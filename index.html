@@ -1,273 +1,707 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Premium Content Strategy</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; min-height: 100vh; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
-    .header h1 { font-size: 28px; margin-bottom: 8px; }
-    .header p { opacity: 0.9; }
-    .premium-badge { background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 20px; font-size: 12px; display: inline-block; margin-top: 10px; }
-    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
-    .error { background: #fee2e2; color: #dc2626; padding: 20px; border-radius: 12px; text-align: center; margin: 20px; }
-    .loading { text-align: center; padding: 60px; color: #64748b; }
-    .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-    .tab { padding: 12px 20px; background: white; border: 2px solid #e2e8f0; border-radius: 10px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
-    .tab:hover { border-color: #667eea; }
-    .tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: #667eea; }
-    .tab .count { background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 10px; margin-left: 8px; font-size: 12px; }
-    .tab.active .count { background: rgba(255,255,255,0.2); }
-    .posts { display: none; }
-    .posts.active { display: block; }
-    .post { background: white; border-radius: 16px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-left: 4px solid #667eea; }
-    .post-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
-    .post-meta { display: flex; gap: 10px; flex-wrap: wrap; }
-    .post-number { background: #dbeafe; color: #1d4ed8; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 14px; }
-    .content-type-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-    .type-motivational { background: #fef3c7; color: #92400e; }
-    .type-educational { background: #dbeafe; color: #1e40af; }
-    .type-promotional { background: #fce7f3; color: #9f1239; }
-    .type-community { background: #d1fae5; color: #065f46; }
-    .copy-btn { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 6px; }
-    .copy-btn:hover { background: #5568d3; }
-    .copy-btn.copied { background: #10b981; }
-    .premium-section { background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); padding: 16px; border-radius: 10px; margin-bottom: 16px; border: 1px solid #667eea30; }
-    .premium-section h4 { color: #667eea; margin-bottom: 10px; font-size: 14px; font-weight: 600; }
-    .posting-time { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #475569; margin-bottom: 8px; }
-    .posting-time .icon { font-size: 18px; }
-    .engagement-goal { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #475569; }
-    .engagement-goal .icon { font-size: 18px; }
-    .caption { font-size: 15px; line-height: 1.7; color: #1e293b; white-space: pre-wrap; margin-bottom: 16px; padding: 16px; background: #f8fafc; border-radius: 10px; }
-    .hashtags { color: #667eea; font-size: 14px; margin-bottom: 16px; line-height: 1.6; }
-    .image-container { margin: 16px 0; }
-    .post-image { width: 100%; max-width: 500px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    .image-source { font-size: 12px; color: #64748b; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
-    .image-source.studio { color: #059669; }
-    .image-source.ai { color: #7c3aed; }
-    .download-btn { display: inline-block; margin-top: 10px; background: #10b981; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; text-decoration: none; }
-    .download-btn:hover { background: #059669; }
-    .footer { text-align: center; padding: 30px; color: #64748b; font-size: 14px; }
-    .no-content { text-align: center; padding: 60px 20px; color: #64748b; }
-    .no-content h2 { color: #1e293b; margin-bottom: 10px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Content Strategy Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        
+        .header p {
+            color: #64748b;
+            font-size: 16px;
+        }
+        
+        .platform-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            border: none;
+            background: #f1f5f9;
+            color: #475569;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .tab:hover {
+            background: #e2e8f0;
+            transform: translateY(-2px);
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .platform-content {
+            display: none;
+        }
+        
+        .platform-content.active {
+            display: block;
+        }
+        
+        .post-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f1f5f9;
+        }
+        
+        .post-number {
+            font-size: 18px;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .content-type-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .post-image {
+            width: 100%;
+            max-width: 600px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .image-source {
+            display: inline-block;
+            padding: 4px 10px;
+            margin: 10px 0;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #f0fdf4;
+            color: #166534;
+        }
+        
+        .image-source.ai-generated {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .meta-info {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .meta-row {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        
+        .meta-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .meta-label {
+            font-weight: 600;
+            color: #475569;
+            margin-right: 8px;
+        }
+        
+        .meta-value {
+            color: #64748b;
+        }
+        
+        .caption {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+            line-height: 1.6;
+            color: #1e293b;
+        }
+        
+        .hashtags {
+            color: #0ea5e9;
+            font-weight: 500;
+            margin-top: 12px;
+            display: block;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        /* PHOTO SWAP SECTION */
+        .photo-swap-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #f1f5f9;
+        }
+        
+        .photo-swap-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .photo-swap-header h4 {
+            color: #475569;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .toggle-gallery-btn {
+            padding: 8px 16px;
+            background: #f1f5f9;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .toggle-gallery-btn:hover {
+            background: #e2e8f0;
+        }
+        
+        .photo-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .photo-gallery.hidden {
+            display: none;
+        }
+        
+        .photo-thumbnail {
+            position: relative;
+            cursor: pointer;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .photo-thumbnail:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .photo-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .photo-thumbnail.current {
+            border: 3px solid #667eea;
+            box-shadow: 0 0 0 2px white, 0 0 0 4px #667eea;
+        }
+        
+        .photo-thumbnail-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 6px;
+            font-size: 11px;
+            text-align: center;
+        }
+        
+        .current-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .loading-overlay.hidden {
+            display: none;
+        }
+        
+        .loading-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid #f1f5f9;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .success-message {
+            background: #f0fdf4;
+            border: 2px solid #166534;
+            color: #166534;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .success-message.hidden {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .post-card {
+                padding: 20px;
+            }
+            
+            .platform-tabs {
+                justify-content: center;
+            }
+            
+            .tab {
+                flex: 1;
+                min-width: 100px;
+            }
+            
+            .photo-gallery {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+                gap: 10px;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div class="header">
-    <h1>✨ Your Premium Content Strategy</h1>
-    <p>Professional content with strategic posting times</p>
-    <span class="premium-badge">⭐ Premium Features Included</span>
-  </div>
-
-  <div class="container">
-    <div id="loading" class="loading">Loading your premium content...</div>
-    <div id="error" class="error" style="display:none;"></div>
-    <div id="content" style="display:none;">
-      <div id="tabs" class="tabs"></div>
-      <div id="posts"></div>
-    </div>
-    <div id="no-content" class="no-content" style="display:none;">
-      <h2>No Content Available</h2>
-      <p>This content may have expired or the link is invalid.</p>
-    </div>
-  </div>
-
-  <div class="footer">
-    <p>Questions? Contact us at <strong>admin@fiorsaoirse.com</strong></p>
-    <p style="margin-top: 10px; font-size: 12px;">Powered by Fitness Content Agent • Premium Marketing Automation</p>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script>
-    const SUPABASE_URL = 'https://kidgcrqxrfcbsaeguwop.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpZGdjcnF4cmZjYnNhZWd1d29wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2MzY5MzQsImV4cCI6MjA3NDIxMjkzNH0.7u__bKIRGD7xt3JcoME2CBjIF7dGdkqE24IQ26hCe3k';
-    
-    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    const platformIcons = {
-      instagram: '📸',
-      facebook: '👍',
-      linkedin: '💼',
-      twitter: '🐦',
-      tiktok: '🎵'
-    };
-
-    async function loadContent() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const contentId = urlParams.get('id');
-
-      if (!contentId) {
-        showError('No content ID provided');
-        return;
-      }
-
-      try {
-        const { data, error } = await supabaseClient
-          .from('content_deliveries')
-          .select('*')
-          .eq('id', contentId)
-          .single();
-
-        if (error) throw error;
-        if (!data) {
-          document.getElementById('loading').style.display = 'none';
-          document.getElementById('no-content').style.display = 'block';
-          return;
-        }
-
-        renderContent(data);
-      } catch (err) {
-        showError('Failed to load content: ' + err.message);
-      }
-    }
-
-    function renderContent(data) {
-      const platforms = ['instagram', 'facebook', 'linkedin', 'twitter', 'tiktok'];
-      const tabsHtml = [];
-      const postsHtml = [];
-
-      let firstPlatform = null;
-
-      platforms.forEach(platform => {
-        const content = data[`${platform}_content`];
-        if (content && content.length > 0) {
-          if (!firstPlatform) firstPlatform = platform;
-          
-          tabsHtml.push(`
-            <div class="tab ${platform === firstPlatform ? 'active' : ''}" data-platform="${platform}">
-              ${platformIcons[platform]} ${platform.charAt(0).toUpperCase() + platform.slice(1)}
-              <span class="count">${content.length}</span>
-            </div>
-          `);
-
-          postsHtml.push(`
-            <div class="posts ${platform === firstPlatform ? 'active' : ''}" data-platform="${platform}">
-              ${content.map((post, i) => renderPost(post, i + 1, platform)).join('')}
-            </div>
-          `);
-        }
-      });
-
-      if (tabsHtml.length === 0) {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('no-content').style.display = 'block';
-        return;
-      }
-
-      document.getElementById('tabs').innerHTML = tabsHtml.join('');
-      document.getElementById('posts').innerHTML = postsHtml.join('');
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('content').style.display = 'block';
-
-      // Tab switching
-      document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-          document.querySelectorAll('.posts').forEach(p => p.classList.remove('active'));
-          tab.classList.add('active');
-          document.querySelector(`.posts[data-platform="${tab.dataset.platform}"]`).classList.add('active');
-        });
-      });
-    }
-
-    function renderPost(post, number, platform) {
-      const hasImage = post.photo_url && post.photo_url.length > 0;
-      const isStudioPhoto = post.matched_photo_id; // Has matched_photo_id means studio photo
-      const isAiImage = !isStudioPhoto && hasImage;
-      
-      // Get content type styling
-      const contentType = (post.content_type || '').toLowerCase();
-      let contentTypeClass = 'type-motivational';
-      if (contentType.includes('education')) contentTypeClass = 'type-educational';
-      else if (contentType.includes('promotion')) contentTypeClass = 'type-promotional';
-      else if (contentType.includes('community')) contentTypeClass = 'type-community';
-      
-      let imageHtml = '';
-      
-      if (hasImage) {
-        const sourceLabel = isStudioPhoto ? '📁 Your Studio Photo' : '🤖 AI Generated';
-        const sourceClass = isStudioPhoto ? 'studio' : 'ai';
-        
-        imageHtml = `
-          <div class="image-container">
-            <img src="${post.photo_url}" alt="Post image" class="post-image" onerror="this.style.display='none'">
-            <p class="image-source ${sourceClass}">${sourceLabel}${isStudioPhoto && post.matched_photo_name ? ` (${post.matched_photo_name})` : ''}</p>
-            <a href="${post.photo_url}" download="${platform}-post-${number}.jpg" class="download-btn" target="_blank">⬇️ Download Image</a>
-          </div>
-        `;
-      }
-
-      // Premium features section
-      let premiumHtml = '';
-      if (post.optimal_posting_time || post.engagement_goal) {
-        premiumHtml = `
-          <div class="premium-section">
-            <h4>⭐ Premium Strategy</h4>
-            ${post.optimal_posting_time ? `
-              <div class="posting-time">
-                <span class="icon">⏰</span>
-                <span><strong>Best Time:</strong> ${escapeHtml(post.optimal_posting_time)}</span>
-              </div>
-            ` : ''}
-            ${post.engagement_goal ? `
-              <div class="engagement-goal">
-                <span class="icon">🎯</span>
-                <span><strong>Engagement Goal:</strong> ${escapeHtml(post.engagement_goal)}</span>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      }
-
-      return `
-        <div class="post">
-          <div class="post-header">
-            <div class="post-meta">
-              <span class="post-number">Post ${number}</span>
-              ${post.content_type ? `<span class="content-type-badge ${contentTypeClass}">${escapeHtml(post.content_type)}</span>` : ''}
-            </div>
-            <button class="copy-btn" onclick="copyCaption(this, \`${escapeForJs(post.caption)}\`)">
-              📋 Copy Caption
-            </button>
-          </div>
-          ${premiumHtml}
-          <div class="caption">${escapeHtml(post.caption)}</div>
-          <div class="hashtags">${escapeHtml(post.hashtags || '')}</div>
-          ${imageHtml}
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Updating photo...</p>
         </div>
-      `;
-    }
-
-    function escapeHtml(text) {
-      if (!text) return '';
-      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    function escapeForJs(text) {
-      if (!text) return '';
-      return text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-    }
-
-    function copyCaption(btn, text) {
-      navigator.clipboard.writeText(text).then(() => {
-        btn.classList.add('copied');
-        btn.innerHTML = '✓ Copied!';
-        setTimeout(() => {
-          btn.classList.remove('copied');
-          btn.innerHTML = '📋 Copy Caption';
-        }, 2000);
-      }, 2000);
-    }
-
-    function showError(message) {
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('error').style.display = 'block';
-      document.getElementById('error').textContent = message;
-    }
-
-    loadContent();
-  </script>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>✨ Your Content Strategy Dashboard</h1>
+            <p>Professional content ready to dominate social media</p>
+        </div>
+        
+        <div class="platform-tabs" id="platformTabs"></div>
+        
+        <div id="contentContainer"></div>
+    </div>
+    
+    <script>
+        // Supabase configuration
+        const SUPABASE_URL = 'https://kidgcrqxrfcbsaeguwop.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpZGdjcnF4cmZjYnNhZWd1d29wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU3Njk0NjUsImV4cCI6MjA1MTM0NTQ2NX0.jUING1vt4JY8n88pDNGIL6fBp4kD2fFJf0n-eqlEJAI';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        let contentData = null;
+        let studioPhotos = [];
+        let contentDeliveryId = null;
+        
+        // Get content delivery ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        contentDeliveryId = urlParams.get('id');
+        
+        if (!contentDeliveryId) {
+            document.body.innerHTML = '<div class="container"><div class="header"><h1>❌ Error</h1><p>No content ID provided</p></div></div>';
+        } else {
+            loadContent();
+        }
+        
+        async function loadContent() {
+            try {
+                // Load content delivery
+                const { data: delivery, error } = await supabaseClient
+                    .from('content_deliveries')
+                    .select('*')
+                    .eq('id', contentDeliveryId)
+                    .single();
+                
+                if (error) throw error;
+                
+                contentData = {
+                    instagram: delivery.instagram_content || [],
+                    facebook: delivery.facebook_content || [],
+                    twitter: delivery.twitter_content || [],
+                    linkedin: delivery.linkedin_content || [],
+                    tiktok: delivery.tiktok_content || []
+                };
+                
+                // Load studio photos for swapping
+                if (delivery.studio_id) {
+                    const { data: photos, error: photoError } = await supabaseClient
+                        .from('studio_photos')
+                        .select('*')
+                        .eq('studio_id', delivery.studio_id)
+                        .eq('is_active', true);
+                    
+                    if (!photoError && photos) {
+                        studioPhotos = photos;
+                    }
+                }
+                
+                renderDashboard();
+            } catch (error) {
+                console.error('Error loading content:', error);
+                document.getElementById('contentContainer').innerHTML = 
+                    `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error loading content. Please try refreshing the page.</p></div>`;
+            }
+        }
+        
+        function renderDashboard() {
+            const platforms = ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok'];
+            const platformEmojis = {
+                instagram: '📸',
+                facebook: '👍',
+                twitter: '𝕏',
+                linkedin: '💼',
+                tiktok: '🎵'
+            };
+            
+            // Render tabs
+            const tabsHTML = platforms
+                .filter(platform => contentData[platform] && contentData[platform].length > 0)
+                .map((platform, index) => {
+                    const count = contentData[platform].length;
+                    return `<button class="tab ${index === 0 ? 'active' : ''}" onclick="switchTab('${platform}')">
+                        ${platformEmojis[platform]} ${platform.charAt(0).toUpperCase() + platform.slice(1)} (${count})
+                    </button>`;
+                })
+                .join('');
+            
+            document.getElementById('platformTabs').innerHTML = tabsHTML;
+            
+            // Render content
+            const contentHTML = platforms.map((platform, index) => {
+                const posts = contentData[platform] || [];
+                if (posts.length === 0) return '';
+                
+                const postsHTML = posts.map((post, postIndex) => {
+                    const hasImage = post.photo_url || post.needs_ai_image;
+                    const isAIGenerated = post.needs_ai_image || (!post.matched_photo_id && post.photo_url);
+                    
+                    return `
+                        <div class="post-card" data-platform="${platform}" data-post-index="${postIndex}">
+                            <div class="post-header">
+                                <div class="post-number">Post #${post.post_number || postIndex + 1}</div>
+                                ${post.content_type ? `<div class="content-type-badge">${post.content_type}</div>` : ''}
+                            </div>
+                            
+                            ${hasImage && post.photo_url ? `
+                                <img src="${post.photo_url}" class="post-image" alt="Post image">
+                                <span class="image-source ${isAIGenerated ? 'ai-generated' : ''}">
+                                    ${isAIGenerated ? '🤖 AI Generated' : '📸 Studio Photo'}
+                                </span>
+                            ` : ''}
+                            
+                            <div class="meta-info">
+                                ${post.optimal_posting_time ? `
+                                    <div class="meta-row">
+                                        <span class="meta-icon">⏰</span>
+                                        <span class="meta-label">Best Time:</span>
+                                        <span class="meta-value">${post.optimal_posting_time}</span>
+                                    </div>
+                                ` : ''}
+                                ${post.engagement_goal ? `
+                                    <div class="meta-row">
+                                        <span class="meta-icon">🎯</span>
+                                        <span class="meta-label">Goal:</span>
+                                        <span class="meta-value">${post.engagement_goal}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="caption">
+                                ${post.caption}
+                                ${post.hashtags ? `<span class="hashtags">${post.hashtags}</span>` : ''}
+                            </div>
+                            
+                            <div class="action-buttons">
+                                <button class="btn btn-primary" onclick="copyCaption('${platform}', ${postIndex})">📋 Copy Caption</button>
+                                ${post.photo_url ? `<a href="${post.photo_url}" download class="btn btn-secondary" style="text-decoration: none;">⬇️ Download Image</a>` : ''}
+                            </div>
+                            
+                            ${studioPhotos.length > 0 && hasImage ? renderPhotoSwapSection(platform, postIndex, post) : ''}
+                        </div>
+                    `;
+                }).join('');
+                
+                return `
+                    <div class="platform-content ${index === 0 ? 'active' : ''}" id="${platform}-content">
+                        ${postsHTML}
+                    </div>
+                `;
+            }).join('');
+            
+            document.getElementById('contentContainer').innerHTML = contentHTML;
+        }
+        
+        function renderPhotoSwapSection(platform, postIndex, post) {
+            const currentPhotoId = post.matched_photo_id;
+            
+            const thumbnailsHTML = studioPhotos.map(photo => {
+                const isCurrent = photo.id === currentPhotoId;
+                return `
+                    <div class="photo-thumbnail ${isCurrent ? 'current' : ''}" 
+                         onclick="swapPhoto('${platform}', ${postIndex}, '${photo.photo_url}', '${photo.id}')">
+                        <img src="${photo.photo_url}" alt="${photo.keywords || 'Studio photo'}">
+                        ${isCurrent ? '<div class="current-badge">CURRENT</div>' : ''}
+                        ${photo.keywords ? `<div class="photo-thumbnail-overlay">${photo.keywords}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div class="photo-swap-section">
+                    <div class="photo-swap-header">
+                        <h4>🔄 Swap Photo</h4>
+                        <button class="toggle-gallery-btn" onclick="toggleGallery('${platform}', ${postIndex})">
+                            Show Gallery
+                        </button>
+                    </div>
+                    <div class="photo-gallery hidden" id="gallery-${platform}-${postIndex}">
+                        ${thumbnailsHTML}
+                    </div>
+                    <div class="success-message hidden" id="success-${platform}-${postIndex}">
+                        ✅ Photo updated successfully!
+                    </div>
+                </div>
+            `;
+        }
+        
+        function toggleGallery(platform, postIndex) {
+            const gallery = document.getElementById(`gallery-${platform}-${postIndex}`);
+            const btn = event.target;
+            
+            if (gallery.classList.contains('hidden')) {
+                gallery.classList.remove('hidden');
+                btn.textContent = 'Hide Gallery';
+            } else {
+                gallery.classList.add('hidden');
+                btn.textContent = 'Show Gallery';
+            }
+        }
+        
+        async function swapPhoto(platform, postIndex, newPhotoUrl, newPhotoId) {
+            // Show loading
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+            
+            try {
+                // Update the content array
+                const updatedContent = [...contentData[platform]];
+                updatedContent[postIndex] = {
+                    ...updatedContent[postIndex],
+                    photo_url: newPhotoUrl,
+                    matched_photo_id: newPhotoId,
+                    needs_ai_image: false
+                };
+                
+                // Build update object for the specific platform column
+                const updateData = {};
+                updateData[`${platform}_content`] = updatedContent;
+                
+                // Update in Supabase
+                const { error } = await supabaseClient
+                    .from('content_deliveries')
+                    .update(updateData)
+                    .eq('id', contentDeliveryId);
+                
+                if (error) throw error;
+                
+                // Update local data
+                contentData[platform] = updatedContent;
+                
+                // Hide loading
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                
+                // Show success message
+                const successMsg = document.getElementById(`success-${platform}-${postIndex}`);
+                successMsg.classList.remove('hidden');
+                setTimeout(() => {
+                    successMsg.classList.add('hidden');
+                }, 3000);
+                
+                // Re-render to show new photo
+                renderDashboard();
+                switchTab(platform);
+                
+            } catch (error) {
+                console.error('Error swapping photo:', error);
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                alert('Error updating photo. Please try again.');
+            }
+        }
+        
+        function switchTab(platform) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event?.target?.classList.add('active');
+            
+            // Update content
+            document.querySelectorAll('.platform-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`${platform}-content`)?.classList.add('active');
+        }
+        
+        function copyCaption(platform, postIndex) {
+            const post = contentData[platform][postIndex];
+            const fullText = post.caption + (post.hashtags ? '\n\n' + post.hashtags : '');
+            
+            navigator.clipboard.writeText(fullText).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                btn.style.background = '#10b981';
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '';
+                }, 2000);
+            });
+        }
+    </script>
 </body>
 </html>
