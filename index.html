@@ -436,7 +436,12 @@
         // Supabase configuration
         const SUPABASE_URL = 'https://kidgcrqxrfcbsaeguwop.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpZGdjcnF4cmZjYnNhZWd1d29wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU3Njk0NjUsImV4cCI6MjA1MTM0NTQ2NX0.jUING1vt4JY8n88pDNGIL6fBp4kD2fFJf0n-eqlEJAI';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false
+            }
+        });
         
         let contentData = null;
         let studioPhotos = [];
@@ -454,6 +459,8 @@
         
         async function loadContent() {
             try {
+                console.log('Loading content for ID:', contentDeliveryId);
+                
                 // Load content delivery
                 const { data: delivery, error } = await supabaseClient
                     .from('content_deliveries')
@@ -461,7 +468,12 @@
                     .eq('id', contentDeliveryId)
                     .single();
                 
-                if (error) throw error;
+                if (error) {
+                    console.error('Supabase error:', error);
+                    throw error;
+                }
+                
+                console.log('Loaded delivery:', delivery);
                 
                 contentData = {
                     instagram: delivery.instagram_content || [],
@@ -481,6 +493,7 @@
                     
                     if (!photoError && photos) {
                         studioPhotos = photos;
+                        console.log('Loaded studio photos:', photos.length);
                     }
                 }
                 
@@ -488,7 +501,11 @@
             } catch (error) {
                 console.error('Error loading content:', error);
                 document.getElementById('contentContainer').innerHTML = 
-                    `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error loading content. Please try refreshing the page.</p></div>`;
+                    `<div class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <p>Error loading content: ${error.message}</p>
+                        <p style="font-size: 12px; margin-top: 10px;">Check console for details</p>
+                    </div>`;
             }
         }
         
