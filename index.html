@@ -11,19 +11,19 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-        
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
         }
-        
+
         .header {
             background: white;
             padding: 30px;
@@ -32,18 +32,55 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             text-align: center;
         }
-        
+
         .header h1 {
             color: #667eea;
             margin-bottom: 10px;
             font-size: 32px;
         }
-        
+
         .header p {
             color: #64748b;
             font-size: 16px;
         }
-        
+
+        /* USER INFO BANNER - NEW */
+        .user-info-banner {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 12px 20px;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            font-size: 14px;
+        }
+
+        .user-info-banner .user-email {
+            color: #0369a1;
+            font-weight: 600;
+        }
+
+        .user-info-banner .user-role {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .user-info-banner .user-role.instructor {
+            background: #8b5cf6;
+        }
+
+        .user-info-banner .user-role.owner {
+            background: #059669;
+        }
+
         .platform-tabs {
             display: flex;
             gap: 10px;
@@ -54,7 +91,7 @@
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-        
+
         .tab {
             padding: 12px 24px;
             border: none;
@@ -66,26 +103,26 @@
             transition: all 0.3s ease;
             font-size: 14px;
         }
-        
+
         .tab:hover {
             background: #e2e8f0;
             transform: translateY(-2px);
         }
-        
+
         .tab.active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
-        
+
         .platform-content {
             display: none;
         }
-        
+
         .platform-content.active {
             display: block;
         }
-        
+
         .post-card {
             background: white;
             padding: 30px;
@@ -93,7 +130,7 @@
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-        
+
         .post-header {
             display: flex;
             justify-content: space-between;
@@ -102,13 +139,13 @@
             padding-bottom: 15px;
             border-bottom: 2px solid #f1f5f9;
         }
-        
+
         .post-number {
             font-size: 18px;
             font-weight: 700;
             color: #667eea;
         }
-        
+
         .content-type-badge {
             padding: 6px 12px;
             border-radius: 20px;
@@ -117,7 +154,7 @@
             background: #dbeafe;
             color: #1e40af;
         }
-        
+
         .post-image {
             width: 100%;
             max-width: 600px;
@@ -125,7 +162,7 @@
             margin: 20px 0;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
-        
+
         .image-source {
             display: inline-block;
             padding: 4px 10px;
@@ -136,41 +173,41 @@
             background: #f0fdf4;
             color: #166534;
         }
-        
+
         .image-source.ai-generated {
             background: #fef3c7;
             color: #92400e;
         }
-        
+
         .meta-info {
             background: #f8fafc;
             padding: 15px;
             border-radius: 8px;
             margin: 15px 0;
         }
-        
+
         .meta-row {
             display: flex;
             align-items: center;
             margin: 8px 0;
             font-size: 14px;
         }
-        
+
         .meta-icon {
             margin-right: 8px;
             font-size: 16px;
         }
-        
+
         .meta-label {
             font-weight: 600;
             color: #475569;
             margin-right: 8px;
         }
-        
+
         .meta-value {
             color: #64748b;
         }
-        
+
         .caption {
             background: #f8fafc;
             padding: 20px;
@@ -180,21 +217,21 @@
             line-height: 1.6;
             color: #1e293b;
         }
-        
+
         .hashtags {
             color: #0ea5e9;
             font-weight: 500;
             margin-top: 12px;
             display: block;
         }
-        
+
         .action-buttons {
             display: flex;
             gap: 10px;
             margin-top: 20px;
             flex-wrap: wrap;
         }
-        
+
         .btn {
             padding: 12px 24px;
             border: none;
@@ -204,51 +241,51 @@
             transition: all 0.3s ease;
             font-size: 14px;
         }
-        
+
         .btn-primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
-        
+
         .btn-primary:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
-        
+
         .btn-secondary {
             background: #f1f5f9;
             color: #475569;
         }
-        
+
         .btn-secondary:hover {
             background: #e2e8f0;
         }
-        
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
             color: #64748b;
         }
-        
+
         .empty-state-icon {
             font-size: 48px;
             margin-bottom: 16px;
         }
-        
+
         /* PHOTO SWAP SECTION */
         .photo-swap-section {
             margin-top: 30px;
             padding-top: 30px;
             border-top: 2px solid #f1f5f9;
         }
-        
+
         .photo-swap-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
         }
-        
+
         .photo-swap-header h4 {
             color: #475569;
             font-size: 16px;
@@ -256,7 +293,7 @@
             align-items: center;
             gap: 8px;
         }
-        
+
         .toggle-gallery-btn {
             padding: 8px 16px;
             background: #f1f5f9;
@@ -268,22 +305,47 @@
             cursor: pointer;
             transition: all 0.2s ease;
         }
-        
+
         .toggle-gallery-btn:hover {
             background: #e2e8f0;
         }
-        
+
         .photo-gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 15px;
             margin-top: 15px;
         }
-        
+
         .photo-gallery.hidden {
             display: none;
         }
-        
+
+        /* PHOTO TYPE LABELS - NEW */
+        .photo-gallery-section {
+            margin-bottom: 20px;
+        }
+
+        .photo-gallery-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .photo-gallery-section-title.activity {
+            color: #059669;
+        }
+
+        .photo-gallery-section-title.headshot {
+            color: #8b5cf6;
+        }
+
         .photo-thumbnail {
             position: relative;
             cursor: pointer;
@@ -293,23 +355,23 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
         }
-        
+
         .photo-thumbnail:hover {
             transform: translateY(-4px);
             box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
         }
-        
+
         .photo-thumbnail img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
-        
+
         .photo-thumbnail.current {
             border: 3px solid #667eea;
             box-shadow: 0 0 0 2px white, 0 0 0 4px #667eea;
         }
-        
+
         .photo-thumbnail-overlay {
             position: absolute;
             bottom: 0;
@@ -321,7 +383,7 @@
             font-size: 11px;
             text-align: center;
         }
-        
+
         .current-badge {
             position: absolute;
             top: 5px;
@@ -333,7 +395,29 @@
             font-size: 10px;
             font-weight: 700;
         }
-        
+
+        /* PHOTO TYPE BADGE - NEW */
+        .photo-type-badge {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .photo-type-badge.activity {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .photo-type-badge.headshot {
+            background: #ede9fe;
+            color: #7c3aed;
+        }
+
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -346,18 +430,18 @@
             justify-content: center;
             z-index: 9999;
         }
-        
+
         .loading-overlay.hidden {
             display: none;
         }
-        
+
         .loading-content {
             background: white;
             padding: 30px;
             border-radius: 15px;
             text-align: center;
         }
-        
+
         .spinner {
             border: 4px solid #f1f5f9;
             border-top: 4px solid #667eea;
@@ -367,12 +451,12 @@
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
         }
-        
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
+
         .success-message {
             background: #f0fdf4;
             border: 2px solid #166534;
@@ -383,32 +467,52 @@
             font-weight: 600;
             text-align: center;
         }
-        
+
         .success-message.hidden {
             display: none;
         }
-        
+
+        /* PHOTO COUNT INFO - NEW */
+        .photo-count-info {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #f8fafc;
+            border-radius: 6px;
+        }
+
+        .photo-count-info.restricted {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 24px;
             }
-            
+
             .post-card {
                 padding: 20px;
             }
-            
+
             .platform-tabs {
                 justify-content: center;
             }
-            
+
             .tab {
                 flex: 1;
                 min-width: 100px;
             }
-            
+
             .photo-gallery {
                 grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
                 gap: 10px;
+            }
+
+            .user-info-banner {
+                flex-direction: column;
+                gap: 8px;
             }
         }
     </style>
@@ -420,18 +524,22 @@
             <p>Updating photo...</p>
         </div>
     </div>
-    
+
     <div class="container">
         <div class="header">
-            <h1>✨ Your Content Strategy Dashboard</h1>
+            <h1>Your Content Strategy Dashboard</h1>
             <p>Professional content ready to dominate social media</p>
+            <div class="user-info-banner" id="userInfoBanner" style="display: none;">
+                <span>Logged in as: <span class="user-email" id="userEmailDisplay"></span></span>
+                <span class="user-role" id="userRoleDisplay"></span>
+            </div>
         </div>
-        
+
         <div class="platform-tabs" id="platformTabs"></div>
-        
+
         <div id="contentContainer"></div>
     </div>
-    
+
     <script>
         // Supabase configuration
         const SUPABASE_URL = 'https://kidgcrqxrfcbsaeguwop.supabase.co';
@@ -442,39 +550,119 @@
                 autoRefreshToken: false
             }
         });
-        
+
         let contentData = null;
-        let studioPhotos = [];
+        let studioPhotos = [];        // All studio photos
+        let filteredPhotos = [];      // Photos filtered by user role
         let contentDeliveryId = null;
-        
-        // Get content delivery ID from URL
+
+        // NEW: User identification from URL params
+        let currentUserEmail = null;
+        let currentUserRole = null;
+
+        // Get parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
         contentDeliveryId = urlParams.get('id');
-        
+        currentUserEmail = urlParams.get('email');
+        currentUserRole = urlParams.get('role');
+
         if (!contentDeliveryId) {
-            document.body.innerHTML = '<div class="container"><div class="header"><h1>❌ Error</h1><p>No content ID provided</p></div></div>';
+            document.body.innerHTML = '<div class="container"><div class="header"><h1>Error</h1><p>No content ID provided</p></div></div>';
         } else {
             loadContent();
         }
-        
+
+        // NEW: Filter photos based on user role
+        function filterPhotosForUser(photos, userEmail, userRole) {
+            // If no role specified or studio_owner, show all photos
+            if (!userRole || userRole === 'studio_owner') {
+                return photos;
+            }
+
+            // For instructors, filter to show:
+            // 1. Activity photos (no tags or empty tags)
+            // 2. Only their own headshot
+            if (userRole === 'studio_instructor') {
+                return photos.filter(photo => {
+                    // Activity photos - always show (no tags or empty tags array)
+                    if (!photo.tags || photo.tags.length === 0) {
+                        return true;
+                    }
+
+                    // Headshot photos - only show if user's email is in tags
+                    if (userEmail && photo.tags.includes(userEmail)) {
+                        return true;
+                    }
+
+                    // Other instructors' headshots - BLOCKED
+                    return false;
+                });
+            }
+
+            // Unknown role - show all for safety
+            return photos;
+        }
+
+        // NEW: Categorize photos into activity and headshots
+        function categorizePhotos(photos) {
+            const activity = [];
+            const headshots = [];
+
+            photos.forEach(photo => {
+                if (!photo.tags || photo.tags.length === 0) {
+                    activity.push(photo);
+                } else {
+                    headshots.push(photo);
+                }
+            });
+
+            return { activity, headshots };
+        }
+
+        // NEW: Display user info banner
+        function showUserInfo() {
+            if (currentUserEmail && currentUserRole) {
+                const banner = document.getElementById('userInfoBanner');
+                const emailDisplay = document.getElementById('userEmailDisplay');
+                const roleDisplay = document.getElementById('userRoleDisplay');
+
+                emailDisplay.textContent = currentUserEmail;
+
+                // Format role display
+                let roleText = currentUserRole;
+                if (currentUserRole === 'studio_owner') {
+                    roleText = 'Studio Owner';
+                    roleDisplay.classList.add('owner');
+                } else if (currentUserRole === 'studio_instructor') {
+                    roleText = 'Instructor';
+                    roleDisplay.classList.add('instructor');
+                }
+                roleDisplay.textContent = roleText;
+
+                banner.style.display = 'flex';
+            }
+        }
+
         async function loadContent() {
             try {
                 console.log('Loading content for ID:', contentDeliveryId);
-                
+                console.log('User email:', currentUserEmail);
+                console.log('User role:', currentUserRole);
+
                 // Load content delivery
                 const { data: delivery, error } = await supabaseClient
                     .from('content_deliveries')
                     .select('*')
                     .eq('id', contentDeliveryId)
                     .single();
-                
+
                 if (error) {
                     console.error('Supabase error:', error);
                     throw error;
                 }
-                
+
                 console.log('Loaded delivery:', delivery);
-                
+
                 contentData = {
                     instagram: delivery.instagram_content || [],
                     facebook: delivery.facebook_content || [],
@@ -482,7 +670,7 @@
                     linkedin: delivery.linkedin_content || [],
                     tiktok: delivery.tiktok_content || []
                 };
-                
+
                 // Load studio photos for swapping
                 if (delivery.studio_id) {
                     const { data: photos, error: photoError } = await supabaseClient
@@ -490,35 +678,46 @@
                         .select('*')
                         .eq('studio_id', delivery.studio_id)
                         .eq('is_active', true);
-                    
+
                     if (!photoError && photos) {
                         studioPhotos = photos;
-                        console.log('Loaded studio photos:', photos.length);
+                        console.log('Loaded all studio photos:', photos.length);
+
+                        // NEW: Apply role-based filtering
+                        filteredPhotos = filterPhotosForUser(photos, currentUserEmail, currentUserRole);
+                        console.log('Filtered photos for user:', filteredPhotos.length);
+
+                        if (currentUserRole === 'studio_instructor' && filteredPhotos.length < studioPhotos.length) {
+                            console.log('Instructor view - some headshots hidden');
+                        }
                     }
                 }
-                
+
+                // Show user info banner
+                showUserInfo();
+
                 renderDashboard();
             } catch (error) {
                 console.error('Error loading content:', error);
-                document.getElementById('contentContainer').innerHTML = 
+                document.getElementById('contentContainer').innerHTML =
                     `<div class="empty-state">
-                        <div class="empty-state-icon">❌</div>
+                        <div class="empty-state-icon">Error</div>
                         <p>Error loading content: ${error.message}</p>
                         <p style="font-size: 12px; margin-top: 10px;">Check console for details</p>
                     </div>`;
             }
         }
-        
+
         function renderDashboard() {
             const platforms = ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok'];
             const platformEmojis = {
-                instagram: '📸',
-                facebook: '👍',
-                twitter: '𝕏',
-                linkedin: '💼',
-                tiktok: '🎵'
+                instagram: 'IG',
+                facebook: 'FB',
+                twitter: 'X',
+                linkedin: 'LI',
+                tiktok: 'TT'
             };
-            
+
             // Render tabs
             const tabsHTML = platforms
                 .filter(platform => contentData[platform] && contentData[platform].length > 0)
@@ -529,111 +728,181 @@
                     </button>`;
                 })
                 .join('');
-            
+
             document.getElementById('platformTabs').innerHTML = tabsHTML;
-            
+
             // Render content
             const contentHTML = platforms.map((platform, index) => {
                 const posts = contentData[platform] || [];
                 if (posts.length === 0) return '';
-                
+
                 const postsHTML = posts.map((post, postIndex) => {
                     const hasImage = post.photo_url || post.needs_ai_image;
                     const isAIGenerated = post.needs_ai_image || (!post.matched_photo_id && post.photo_url);
-                    
+
                     return `
                         <div class="post-card" data-platform="${platform}" data-post-index="${postIndex}">
                             <div class="post-header">
                                 <div class="post-number">Post #${post.post_number || postIndex + 1}</div>
                                 ${post.content_type ? `<div class="content-type-badge">${post.content_type}</div>` : ''}
                             </div>
-                            
+
                             ${hasImage && post.photo_url ? `
                                 <img src="${post.photo_url}" class="post-image" alt="Post image">
                                 <span class="image-source ${isAIGenerated ? 'ai-generated' : ''}">
-                                    ${isAIGenerated ? '🤖 AI Generated' : '📸 Studio Photo'}
+                                    ${isAIGenerated ? 'AI Generated' : 'Studio Photo'}
                                 </span>
                             ` : ''}
-                            
+
                             <div class="meta-info">
                                 ${post.optimal_posting_time ? `
                                     <div class="meta-row">
-                                        <span class="meta-icon">⏰</span>
+                                        <span class="meta-icon">Clock</span>
                                         <span class="meta-label">Best Time:</span>
                                         <span class="meta-value">${post.optimal_posting_time}</span>
                                     </div>
                                 ` : ''}
                                 ${post.engagement_goal ? `
                                     <div class="meta-row">
-                                        <span class="meta-icon">🎯</span>
+                                        <span class="meta-icon">Target</span>
                                         <span class="meta-label">Goal:</span>
                                         <span class="meta-value">${post.engagement_goal}</span>
                                     </div>
                                 ` : ''}
                             </div>
-                            
+
                             <div class="caption">
                                 ${post.caption}
                                 ${post.hashtags ? `<span class="hashtags">${post.hashtags}</span>` : ''}
                             </div>
-                            
+
                             <div class="action-buttons">
-                                <button class="btn btn-primary" onclick="copyCaption('${platform}', ${postIndex})">📋 Copy Caption</button>
-                                ${post.photo_url ? `<a href="${post.photo_url}" download class="btn btn-secondary" style="text-decoration: none;">⬇️ Download Image</a>` : ''}
+                                <button class="btn btn-primary" onclick="copyCaption('${platform}', ${postIndex})">Copy Caption</button>
+                                ${post.photo_url ? `<a href="${post.photo_url}" download class="btn btn-secondary" style="text-decoration: none;">Download Image</a>` : ''}
                             </div>
-                            
-                            ${studioPhotos.length > 0 && hasImage ? renderPhotoSwapSection(platform, postIndex, post) : ''}
+
+                            ${filteredPhotos.length > 0 && hasImage ? renderPhotoSwapSection(platform, postIndex, post) : ''}
                         </div>
                     `;
                 }).join('');
-                
+
                 return `
                     <div class="platform-content ${index === 0 ? 'active' : ''}" id="${platform}-content">
                         ${postsHTML}
                     </div>
                 `;
             }).join('');
-            
+
             document.getElementById('contentContainer').innerHTML = contentHTML;
         }
-        
+
+        // MODIFIED: renderPhotoSwapSection with categorized photos and role info
         function renderPhotoSwapSection(platform, postIndex, post) {
             const currentPhotoId = post.matched_photo_id;
-            
-            const thumbnailsHTML = studioPhotos.map(photo => {
-                const isCurrent = photo.id === currentPhotoId;
-                return `
-                    <div class="photo-thumbnail ${isCurrent ? 'current' : ''}" 
-                         onclick="swapPhoto('${platform}', ${postIndex}, '${photo.photo_url}', '${photo.id}')">
-                        <img src="${photo.photo_url}" alt="${photo.keywords || 'Studio photo'}">
-                        ${isCurrent ? '<div class="current-badge">CURRENT</div>' : ''}
-                        ${photo.keywords ? `<div class="photo-thumbnail-overlay">${photo.keywords}</div>` : ''}
+
+            // Categorize filtered photos
+            const { activity, headshots } = categorizePhotos(filteredPhotos);
+
+            // Build activity photos section
+            let activityHTML = '';
+            if (activity.length > 0) {
+                const activityThumbnails = activity.map(photo => {
+                    const isCurrent = photo.id === currentPhotoId;
+                    return `
+                        <div class="photo-thumbnail ${isCurrent ? 'current' : ''}"
+                             onclick="swapPhoto('${platform}', ${postIndex}, '${photo.photo_url}', '${photo.id}')">
+                            <img src="${photo.photo_url}" alt="${photo.keywords || 'Studio photo'}">
+                            ${isCurrent ? '<div class="current-badge">CURRENT</div>' : ''}
+                            <div class="photo-type-badge activity">Activity</div>
+                            ${photo.keywords ? `<div class="photo-thumbnail-overlay">${photo.keywords}</div>` : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                activityHTML = `
+                    <div class="photo-gallery-section">
+                        <div class="photo-gallery-section-title activity">
+                            Studio/Activity Photos (${activity.length})
+                        </div>
+                        <div class="photo-gallery" style="display: grid;">
+                            ${activityThumbnails}
+                        </div>
                     </div>
                 `;
-            }).join('');
-            
+            }
+
+            // Build headshots section
+            let headshotsHTML = '';
+            if (headshots.length > 0) {
+                const headshotThumbnails = headshots.map(photo => {
+                    const isCurrent = photo.id === currentPhotoId;
+                    // Try to get instructor name from tags
+                    const instructorName = photo.tags && photo.tags[0] ? photo.tags[0].split('@')[0] : '';
+                    return `
+                        <div class="photo-thumbnail ${isCurrent ? 'current' : ''}"
+                             onclick="swapPhoto('${platform}', ${postIndex}, '${photo.photo_url}', '${photo.id}')">
+                            <img src="${photo.photo_url}" alt="${instructorName || 'Headshot'}">
+                            ${isCurrent ? '<div class="current-badge">CURRENT</div>' : ''}
+                            <div class="photo-type-badge headshot">Headshot</div>
+                            <div class="photo-thumbnail-overlay">${instructorName || 'Instructor'}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                headshotsHTML = `
+                    <div class="photo-gallery-section">
+                        <div class="photo-gallery-section-title headshot">
+                            ${currentUserRole === 'studio_instructor' ? 'Your Headshot' : 'Instructor Headshots'} (${headshots.length})
+                        </div>
+                        <div class="photo-gallery" style="display: grid;">
+                            ${headshotThumbnails}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Photo count info with role context
+            let photoCountInfo = '';
+            if (currentUserRole === 'studio_instructor' && studioPhotos.length > filteredPhotos.length) {
+                const hiddenCount = studioPhotos.length - filteredPhotos.length;
+                photoCountInfo = `
+                    <div class="photo-count-info restricted">
+                        Note: As an instructor, you can see ${filteredPhotos.length} photos (${activity.length} activity + ${headshots.length} your headshot).
+                        ${hiddenCount} other instructor headshots are hidden.
+                    </div>
+                `;
+            } else if (filteredPhotos.length > 0) {
+                photoCountInfo = `
+                    <div class="photo-count-info">
+                        ${filteredPhotos.length} photos available (${activity.length} activity, ${headshots.length} headshots)
+                    </div>
+                `;
+            }
+
             return `
                 <div class="photo-swap-section">
                     <div class="photo-swap-header">
-                        <h4>🔄 Swap Photo</h4>
+                        <h4>Swap Photo</h4>
                         <button class="toggle-gallery-btn" onclick="toggleGallery('${platform}', ${postIndex})">
                             Show Gallery
                         </button>
                     </div>
                     <div class="photo-gallery hidden" id="gallery-${platform}-${postIndex}">
-                        ${thumbnailsHTML}
+                        ${activityHTML}
+                        ${headshotsHTML}
+                        ${photoCountInfo}
                     </div>
                     <div class="success-message hidden" id="success-${platform}-${postIndex}">
-                        ✅ Photo updated successfully!
+                        Photo updated successfully!
                     </div>
                 </div>
             `;
         }
-        
+
         function toggleGallery(platform, postIndex) {
             const gallery = document.getElementById(`gallery-${platform}-${postIndex}`);
             const btn = event.target;
-            
+
             if (gallery.classList.contains('hidden')) {
                 gallery.classList.remove('hidden');
                 btn.textContent = 'Hide Gallery';
@@ -642,11 +911,11 @@
                 btn.textContent = 'Show Gallery';
             }
         }
-        
+
         async function swapPhoto(platform, postIndex, newPhotoUrl, newPhotoId) {
             // Show loading
             document.getElementById('loadingOverlay').classList.remove('hidden');
-            
+
             try {
                 // Update the content array
                 const updatedContent = [...contentData[platform]];
@@ -656,63 +925,63 @@
                     matched_photo_id: newPhotoId,
                     needs_ai_image: false
                 };
-                
+
                 // Build update object for the specific platform column
                 const updateData = {};
                 updateData[`${platform}_content`] = updatedContent;
-                
+
                 // Update in Supabase
                 const { error } = await supabaseClient
                     .from('content_deliveries')
                     .update(updateData)
                     .eq('id', contentDeliveryId);
-                
+
                 if (error) throw error;
-                
+
                 // Update local data
                 contentData[platform] = updatedContent;
-                
+
                 // Hide loading
                 document.getElementById('loadingOverlay').classList.add('hidden');
-                
+
                 // Show success message
                 const successMsg = document.getElementById(`success-${platform}-${postIndex}`);
                 successMsg.classList.remove('hidden');
                 setTimeout(() => {
                     successMsg.classList.add('hidden');
                 }, 3000);
-                
+
                 // Re-render to show new photo
                 renderDashboard();
                 switchTab(platform);
-                
+
             } catch (error) {
                 console.error('Error swapping photo:', error);
                 document.getElementById('loadingOverlay').classList.add('hidden');
                 alert('Error updating photo. Please try again.');
             }
         }
-        
+
         function switchTab(platform) {
             // Update tabs
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             event?.target?.classList.add('active');
-            
+
             // Update content
             document.querySelectorAll('.platform-content').forEach(content => content.classList.remove('active'));
             document.getElementById(`${platform}-content`)?.classList.add('active');
         }
-        
+
         function copyCaption(platform, postIndex) {
             const post = contentData[platform][postIndex];
             const fullText = post.caption + (post.hashtags ? '\n\n' + post.hashtags : '');
-            
+
             navigator.clipboard.writeText(fullText).then(() => {
                 const btn = event.target;
                 const originalText = btn.textContent;
-                btn.textContent = '✅ Copied!';
+                btn.textContent = 'Copied!';
                 btn.style.background = '#10b981';
-                
+
                 setTimeout(() => {
                     btn.textContent = originalText;
                     btn.style.background = '';
