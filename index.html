@@ -387,7 +387,382 @@
         .success-message.hidden {
             display: none;
         }
-        
+
+        /* ============================================
+           PHOTO EDITOR MODAL - Iteration Workflow
+           Isolated feature: /fca-photo-editor-test
+           ============================================ */
+        .photo-editor-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .photo-editor-modal.hidden {
+            display: none;
+        }
+
+        .editor-container {
+            background: #1a1a2e;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .editor-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .editor-close-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .editor-close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .editor-body {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        @media (max-width: 900px) {
+            .editor-body {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Preview Panel */
+        .editor-preview {
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #0f0f1a;
+            position: relative;
+            min-height: 400px;
+        }
+
+        .preview-image-container {
+            position: relative;
+            max-width: 100%;
+            max-height: 60vh;
+        }
+
+        .preview-image-container img {
+            max-width: 100%;
+            max-height: 60vh;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            object-fit: contain;
+        }
+
+        .iteration-badge-editor {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            background: rgba(46, 160, 67, 0.9);
+            color: white;
+            backdrop-filter: blur(10px);
+        }
+
+        .iteration-badge-editor.iterating {
+            background: rgba(210, 153, 34, 0.9);
+            animation: pulse-badge 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-badge {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .preview-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 15, 26, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+        }
+
+        .preview-loading.hidden {
+            display: none;
+        }
+
+        .preview-loading .spinner {
+            border-color: #667eea;
+            border-top-color: white;
+            width: 60px;
+            height: 60px;
+        }
+
+        .preview-loading p {
+            color: #a0a0b0;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        /* Controls Panel */
+        .editor-controls {
+            padding: 25px;
+            background: #16162a;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .control-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .control-section-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #667eea;
+            margin-bottom: 12px;
+        }
+
+        .editor-prompt {
+            width: 100%;
+            min-height: 100px;
+            padding: 14px;
+            background: #0f0f1a;
+            border: 2px solid #2a2a4a;
+            border-radius: 10px;
+            color: #e0e0f0;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.2s ease;
+        }
+
+        .editor-prompt:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .editor-prompt::placeholder {
+            color: #606080;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .quick-action-btn {
+            padding: 12px 10px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 8px;
+            color: #a0a0f0;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .quick-action-btn:hover {
+            background: rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+            color: #c0c0ff;
+            transform: translateY(-2px);
+        }
+
+        /* Generate Button */
+        .generate-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .generate-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .generate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .generate-btn .spinner {
+            width: 20px;
+            height: 20px;
+            border-width: 2px;
+            display: none;
+        }
+
+        .generate-btn.loading .spinner {
+            display: block;
+        }
+
+        .generate-btn.loading .btn-text {
+            display: none;
+        }
+
+        /* Auto Continue Notice */
+        .auto-continue-notice-editor {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(46, 160, 67, 0.15);
+            border: 1px solid rgba(46, 160, 67, 0.3);
+            border-radius: 8px;
+            font-size: 12px;
+            color: #4ade80;
+        }
+
+        .auto-continue-notice-editor.hidden {
+            display: none;
+        }
+
+        /* Action Buttons Row */
+        .editor-action-row {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .editor-action-btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .editor-action-btn.reset {
+            background: rgba(248, 81, 73, 0.1);
+            border: 1px solid rgba(248, 81, 73, 0.3);
+            color: #f85149;
+        }
+
+        .editor-action-btn.reset:hover {
+            background: rgba(248, 81, 73, 0.2);
+        }
+
+        .editor-action-btn.reset.hidden {
+            display: none;
+        }
+
+        .editor-action-btn.save {
+            background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
+            border: none;
+            color: white;
+        }
+
+        .editor-action-btn.save:hover:not(:disabled) {
+            box-shadow: 0 6px 20px rgba(35, 134, 54, 0.4);
+        }
+
+        .editor-action-btn.save:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Error Message in Editor */
+        .editor-error {
+            padding: 12px;
+            background: rgba(248, 81, 73, 0.15);
+            border: 1px solid rgba(248, 81, 73, 0.3);
+            border-radius: 8px;
+            color: #f85149;
+            font-size: 13px;
+        }
+
+        .editor-error.hidden {
+            display: none;
+        }
+
+        /* Edit Photo Button in Gallery */
+        .btn-edit-photo {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-edit-photo:hover {
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 24px;
@@ -420,7 +795,77 @@
             <p>Updating photo...</p>
         </div>
     </div>
-    
+
+    <!-- ============================================
+         PHOTO EDITOR MODAL - Iteration Workflow
+         Isolated feature: /fca-photo-editor-test
+         ============================================ -->
+    <div class="photo-editor-modal hidden" id="photoEditorModal">
+        <div class="editor-container">
+            <div class="editor-header">
+                <h2>🎨 AI Photo Editor</h2>
+                <button class="editor-close-btn" onclick="closePhotoEditor()">×</button>
+            </div>
+            <div class="editor-body">
+                <!-- Preview Panel -->
+                <div class="editor-preview">
+                    <div class="preview-image-container">
+                        <img id="editorPreviewImage" src="" alt="Photo preview">
+                        <div class="iteration-badge-editor" id="editorIterationBadge">Iteration 1</div>
+                        <div class="preview-loading hidden" id="editorLoading">
+                            <div class="spinner"></div>
+                            <p id="editorLoadingText">Generating edit...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls Panel -->
+                <div class="editor-controls">
+                    <div class="control-section">
+                        <div class="control-section-title">What do you want to change?</div>
+                        <textarea
+                            class="editor-prompt"
+                            id="editorPrompt"
+                            placeholder="Describe your edit... e.g., 'Change the background to a warm orange gradient with studio brand colors' or 'Make the lighting warmer and more inviting'"
+                        ></textarea>
+                    </div>
+
+                    <div class="control-section">
+                        <div class="control-section-title">Quick Actions</div>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" onclick="setQuickPrompt('brand')">🎨 Add Brand Colors</button>
+                            <button class="quick-action-btn" onclick="setQuickPrompt('lighting')">💡 Improve Lighting</button>
+                            <button class="quick-action-btn" onclick="setQuickPrompt('background')">🖼️ Change Background</button>
+                            <button class="quick-action-btn" onclick="setQuickPrompt('clothing')">👕 Change Clothing Color</button>
+                            <button class="quick-action-btn" onclick="setQuickPrompt('energy')">⚡ Add Energy/Motion</button>
+                            <button class="quick-action-btn" onclick="setQuickPrompt('professional')">✨ Make More Professional</button>
+                        </div>
+                    </div>
+
+                    <button class="generate-btn" id="editorGenerateBtn" onclick="generatePhotoEdit()" disabled>
+                        <span class="btn-text">✨ Generate Edit</span>
+                        <div class="spinner"></div>
+                    </button>
+
+                    <div class="auto-continue-notice-editor hidden" id="editorAutoContinue">
+                        ✅ Result will automatically be used for next edit - keep iterating!
+                    </div>
+
+                    <div class="editor-error hidden" id="editorError"></div>
+
+                    <div class="editor-action-row">
+                        <button class="editor-action-btn reset hidden" id="editorResetBtn" onclick="resetPhotoEditor()">
+                            🔄 Reset to Original
+                        </button>
+                        <button class="editor-action-btn save" id="editorSaveBtn" onclick="saveEditedPhoto()" disabled>
+                            💾 Save to Post
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <div class="header">
             <h1>✨ Your Content Strategy Dashboard</h1>
@@ -579,6 +1024,7 @@
                             
                             <div class="action-buttons">
                                 <button class="btn btn-primary" onclick="copyCaption('${platform}', ${postIndex})">📋 Copy Caption</button>
+                                ${post.photo_url ? `<button class="btn btn-edit-photo" onclick="openPhotoEditor('${platform}', ${postIndex}, '${post.photo_url}', '${post.matched_photo_id || ''}')">🎨 Edit Photo</button>` : ''}
                                 ${post.photo_url ? `<a href="${post.photo_url}" download class="btn btn-secondary" style="text-decoration: none;">⬇️ Download Image</a>` : ''}
                             </div>
                             
@@ -706,19 +1152,334 @@
         function copyCaption(platform, postIndex) {
             const post = contentData[platform][postIndex];
             const fullText = post.caption + (post.hashtags ? '\n\n' + post.hashtags : '');
-            
+
             navigator.clipboard.writeText(fullText).then(() => {
                 const btn = event.target;
                 const originalText = btn.textContent;
                 btn.textContent = '✅ Copied!';
                 btn.style.background = '#10b981';
-                
+
                 setTimeout(() => {
                     btn.textContent = originalText;
                     btn.style.background = '';
                 }, 2000);
             });
         }
+
+        // ============================================
+        // PHOTO EDITOR - Iteration Workflow
+        // TEST WEBHOOK: /fca-photo-editor-test
+        // Pattern from: Image-editor/index.html
+        // ============================================
+
+        // Photo Editor Configuration - ISOLATED TEST WEBHOOK
+        const PHOTO_EDITOR_WEBHOOK = 'https://jmac.app.n8n.cloud/webhook/fca-photo-editor-test';
+
+        // Photo Editor State (Iteration Pattern)
+        let editorCurrentIteration = 1;
+        let editorLastResultBase64 = null;  // Stores latest generated image
+        let editorOriginalPhotoUrl = null;   // For "Reset to Original"
+        let editorCurrentPhotoId = null;     // For Supabase updates
+        let editorCurrentPlatform = null;
+        let editorCurrentPostIndex = null;
+        let editorStudioId = null;
+
+        // DOM Elements
+        const photoEditorModal = document.getElementById('photoEditorModal');
+        const editorPreviewImage = document.getElementById('editorPreviewImage');
+        const editorIterationBadge = document.getElementById('editorIterationBadge');
+        const editorPrompt = document.getElementById('editorPrompt');
+        const editorGenerateBtn = document.getElementById('editorGenerateBtn');
+        const editorLoading = document.getElementById('editorLoading');
+        const editorLoadingText = document.getElementById('editorLoadingText');
+        const editorAutoContinue = document.getElementById('editorAutoContinue');
+        const editorResetBtn = document.getElementById('editorResetBtn');
+        const editorSaveBtn = document.getElementById('editorSaveBtn');
+        const editorError = document.getElementById('editorError');
+
+        // Open Photo Editor
+        function openPhotoEditor(platform, postIndex, photoUrl, photoId) {
+            console.log('Opening photo editor:', { platform, postIndex, photoUrl, photoId });
+
+            // Reset state
+            editorCurrentIteration = 1;
+            editorLastResultBase64 = null;
+            editorOriginalPhotoUrl = photoUrl;
+            editorCurrentPhotoId = photoId;
+            editorCurrentPlatform = platform;
+            editorCurrentPostIndex = postIndex;
+
+            // Get studio ID from content data
+            // This will be available after loadContent runs
+
+            // Set preview image
+            editorPreviewImage.src = photoUrl;
+
+            // Reset UI
+            editorIterationBadge.textContent = 'Iteration 1';
+            editorIterationBadge.classList.remove('iterating');
+            editorPrompt.value = '';
+            editorAutoContinue.classList.add('hidden');
+            editorResetBtn.classList.add('hidden');
+            editorSaveBtn.disabled = true;
+            editorError.classList.add('hidden');
+            updateEditorGenerateBtn();
+
+            // Show modal
+            photoEditorModal.classList.remove('hidden');
+            editorPrompt.focus();
+        }
+
+        // Close Photo Editor
+        function closePhotoEditor() {
+            photoEditorModal.classList.add('hidden');
+
+            // Reset state
+            editorCurrentIteration = 1;
+            editorLastResultBase64 = null;
+            editorOriginalPhotoUrl = null;
+            editorCurrentPhotoId = null;
+            editorCurrentPlatform = null;
+            editorCurrentPostIndex = null;
+        }
+
+        // Update Generate Button State
+        function updateEditorGenerateBtn() {
+            const hasPrompt = editorPrompt.value.trim().length > 0;
+            editorGenerateBtn.disabled = !hasPrompt;
+
+            // Update button text based on iteration
+            const btnText = editorGenerateBtn.querySelector('.btn-text');
+            if (editorLastResultBase64) {
+                btnText.textContent = `✨ Generate Iteration ${editorCurrentIteration + 1}`;
+            } else {
+                btnText.textContent = '✨ Generate Edit';
+            }
+        }
+
+        // Listen for prompt changes
+        editorPrompt.addEventListener('input', updateEditorGenerateBtn);
+
+        // Quick Action Prompts
+        const quickPrompts = {
+            brand: 'Add warm, energetic brand colors (purple and orange gradients) to the background while keeping the subject intact. Make it feel like a premium fitness studio.',
+            lighting: 'Improve the lighting to be warmer and more inviting. Add subtle highlights and make the subject look more vibrant and professional.',
+            background: 'Change the background to a modern fitness studio setting with sleek equipment and motivational atmosphere. Keep the subject exactly as is.',
+            clothing: 'Change the clothing color to a vibrant, energetic color that pops against the background. Keep everything else the same.',
+            energy: 'Add a sense of energy and motion to the image. Subtle motion blur, dynamic lighting, or energy effects that convey movement and vitality.',
+            professional: 'Make this image look more professional and polished. Clean up any imperfections, enhance colors, and make it suitable for high-end marketing materials.'
+        };
+
+        function setQuickPrompt(type) {
+            editorPrompt.value = quickPrompts[type] || '';
+            updateEditorGenerateBtn();
+            editorPrompt.focus();
+        }
+
+        // Generate Photo Edit - Core Iteration Logic
+        async function generatePhotoEdit() {
+            const prompt = editorPrompt.value.trim();
+            if (!prompt) return;
+
+            // Determine source image
+            let sourceImageBase64 = null;
+            let useIterationImage = false;
+
+            if (editorLastResultBase64) {
+                // Auto-continue: use previous edit result
+                sourceImageBase64 = editorLastResultBase64;
+                useIterationImage = true;
+                editorCurrentIteration++;
+                editorIterationBadge.textContent = `Iteration ${editorCurrentIteration}`;
+                editorIterationBadge.classList.add('iterating');
+            }
+
+            // Show loading
+            editorGenerateBtn.classList.add('loading');
+            editorGenerateBtn.disabled = true;
+            editorLoading.classList.remove('hidden');
+            editorLoadingText.textContent = useIterationImage
+                ? `Generating iteration ${editorCurrentIteration}...`
+                : 'Generating edit...';
+            editorError.classList.add('hidden');
+
+            try {
+                // Build request payload
+                const payload = {
+                    prompt: prompt,
+                    photo_id: editorCurrentPhotoId,
+                    iteration: editorCurrentIteration
+                };
+
+                // Include either URL (first edit) or base64 (iterations)
+                if (useIterationImage) {
+                    payload.iteration_image = sourceImageBase64;
+                } else {
+                    payload.photo_url = editorOriginalPhotoUrl;
+                }
+
+                console.log('Sending to webhook:', PHOTO_EDITOR_WEBHOOK);
+                console.log('Payload:', { ...payload, iteration_image: payload.iteration_image ? '[base64]' : undefined });
+
+                const response = await fetch(PHOTO_EDITOR_WEBHOOK, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('Response:', data);
+
+                if (!data.success || !data.editedImage) {
+                    throw new Error(data.message || 'No edited image returned');
+                }
+
+                // Store result for next iteration (KEY PATTERN)
+                editorLastResultBase64 = data.editedImage;
+
+                // Update preview
+                editorPreviewImage.src = `data:image/jpeg;base64,${data.editedImage}`;
+
+                // Show iteration UI
+                editorAutoContinue.classList.remove('hidden');
+                editorResetBtn.classList.remove('hidden');
+                editorSaveBtn.disabled = false;
+
+                // Clear prompt for next edit
+                editorPrompt.value = '';
+                editorPrompt.focus();
+
+            } catch (error) {
+                console.error('Photo edit error:', error);
+                editorError.textContent = `Error: ${error.message}`;
+                editorError.classList.remove('hidden');
+
+                // Revert iteration count if failed
+                if (useIterationImage && editorCurrentIteration > 1) {
+                    editorCurrentIteration--;
+                    editorIterationBadge.textContent = `Iteration ${editorCurrentIteration}`;
+                }
+            } finally {
+                editorGenerateBtn.classList.remove('loading');
+                editorLoading.classList.add('hidden');
+                updateEditorGenerateBtn();
+            }
+        }
+
+        // Reset to Original
+        function resetPhotoEditor() {
+            editorCurrentIteration = 1;
+            editorLastResultBase64 = null;
+
+            // Reset preview
+            editorPreviewImage.src = editorOriginalPhotoUrl;
+
+            // Reset UI
+            editorIterationBadge.textContent = 'Iteration 1';
+            editorIterationBadge.classList.remove('iterating');
+            editorAutoContinue.classList.add('hidden');
+            editorResetBtn.classList.add('hidden');
+            editorSaveBtn.disabled = true;
+            editorPrompt.value = '';
+            editorError.classList.add('hidden');
+
+            updateEditorGenerateBtn();
+        }
+
+        // Save Edited Photo to Post
+        async function saveEditedPhoto() {
+            if (!editorLastResultBase64) return;
+
+            editorSaveBtn.disabled = true;
+            editorSaveBtn.textContent = '💾 Saving...';
+
+            try {
+                // Convert base64 to blob for upload
+                const byteCharacters = atob(editorLastResultBase64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+                // Generate unique filename
+                const filename = `edited-${editorCurrentPhotoId || 'photo'}-${Date.now()}.jpg`;
+
+                // Upload to Supabase storage
+                const { data: uploadData, error: uploadError } = await supabaseClient
+                    .storage
+                    .from('studio-photos')
+                    .upload(`edited/${filename}`, blob, {
+                        contentType: 'image/jpeg',
+                        upsert: false
+                    });
+
+                if (uploadError) {
+                    console.error('Upload error:', uploadError);
+                    throw new Error('Failed to upload edited photo');
+                }
+
+                // Get public URL
+                const { data: urlData } = supabaseClient
+                    .storage
+                    .from('studio-photos')
+                    .getPublicUrl(`edited/${filename}`);
+
+                const newPhotoUrl = urlData.publicUrl;
+                console.log('Uploaded to:', newPhotoUrl);
+
+                // Update the post with new photo URL
+                const updatedContent = [...contentData[editorCurrentPlatform]];
+                updatedContent[editorCurrentPostIndex] = {
+                    ...updatedContent[editorCurrentPostIndex],
+                    photo_url: newPhotoUrl,
+                    edited_from_photo_id: editorCurrentPhotoId,
+                    edit_iteration: editorCurrentIteration
+                };
+
+                // Save to Supabase
+                const updateData = {};
+                updateData[`${editorCurrentPlatform}_content`] = updatedContent;
+
+                const { error: updateError } = await supabaseClient
+                    .from('content_deliveries')
+                    .update(updateData)
+                    .eq('id', contentDeliveryId);
+
+                if (updateError) throw updateError;
+
+                // Update local data
+                contentData[editorCurrentPlatform] = updatedContent;
+
+                // Close editor and refresh
+                closePhotoEditor();
+                renderDashboard();
+                switchTab(editorCurrentPlatform);
+
+                // Show success
+                alert('✅ Photo saved successfully!');
+
+            } catch (error) {
+                console.error('Save error:', error);
+                alert(`Error saving photo: ${error.message}`);
+                editorSaveBtn.disabled = false;
+                editorSaveBtn.textContent = '💾 Save to Post';
+            }
+        }
+
+        // Close editor on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !photoEditorModal.classList.contains('hidden')) {
+                closePhotoEditor();
+            }
+        });
     </script>
 </body>
 </html>
