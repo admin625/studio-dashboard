@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Your Content Strategy Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css"/>
     <style>
         * {
             margin: 0;
@@ -880,7 +881,131 @@
                 gap: 8px;
             }
         }
-    </style>
+            /* COLOR PICKER IN PHOTO EDITOR */
+        .editor-color-picker {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .editor-color-picker .control-section-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #667eea;
+            margin-bottom: 12px;
+        }
+
+        .editor-color-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .editor-color-input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .editor-color-input-wrapper input {
+            width: 100%;
+            padding: 10px 14px 10px 42px;
+            background: #0f0f1a;
+            border: 2px solid #2a2a4a;
+            border-radius: 8px;
+            color: #e0e0f0;
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+
+        .editor-color-input-wrapper input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .editor-color-swatch {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            border-radius: 5px;
+            border: 2px solid #2a2a4a;
+            pointer-events: none;
+        }
+
+        .editor-add-color-btn {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .editor-add-color-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .editor-color-tag {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            margin-top: 10px;
+            background: rgba(102, 126, 234, 0.15);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 20px;
+            font-size: 12px;
+            color: #a0a0f0;
+            width: fit-content;
+        }
+
+        .editor-color-tag.visible {
+            display: flex;
+        }
+
+        .editor-color-tag .tag-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .editor-color-tag .remove-color {
+            background: none;
+            border: none;
+            color: #f85149;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0 2px;
+        }
+
+        /* Coloris dark theme overrides for FCA editor modal */
+        .clr-picker {
+            background: #1a1a2e !important;
+            border-color: #2a2a4a !important;
+            z-index: 10001 !important;
+        }
+
+        .clr-picker input {
+            background: #0f0f1a !important;
+            color: #e0e0f0 !important;
+            border-color: #2a2a4a !important;
+        }
+
+</style>
 </head>
 <body>
     <div class="loading-overlay hidden" id="loadingOverlay">
@@ -946,6 +1071,22 @@
                         </div>
                     </div>
 
+                    <!-- Color Picker -->
+                    <div class="editor-color-picker">
+                        <div class="control-section-title">Add Color</div>
+                        <div class="editor-color-row">
+                            <div class="editor-color-input-wrapper">
+                                <div class="editor-color-swatch" id="editorColorSwatch" style="background: #667eea;"></div>
+                                <input type="text" id="editorColorInput" data-coloris value="#667eea">
+                            </div>
+                            <button class="editor-add-color-btn" id="editorAddColorBtn">Use This Color</button>
+                        </div>
+                        <div class="editor-color-tag" id="editorColorTag">
+                            <span class="tag-swatch" id="editorTagSwatch"></span>
+                            <span id="editorTagText"></span>
+                            <button class="remove-color" id="editorRemoveColorBtn">&times;</button>
+                        </div>
+                    </div>
                     <button class="generate-btn" id="editorGenerateBtn" onclick="generatePhotoEdit()" disabled>
                         <div class="spinner"></div>
                         <span class="btn-text">Generate Edit</span>
@@ -1375,6 +1516,7 @@
         var editorCurrentPhotoId = null;
         var editorCurrentPlatform = null;
         var editorCurrentPostIndex = null;
+        var editorSelectedColor = null;
 
         var photoEditorModal = document.getElementById('photoEditorModal');
         var editorPreviewImage = document.getElementById('editorPreviewImage');
@@ -1407,6 +1549,8 @@
             editorResetBtn.classList.add('hidden');
             editorSaveBtn.disabled = true;
             editorError.classList.add('hidden');
+            editorSelectedColor = null;
+            document.getElementById('editorColorTag').classList.remove('visible');
 
             updateEditorGenerateBtn();
 
@@ -1423,6 +1567,8 @@
             editorCurrentPhotoId = null;
             editorCurrentPlatform = null;
             editorCurrentPostIndex = null;
+            editorSelectedColor = null;
+            document.getElementById('editorColorTag').classList.remove('visible');
         }
 
         function updateEditorGenerateBtn() {
@@ -1476,13 +1622,24 @@
             editorError.classList.add('hidden');
 
             try {
+                // Build prompt with optional color
+                var finalPrompt = prompt;
+                if (editorSelectedColor) {
+                    finalPrompt += '. Incorporate this color prominently: ' + editorSelectedColor;
+                }
+
                 var payload = {
-                    prompt: prompt,
+                    prompt: finalPrompt,
                     photo_id: editorCurrentPhotoId,
                     iteration: editorCurrentIteration,
                     user_email: currentUserEmail || 'anonymous',
                     user_role: currentUserRole || 'studio_owner'
                 };
+
+                // Add color as separate field for n8n workflow
+                if (editorSelectedColor) {
+                    payload.color = editorSelectedColor;
+                }
 
                 if (useIterationImage) {
                     payload.iteration_image = sourceImageBase64;
@@ -1548,6 +1705,8 @@
             editorSaveBtn.disabled = true;
             editorPrompt.value = '';
             editorError.classList.add('hidden');
+            editorSelectedColor = null;
+            document.getElementById('editorColorTag').classList.remove('visible');
 
             updateEditorGenerateBtn();
         }
@@ -1627,6 +1786,50 @@
             if (e.key === 'Escape' && !photoEditorModal.classList.contains('hidden')) {
                 closePhotoEditor();
             }
+        });
+    
+        // ============================================
+        // COLOR PICKER IN PHOTO EDITOR
+        // ============================================
+
+        var editorColorInput = document.getElementById('editorColorInput');
+        var editorColorSwatch = document.getElementById('editorColorSwatch');
+        var editorAddColorBtn = document.getElementById('editorAddColorBtn');
+        var editorColorTag = document.getElementById('editorColorTag');
+        var editorTagSwatch = document.getElementById('editorTagSwatch');
+        var editorTagText = document.getElementById('editorTagText');
+        var editorRemoveColorBtn = document.getElementById('editorRemoveColorBtn');
+
+        // Update swatch preview when color changes
+        editorColorInput.addEventListener('input', function(e) {
+            editorColorSwatch.style.background = e.target.value;
+        });
+
+        // Add color
+        editorAddColorBtn.addEventListener('click', function() {
+            editorSelectedColor = editorColorInput.value;
+            editorTagSwatch.style.background = editorSelectedColor;
+            editorTagText.textContent = editorSelectedColor;
+            editorColorTag.classList.add('visible');
+        });
+
+        // Remove color
+        editorRemoveColorBtn.addEventListener('click', function() {
+            editorSelectedColor = null;
+            editorColorTag.classList.remove('visible');
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js"></script>
+    <script>
+        Coloris({
+            themeMode: 'dark',
+            alpha: false,
+            format: 'hex',
+            swatches: [
+                '#667eea', '#764ba2', '#f59e0b', '#10b981',
+                '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899',
+                '#000000', '#ffffff', '#ff6900', '#0693e3'
+            ]
         });
     </script>
 </body>
