@@ -1010,22 +1010,7 @@
         // ============================================
 
         function filterPhotosForUser(photos, userEmail, userRole) {
-            if (!userRole || userRole === 'studio_owner') {
-                return photos;
-            }
-
-            if (userRole === 'studio_instructor') {
-                return photos.filter(photo => {
-                    if (!photo.tags || photo.tags.length === 0) {
-                        return true;
-                    }
-                    if (userEmail && photo.tags.includes(userEmail)) {
-                        return true;
-                    }
-                    return false;
-                });
-            }
-
+            // All roles see all photos (activity + all instructor headshots)
             return photos;
         }
 
@@ -1109,11 +1094,7 @@
                         console.log('Loaded all studio photos:', photos.length);
 
                         filteredPhotos = filterPhotosForUser(photos, currentUserEmail, currentUserRole);
-                        console.log('Filtered photos for user:', filteredPhotos.length);
-
-                        if (currentUserRole === 'studio_instructor' && filteredPhotos.length < studioPhotos.length) {
-                            console.log('Instructor view - some headshots hidden');
-                        }
+                        console.log('Photos available for user:', filteredPhotos.length);
                     }
                 }
 
@@ -1277,7 +1258,7 @@
                     '</div>';
                 }).join('');
 
-                var headshotTitle = currentUserRole === 'studio_instructor' ? 'Your Headshot' : 'Instructor Headshots';
+                var headshotTitle = 'Instructor Headshots';
                 headshotsHTML = '<div class="photo-gallery-section">' +
                     '<div class="photo-gallery-section-title headshot">' + headshotTitle + ' (' + headshots.length + ')</div>' +
                     '<div class="photo-gallery" style="display: grid;">' + headshotThumbnails + '</div>' +
@@ -1285,13 +1266,7 @@
             }
 
             var photoCountInfo = '';
-            if (currentUserRole === 'studio_instructor' && studioPhotos.length > filteredPhotos.length) {
-                var hiddenCount = studioPhotos.length - filteredPhotos.length;
-                photoCountInfo = '<div class="photo-count-info restricted">' +
-                    'Note: As an instructor, you can see ' + filteredPhotos.length + ' photos (' + activity.length + ' activity + ' + headshots.length + ' your headshot). ' +
-                    hiddenCount + ' other instructor headshots are hidden.' +
-                '</div>';
-            } else if (filteredPhotos.length > 0) {
+            if (filteredPhotos.length > 0) {
                 photoCountInfo = '<div class="photo-count-info">' +
                     filteredPhotos.length + ' photos available (' + activity.length + ' activity, ' + headshots.length + ' headshots)' +
                 '</div>';
