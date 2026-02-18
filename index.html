@@ -1162,6 +1162,11 @@
                 <div class="editor-controls">
                     <div class="control-section">
                         <div class="control-section-title">Edit Instructions</div>
+                        <div class="photo-editor-hint" style="font-size: 13px; color: #6b7280; margin-bottom: 8px; padding: 8px 12px; background: #f3f4f6; border-radius: 6px; border-left: 3px solid #8b5cf6;">
+                            <strong>Editing tips:</strong> Best results with color/lighting changes, background swaps, and style adjustments.
+                            For removing objects, try describing what you want the scene to look like instead
+                            (e.g., <em>"clean studio backdrop with wooden floors"</em> rather than <em>"remove the equipment"</em>).
+                        </div>
                         <textarea class="editor-prompt" id="editorPrompt"
                                   placeholder="What do you want to change?"></textarea>
                     </div>
@@ -1850,6 +1855,37 @@
                 editorAutoContinue.classList.remove('hidden');
                 editorResetBtn.classList.remove('hidden');
                 editorSaveBtn.disabled = false;
+
+                // Show feedback when edit returns without AI text response
+                if (data.editedImage && !data.aiResponse) {
+                    editorError.textContent = "Edit complete! If the result isn't quite right, try rephrasing your prompt \u2014 describing the scene you want often works better than asking to remove specific objects.";
+                    editorError.classList.remove('hidden');
+                    editorError.style.color = '#059669';
+                    editorError.style.background = '#ecfdf5';
+                    editorError.style.border = '1px solid #a7f3d0';
+                    editorError.style.padding = '8px 12px';
+                    editorError.style.borderRadius = '6px';
+                    editorError.style.fontSize = '13px';
+                    // Auto-hide after 8 seconds
+                    setTimeout(function() {
+                        editorError.classList.add('hidden');
+                        editorError.style.color = '';
+                        editorError.style.background = '';
+                        editorError.style.border = '';
+                        editorError.style.padding = '';
+                        editorError.style.borderRadius = '';
+                        editorError.style.fontSize = '';
+                    }, 8000);
+                } else if (data.aiResponse) {
+                    editorError.textContent = data.aiResponse;
+                    editorError.classList.remove('hidden');
+                    editorError.style.color = '#4b5563';
+                    editorError.style.background = '#f9fafb';
+                    editorError.style.border = '1px solid #e5e7eb';
+                    editorError.style.padding = '8px 12px';
+                    editorError.style.borderRadius = '6px';
+                    editorError.style.fontSize = '13px';
+                }
 
                 editorPrompt.value = '';
                 editorPrompt.focus();
