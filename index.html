@@ -430,6 +430,191 @@
             border-bottom: 2px solid #e2e8f0;
         }
 
+        /* OWNER PHOTO UPLOAD */
+        .upload-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .upload-section h3 {
+            color: #475569;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .upload-dropzone {
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #f8fafc;
+        }
+
+        .upload-dropzone:hover,
+        .upload-dropzone.drag-over {
+            border-color: #8b5cf6;
+            background: #f5f3ff;
+        }
+
+        .upload-dropzone-icon {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+
+        .upload-dropzone-text {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .upload-dropzone-text strong {
+            color: #8b5cf6;
+        }
+
+        .upload-dropzone-hint {
+            color: #94a3b8;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .upload-options {
+            display: flex;
+            gap: 12px;
+            margin-top: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .upload-category-select {
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 14px;
+            color: #374151;
+            background: white;
+            cursor: pointer;
+        }
+
+        .upload-category-select:focus {
+            outline: none;
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+        }
+
+        .upload-btn {
+            padding: 8px 20px;
+            border-radius: 8px;
+            border: none;
+            background: #8b5cf6;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .upload-btn:hover {
+            background: #7c3aed;
+        }
+
+        .upload-btn:disabled {
+            background: #c4b5fd;
+            cursor: not-allowed;
+        }
+
+        .upload-file-list {
+            margin-top: 12px;
+        }
+
+        .upload-file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+
+        .upload-file-item .file-name {
+            flex: 1;
+            color: #374151;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .upload-file-item .file-size {
+            color: #9ca3af;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .upload-file-item .file-status {
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .upload-file-item .file-status.pending { color: #6b7280; }
+        .upload-file-item .file-status.uploading { color: #8b5cf6; }
+        .upload-file-item .file-status.success { color: #059669; }
+        .upload-file-item .file-status.error { color: #dc2626; }
+
+        .upload-file-item .file-remove {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .upload-file-item .file-remove:hover {
+            color: #dc2626;
+        }
+
+        .upload-progress-bar {
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .upload-progress-bar .progress-fill {
+            height: 100%;
+            background: #8b5cf6;
+            border-radius: 2px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+
+        .upload-summary {
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .upload-summary.success {
+            background: #ecfdf5;
+            color: #059669;
+            border: 1px solid #a7f3d0;
+        }
+
+        .upload-summary.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+
         /* PHOTO TYPE LABELS */
         .photo-gallery-section {
             margin-bottom: 20px;
@@ -1134,6 +1319,26 @@
                 <p style="font-weight: 600; color: #dc2626; margin-bottom: 8px;">Unable to load photos</p>
                 <p style="font-size: 13px;">There was an issue loading your studio photo gallery. Please try refreshing the page. If the problem persists, contact support.</p>
             </div>
+            <!-- Owner-only upload section -->
+            <div id="uploadSection" class="upload-section" style="display: none;">
+                <h3>Upload Photos</h3>
+                <div class="upload-dropzone" id="uploadDropzone" onclick="document.getElementById('uploadFileInput').click()">
+                    <div class="upload-dropzone-icon">+</div>
+                    <div class="upload-dropzone-text"><strong>Click to browse</strong> or drag &amp; drop photos here</div>
+                    <div class="upload-dropzone-hint">JPG, PNG, or WebP &mdash; up to 25 MB each</div>
+                </div>
+                <input type="file" id="uploadFileInput" accept="image/jpeg,image/png,image/webp" multiple style="display: none;">
+                <div class="upload-file-list" id="uploadFileList"></div>
+                <div class="upload-options" id="uploadOptions" style="display: none;">
+                    <label style="font-size: 13px; color: #6b7280;">Category:</label>
+                    <select class="upload-category-select" id="uploadCategory">
+                        <option value="activity">Studio / Activity</option>
+                        <option value="headshot">Instructor Headshot</option>
+                    </select>
+                    <button class="upload-btn" id="uploadBtn" onclick="startUpload()">Upload</button>
+                </div>
+                <div id="uploadSummary"></div>
+            </div>
         </div>
 
         <div class="platform-tabs" id="platformTabs"></div>
@@ -1389,6 +1594,302 @@
         }
 
         // ============================================
+        // OWNER PHOTO UPLOAD
+        // ============================================
+
+        var uploadPendingFiles = [];
+
+        function initUploadUI() {
+            // Only show upload section for studio_owner
+            if (currentUserRole !== 'studio_owner') {
+                console.log('[Upload] User role is', currentUserRole, '- upload hidden');
+                return;
+            }
+
+            var section = document.getElementById('uploadSection');
+            var dropzone = document.getElementById('uploadDropzone');
+            var fileInput = document.getElementById('uploadFileInput');
+
+            section.style.display = 'block';
+            console.log('[Upload] Upload UI initialized for studio_owner');
+
+            // Drag and drop handlers
+            dropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.add('drag-over');
+            });
+
+            dropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('drag-over');
+            });
+
+            dropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('drag-over');
+                handleFiles(e.dataTransfer.files);
+            });
+
+            // File input change
+            fileInput.addEventListener('change', function(e) {
+                handleFiles(e.target.files);
+                fileInput.value = ''; // Reset so same file can be re-selected
+            });
+        }
+
+        function handleFiles(fileList) {
+            var ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+            var MAX_SIZE = 25 * 1024 * 1024; // 25 MB
+            var errors = [];
+
+            for (var i = 0; i < fileList.length; i++) {
+                var file = fileList[i];
+
+                if (ALLOWED_TYPES.indexOf(file.type) === -1) {
+                    errors.push(file.name + ': Invalid file type (' + file.type + '). Only JPG, PNG, or WebP allowed.');
+                    continue;
+                }
+
+                if (file.size > MAX_SIZE) {
+                    errors.push(file.name + ': File too large (' + formatBytes(file.size) + '). Maximum 25 MB.');
+                    continue;
+                }
+
+                // Check for duplicates
+                var isDuplicate = uploadPendingFiles.some(function(f) { return f.name === file.name && f.size === file.size; });
+                if (isDuplicate) continue;
+
+                uploadPendingFiles.push(file);
+            }
+
+            renderFileList();
+
+            if (errors.length > 0) {
+                var summary = document.getElementById('uploadSummary');
+                summary.className = 'upload-summary error';
+                summary.textContent = errors.join(' | ');
+                summary.style.display = 'block';
+                setTimeout(function() { summary.style.display = 'none'; }, 6000);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function renderFileList() {
+            var list = document.getElementById('uploadFileList');
+            var options = document.getElementById('uploadOptions');
+
+            if (uploadPendingFiles.length === 0) {
+                list.innerHTML = '';
+                options.style.display = 'none';
+                return;
+            }
+
+            options.style.display = 'flex';
+
+            var html = '';
+            uploadPendingFiles.forEach(function(file, index) {
+                html += '<div class="upload-file-item" id="upload-file-' + index + '">' +
+                    '<span class="file-name">' + file.name + '</span>' +
+                    '<span class="file-size">' + formatBytes(file.size) + '</span>' +
+                    '<span class="file-status pending" id="upload-status-' + index + '">Ready</span>' +
+                    '<button class="file-remove" onclick="removeUploadFile(' + index + ')">&times;</button>' +
+                '</div>';
+            });
+            list.innerHTML = html;
+        }
+
+        function removeUploadFile(index) {
+            uploadPendingFiles.splice(index, 1);
+            renderFileList();
+        }
+
+        async function startUpload() {
+            if (uploadPendingFiles.length === 0) return;
+
+            var btn = document.getElementById('uploadBtn');
+            var category = document.getElementById('uploadCategory').value;
+            btn.disabled = true;
+            btn.textContent = 'Uploading...';
+
+            // Get delivery to know the studio_id
+            var studioId = null;
+            try {
+                var result = await supabaseClient
+                    .from('content_deliveries')
+                    .select('studio_id')
+                    .eq('id', contentDeliveryId)
+                    .single();
+                studioId = result.data.studio_id;
+            } catch(e) {
+                console.error('[Upload] Could not get studio_id:', e);
+            }
+
+            if (!studioId) {
+                showUploadSummary('error', 'Could not determine studio ID. Please refresh and try again.');
+                btn.disabled = false;
+                btn.textContent = 'Upload';
+                return;
+            }
+
+            console.log('[Upload] Starting upload of', uploadPendingFiles.length, 'files to studio', studioId, 'category:', category);
+
+            var successCount = 0;
+            var errorCount = 0;
+            var filesToUpload = uploadPendingFiles.slice(); // copy array
+
+            for (var i = 0; i < filesToUpload.length; i++) {
+                var file = filesToUpload[i];
+                var statusEl = document.getElementById('upload-status-' + i);
+                var fileItem = document.getElementById('upload-file-' + i);
+
+                statusEl.className = 'file-status uploading';
+                statusEl.textContent = 'Uploading...';
+
+                // Add progress bar
+                var progressHTML = '<div class="upload-progress-bar"><div class="progress-fill" id="upload-progress-' + i + '"></div></div>';
+                fileItem.insertAdjacentHTML('beforeend', progressHTML);
+
+                try {
+                    // Storage path: studio-{studioId}/{timestamp}-{filename}
+                    var storagePath = 'studio-' + studioId + '/' + Date.now() + '-' + file.name;
+
+                    console.log('[Upload] Uploading:', file.name, '(' + formatBytes(file.size) + ') to', storagePath);
+
+                    // Animate progress bar (estimated)
+                    var progressEl = document.getElementById('upload-progress-' + i);
+                    var progressInterval = setInterval(function(el) {
+                        var current = parseFloat(el.style.width) || 0;
+                        if (current < 85) el.style.width = (current + Math.random() * 15) + '%';
+                    }.bind(null, progressEl), 300);
+
+                    // Upload to Supabase storage
+                    var uploadResult = await supabaseClient
+                        .storage
+                        .from('studio-photos')
+                        .upload(storagePath, file, {
+                            contentType: file.type,
+                            upsert: false
+                        });
+
+                    clearInterval(progressInterval);
+
+                    if (uploadResult.error) {
+                        throw new Error(uploadResult.error.message || 'Storage upload failed');
+                    }
+
+                    progressEl.style.width = '90%';
+
+                    // Get public URL
+                    var urlResult = supabaseClient
+                        .storage
+                        .from('studio-photos')
+                        .getPublicUrl(storagePath);
+                    var photoUrl = urlResult.data.publicUrl;
+
+                    // Build tags array: for headshots, tag with empty (owner can edit later)
+                    var tags = category === 'headshot' ? [] : null;
+
+                    // Insert record into studio_photos
+                    var insertResult = await supabaseClient
+                        .from('studio_photos')
+                        .insert({
+                            studio_id: studioId,
+                            photo_url: photoUrl,
+                            file_name: file.name,
+                            file_size: file.size,
+                            tags: tags,
+                            uploaded_by: currentUserEmail || 'studio_owner',
+                            is_active: true,
+                            keywords: category
+                        });
+
+                    if (insertResult.error) {
+                        throw new Error(insertResult.error.message || 'Database insert failed');
+                    }
+
+                    progressEl.style.width = '100%';
+                    statusEl.className = 'file-status success';
+                    statusEl.textContent = 'Done';
+                    successCount++;
+
+                    console.log('[Upload] Success:', file.name, '->', photoUrl);
+
+                } catch (err) {
+                    clearInterval(progressInterval);
+                    console.error('[Upload] Failed:', file.name, err);
+                    statusEl.className = 'file-status error';
+                    statusEl.textContent = 'Failed';
+                    var progressEl2 = document.getElementById('upload-progress-' + i);
+                    if (progressEl2) progressEl2.parentElement.remove();
+                    errorCount++;
+                }
+            }
+
+            // Show summary
+            if (errorCount === 0) {
+                showUploadSummary('success', successCount + ' photo' + (successCount > 1 ? 's' : '') + ' uploaded successfully!');
+            } else if (successCount > 0) {
+                showUploadSummary('error', successCount + ' uploaded, ' + errorCount + ' failed. Check file list for details.');
+            } else {
+                showUploadSummary('error', 'All uploads failed. Please try again.');
+            }
+
+            // Reset
+            uploadPendingFiles = [];
+            btn.disabled = false;
+            btn.textContent = 'Upload';
+
+            // Refresh gallery if any succeeded
+            if (successCount > 0) {
+                console.log('[Upload] Refreshing gallery...');
+                await refreshGalleryPhotos(studioId);
+            }
+        }
+
+        function showUploadSummary(type, message) {
+            var summary = document.getElementById('uploadSummary');
+            summary.className = 'upload-summary ' + type;
+            summary.textContent = message;
+            summary.style.display = 'block';
+            if (type === 'success') {
+                setTimeout(function() { summary.style.display = 'none'; }, 5000);
+            }
+        }
+
+        async function refreshGalleryPhotos(studioId) {
+            try {
+                var result = await supabaseClient
+                    .from('studio_photos')
+                    .select('*')
+                    .eq('studio_id', studioId)
+                    .eq('is_active', true);
+
+                if (result.error) {
+                    console.error('[Upload] Refresh error:', result.error);
+                    return;
+                }
+
+                studioPhotos = result.data;
+                filteredPhotos = filterPhotosForUser(result.data, currentUserEmail, currentUserRole);
+                console.log('[Upload] Gallery refreshed:', filteredPhotos.length, 'photos');
+
+                renderStudioGallery(false);
+                // Re-render dashboard to update per-post swap galleries
+                renderDashboard();
+            } catch (err) {
+                console.error('[Upload] Refresh exception:', err);
+            }
+        }
+
+        // ============================================
         // CONTENT LOADING
         // ============================================
 
@@ -1455,6 +1956,7 @@
 
                 showUserInfo();
                 renderStudioGallery(photoLoadError);
+                initUploadUI();
                 renderDashboard();
             } catch (error) {
                 console.error('[Dashboard] Fatal error loading content:', error);
