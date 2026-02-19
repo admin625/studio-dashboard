@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Your Content Strategy Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.94.1/dist/umd/supabase.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css"/>
     <style>
         * {
@@ -1130,6 +1130,10 @@
                 <span class="toggle-icon" id="galleryToggleIcon">&#9660;</span>
             </div>
             <div id="studioGalleryContent" class="studio-gallery-grid"></div>
+            <div id="galleryErrorState" style="display: none; padding: 20px; text-align: center; color: #6b7280; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; margin-top: 10px;">
+                <p style="font-weight: 600; color: #dc2626; margin-bottom: 8px;">Unable to load photos</p>
+                <p style="font-size: 13px;">There was an issue loading your studio photo gallery. Please try refreshing the page. If the problem persists, contact support.</p>
+            </div>
         </div>
 
         <div class="platform-tabs" id="platformTabs"></div>
@@ -1308,22 +1312,39 @@
         // STUDIO PHOTO GALLERY
         // ============================================
 
-        function renderStudioGallery() {
+        function renderStudioGallery(errorOccurred) {
             const section = document.getElementById('studioGallerySection');
             const content = document.getElementById('studioGalleryContent');
             const countDisplay = document.getElementById('galleryPhotoCount');
+            const errorState = document.getElementById('galleryErrorState');
+
+            console.log('[Gallery] renderStudioGallery called. filteredPhotos:', filteredPhotos ? filteredPhotos.length : 'null', 'errorOccurred:', errorOccurred);
+
+            // Show error state if photo loading failed
+            if (errorOccurred) {
+                section.style.display = 'block';
+                content.style.display = 'none';
+                errorState.style.display = 'block';
+                countDisplay.textContent = '';
+                return;
+            }
 
             if (!filteredPhotos || filteredPhotos.length === 0) {
                 section.style.display = 'none';
+                console.log('[Gallery] No photos to display, hiding gallery');
                 return;
             }
 
             section.style.display = 'block';
+            content.style.display = '';
+            errorState.style.display = 'none';
             var categories = categorizePhotos(filteredPhotos);
 
             countDisplay.textContent = filteredPhotos.length + ' photos (' +
                 categories.activity.length + ' activity, ' +
                 categories.headshots.length + ' headshots)';
+
+            console.log('[Gallery] Rendering', filteredPhotos.length, 'photos:', categories.activity.length, 'activity,', categories.headshots.length, 'headshots');
 
             var html = '';
 
@@ -1357,6 +1378,7 @@
             }
 
             content.innerHTML = html;
+            console.log('[Gallery] Gallery rendered successfully');
         }
 
         function toggleStudioGallery() {
@@ -1371,10 +1393,13 @@
         // ============================================
 
         async function loadContent() {
+            var photoLoadError = false;
             try {
-                console.log('Loading content for ID:', contentDeliveryId);
-                console.log('User email:', currentUserEmail);
-                console.log('User role:', currentUserRole);
+                console.log('[Dashboard] Loading content for ID:', contentDeliveryId);
+                console.log('[Dashboard] User email:', currentUserEmail);
+                console.log('[Dashboard] User role:', currentUserRole);
+                console.log('[Dashboard] Supabase URL:', SUPABASE_URL);
+                console.log('[Dashboard] supabase-js version:', typeof supabase !== 'undefined' ? (supabase.version || 'loaded') : 'NOT LOADED');
 
                 const { data: delivery, error } = await supabaseClient
                     .from('content_deliveries')
@@ -1383,11 +1408,11 @@
                     .single();
 
                 if (error) {
-                    console.error('Supabase error:', error);
+                    console.error('[Dashboard] Content delivery query error:', error);
                     throw error;
                 }
 
-                console.log('Loaded delivery:', delivery);
+                console.log('[Dashboard] Delivery loaded. studio_id:', delivery.studio_id);
 
                 contentData = {
                     instagram: delivery.instagram_content || [],
@@ -1398,38 +1423,47 @@
                 };
 
                 if (delivery.studio_id) {
-                    const { data: photos, error: photoError } = await supabaseClient
-                        .from('studio_photos')
-                        .select('*')
-                        .eq('studio_id', delivery.studio_id)
-                        .eq('is_active', true);
+                    console.log('[Dashboard] Querying studio_photos for studio_id:', delivery.studio_id);
+                    try {
+                        const { data: photos, error: photoError } = await supabaseClient
+                            .from('studio_photos')
+                            .select('*')
+                            .eq('studio_id', delivery.studio_id)
+                            .eq('is_active', true);
 
-                    if (photoError) {
-                        console.error('Photo query error:', photoError);
-                    }
-                    if (!photoError && photos) {
-                        studioPhotos = photos;
-                        console.log('Loaded all studio photos:', photos.length);
+                        if (photoError) {
+                            console.error('[Dashboard] Photo query error:', photoError);
+                            photoLoadError = true;
+                        }
+                        if (!photoError && photos) {
+                            studioPhotos = photos;
+                            console.log('[Dashboard] Loaded studio photos:', photos.length, 'total');
 
-                        filteredPhotos = filterPhotosForUser(photos, currentUserEmail, currentUserRole);
-                        console.log('Photos available for user:', filteredPhotos.length);
-                    } else if (!photos) {
-                        console.warn('No photos returned for studio:', delivery.studio_id);
+                            filteredPhotos = filterPhotosForUser(photos, currentUserEmail, currentUserRole);
+                            console.log('[Dashboard] Filtered photos for user:', filteredPhotos.length);
+                        } else if (!photos) {
+                            console.warn('[Dashboard] No photos returned for studio:', delivery.studio_id);
+                            photoLoadError = true;
+                        }
+                    } catch (photoErr) {
+                        console.error('[Dashboard] Photo loading exception:', photoErr);
+                        photoLoadError = true;
                     }
                 } else {
-                    console.warn('Delivery has no studio_id - cannot load photos');
+                    console.warn('[Dashboard] Delivery has no studio_id - cannot load photos');
                 }
 
                 showUserInfo();
-                renderStudioGallery();
+                renderStudioGallery(photoLoadError);
                 renderDashboard();
             } catch (error) {
-                console.error('Error loading content:', error);
+                console.error('[Dashboard] Fatal error loading content:', error);
+                renderStudioGallery(true);
                 document.getElementById('contentContainer').innerHTML =
                     '<div class="empty-state">' +
                         '<div class="empty-state-icon">Error</div>' +
                         '<p>Error loading content: ' + error.message + '</p>' +
-                        '<p style="font-size: 12px; margin-top: 10px;">Check console for details</p>' +
+                        '<p style="font-size: 12px; margin-top: 10px;">Check console for details. Try refreshing the page.</p>' +
                     '</div>';
             }
         }
