@@ -1450,6 +1450,7 @@
         let studioPhotos = [];        // All studio photos
         let filteredPhotos = [];      // Photos filtered by user role
         let contentDeliveryId = null;
+        let resolvedStudioId = null;  // Studio ID resolved from delivery or email lookup
 
         // User identification from URL params
         let currentUserEmail = null;
@@ -1719,18 +1720,9 @@
             btn.disabled = true;
             btn.textContent = 'Uploading...';
 
-            // Get delivery to know the studio_id
-            var studioId = null;
-            try {
-                var result = await supabaseClient
-                    .from('content_deliveries')
-                    .select('studio_id')
-                    .eq('id', contentDeliveryId)
-                    .single();
-                studioId = result.data.studio_id;
-            } catch(e) {
-                console.error('[Upload] Could not get studio_id:', e);
-            }
+            // Use the globally resolved studio_id (set during loadContent)
+            var studioId = resolvedStudioId;
+            console.log('[Upload] Using resolved studio_id:', studioId);
 
             if (!studioId) {
                 showUploadSummary('error', 'Could not determine studio ID. Please refresh and try again.');
@@ -1923,13 +1915,51 @@
                     tiktok: delivery.tiktok_content || []
                 };
 
-                if (delivery.studio_id) {
-                    console.log('[Dashboard] Querying studio_photos for studio_id:', delivery.studio_id);
+                // Resolve studio_id: use delivery's studio_id, or look up from user email
+                resolvedStudioId = delivery.studio_id;
+
+                if (!resolvedStudioId && currentUserEmail) {
+                    console.log('[Dashboard] Delivery has no studio_id, looking up from email:', currentUserEmail);
+                    try {
+                        // Check studio_accounts first (owner)
+                        var studioLookup = await supabaseClient
+                            .from('studio_accounts')
+                            .select('id')
+                            .eq('email', currentUserEmail)
+                            .limit(1);
+                        if (studioLookup.data && studioLookup.data.length > 0) {
+                            resolvedStudioId = studioLookup.data[0].id;
+                            console.log('[Dashboard] Found studio_id from studio_accounts:', resolvedStudioId);
+                        } else {
+                            // Check studio_instructors (instructor)
+                            var instructorLookup = await supabaseClient
+                                .from('studio_instructors')
+                                .select('studio_id')
+                                .eq('email', currentUserEmail)
+                                .limit(1);
+                            if (instructorLookup.data && instructorLookup.data.length > 0) {
+                                resolvedStudioId = instructorLookup.data[0].studio_id;
+                                console.log('[Dashboard] Found studio_id from studio_instructors:', resolvedStudioId);
+                            }
+                        }
+                    } catch (lookupErr) {
+                        console.error('[Dashboard] Studio lookup error:', lookupErr);
+                    }
+                }
+
+                if (!resolvedStudioId) {
+                    console.warn('[Dashboard] Could not resolve studio_id - no gallery');
+                }
+
+                if (resolvedStudioId) {
+                    // Store resolved studio_id on delivery for use by upload and other features
+                    delivery.studio_id = resolvedStudioId;
+                    console.log('[Dashboard] Querying studio_photos for studio_id:', resolvedStudioId);
                     try {
                         const { data: photos, error: photoError } = await supabaseClient
                             .from('studio_photos')
                             .select('*')
-                            .eq('studio_id', delivery.studio_id)
+                            .eq('studio_id', resolvedStudioId)
                             .eq('is_active', true);
 
                         if (photoError) {
@@ -1943,15 +1973,13 @@
                             filteredPhotos = filterPhotosForUser(photos, currentUserEmail, currentUserRole);
                             console.log('[Dashboard] Filtered photos for user:', filteredPhotos.length);
                         } else if (!photos) {
-                            console.warn('[Dashboard] No photos returned for studio:', delivery.studio_id);
+                            console.warn('[Dashboard] No photos returned for studio:', resolvedStudioId);
                             photoLoadError = true;
                         }
                     } catch (photoErr) {
                         console.error('[Dashboard] Photo loading exception:', photoErr);
                         photoLoadError = true;
                     }
-                } else {
-                    console.warn('[Dashboard] Delivery has no studio_id - cannot load photos');
                 }
 
                 showUserInfo();
