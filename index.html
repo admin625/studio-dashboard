@@ -1133,6 +1133,111 @@
             display: none;
         }
 
+        /* LOGIN SCREEN */
+        .login-overlay {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20000;
+            padding: 20px;
+        }
+        .login-overlay.hidden { display: none; }
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px 32px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .login-card h1 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .login-card .login-subtitle {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 28px;
+        }
+        .login-card .form-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+        .login-card label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .login-card input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .login-card input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 8px;
+        }
+        .login-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .login-error {
+            color: #ef4444;
+            font-size: 13px;
+            margin-top: 12px;
+            display: none;
+        }
+        .login-error.visible { display: block; }
+
+        /* Sign Out Button */
+        .sign-out-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-left: 12px;
+        }
+        .sign-out-btn:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+            color: #dc2626;
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 24px;
@@ -1288,6 +1393,29 @@
 </style>
 </head>
 <body>
+    <!-- LOGIN SCREEN -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-card">
+            <h1>FCA Dashboard</h1>
+            <p class="login-subtitle">Sign in to view your content</p>
+            <form id="loginForm" onsubmit="handleDashboardLogin(event)">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="loginEmail" placeholder="you@studio.com" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
+                <p class="login-error" id="loginError"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP (hidden until authenticated) -->
+    <div id="appShell" style="display:none">
+
     <div class="loading-overlay hidden" id="loadingOverlay">
         <div class="loading-content">
             <div class="spinner"></div>
@@ -1302,6 +1430,7 @@
             <div class="user-info-banner" id="userInfoBanner" style="display: none;">
                 <span>Logged in as: <span class="user-email" id="userEmailDisplay"></span></span>
                 <span class="user-role" id="userRoleDisplay"></span>
+                <button class="sign-out-btn" onclick="handleDashboardSignOut()">Sign Out</button>
             </div>
         </div>
 
@@ -1432,14 +1561,16 @@
         </div>
     </div>
 
+    </div><!-- /appShell -->
+
     <script>
         // Supabase configuration
         const SUPABASE_URL = 'https://kidgcrqxrfcbsaeguwop.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpZGdjcnF4cmZjYnNhZWd1d29wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2MzY5MzQsImV4cCI6MjA3NDIxMjkzNH0.7u__bKIRGD7xt3JcoME2CBjIF7dGdkqE24IQ26hCe3k';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
             auth: {
-                persistSession: false,
-                autoRefreshToken: false
+                persistSession: true,
+                autoRefreshToken: true
             }
         });
 
@@ -1452,21 +1583,146 @@
         let contentDeliveryId = null;
         let resolvedStudioId = null;  // Studio ID resolved from delivery or email lookup
 
-        // User identification from URL params
+        // User identification (set from auth + database lookup)
         let currentUserEmail = null;
         let currentUserRole = null;
 
-        // Get parameters from URL
+        // Get delivery ID from URL (still supported for email deep links)
         const urlParams = new URLSearchParams(window.location.search);
         contentDeliveryId = urlParams.get('id');
-        currentUserEmail = urlParams.get('email');
-        currentUserRole = urlParams.get('role');
 
-        if (!contentDeliveryId) {
-            document.body.innerHTML = '<div class="container"><div class="header"><h1>Error</h1><p>No content ID provided</p></div></div>';
-        } else {
-            loadContent();
+        // ============================================
+        // AUTH: Login, Logout, Session Management
+        // ============================================
+
+        async function handleDashboardLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorEl = document.getElementById('loginError');
+
+            errorEl.classList.remove('visible');
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Signing in...';
+
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+            if (error) {
+                errorEl.textContent = error.message;
+                errorEl.classList.add('visible');
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Sign In';
+                return;
+            }
+
+            // onAuthStateChange will handle the rest
         }
+
+        async function handleDashboardSignOut() {
+            await supabaseClient.auth.signOut();
+            currentUserEmail = null;
+            currentUserRole = null;
+            contentData = null;
+            studioPhotos = [];
+            filteredPhotos = [];
+            document.getElementById('appShell').style.display = 'none';
+            document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginError').classList.remove('visible');
+        }
+
+        async function lookupUserRole(email) {
+            // Check clients table first (studio_owner)
+            const { data: client } = await supabaseClient
+                .from('clients')
+                .select('id, email')
+                .eq('email', email)
+                .maybeSingle();
+
+            if (client) {
+                return { role: 'studio_owner', studioId: client.id };
+            }
+
+            // Check studio_instructors table (studio_instructor)
+            const { data: instructor } = await supabaseClient
+                .from('studio_instructors')
+                .select('id, studio_id, email')
+                .eq('email', email)
+                .eq('status', 'active')
+                .maybeSingle();
+
+            if (instructor) {
+                return { role: 'studio_instructor', studioId: instructor.studio_id };
+            }
+
+            return null;
+        }
+
+        async function initAppWithAuth(user) {
+            currentUserEmail = user.email;
+
+            // Look up role from database
+            const roleInfo = await lookupUserRole(user.email);
+            if (!roleInfo) {
+                document.getElementById('appShell').style.display = 'block';
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('contentContainer').innerHTML =
+                    '<div class="empty-state">' +
+                        '<div class="empty-state-icon">&#10060;</div>' +
+                        '<p>Your email (' + user.email + ') is not associated with any studio.</p>' +
+                        '<p style="font-size: 12px; margin-top: 10px;">Contact your studio admin for access.</p>' +
+                        '<button class="btn btn-secondary" onclick="handleDashboardSignOut()" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">Sign Out</button>' +
+                    '</div>';
+                return;
+            }
+
+            currentUserRole = roleInfo.role;
+
+            // Show app, hide login
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('appShell').style.display = 'block';
+
+            // Show user info
+            showUserInfo();
+
+            // Load content if delivery ID is provided
+            if (contentDeliveryId) {
+                loadContent();
+            } else {
+                document.getElementById('contentContainer').innerHTML =
+                    '<div style="text-align: center; padding: 60px 20px; color: #64748b;">' +
+                        '<div style="font-size: 48px; margin-bottom: 16px;">&#128233;</div>' +
+                        '<p style="font-size: 18px; font-weight: 600;">No content delivery selected</p>' +
+                        '<p style="font-size: 14px; margin-top: 8px;">Open a link from your content delivery email to view your posts.</p>' +
+                    '</div>';
+            }
+        }
+
+        // Init: Check session on page load
+        (async function() {
+            // Listen for auth state changes
+            supabaseClient.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session?.user) {
+                    await initAppWithAuth(session.user);
+                } else if (event === 'SIGNED_OUT') {
+                    currentUserEmail = null;
+                    currentUserRole = null;
+                    document.getElementById('appShell').style.display = 'none';
+                    document.getElementById('loginOverlay').classList.remove('hidden');
+                }
+            });
+
+            // Check for existing session
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session?.user) {
+                await initAppWithAuth(session.user);
+            } else {
+                // No session — show login
+                document.getElementById('loginOverlay').classList.remove('hidden');
+                document.getElementById('appShell').style.display = 'none';
+            }
+        })();
 
         // ============================================
         // ROLE-BASED PHOTO FILTERING (from deploy-preview-1)
@@ -1499,6 +1755,9 @@
                 const roleDisplay = document.getElementById('userRoleDisplay');
 
                 emailDisplay.textContent = currentUserEmail;
+
+                // Reset role classes
+                roleDisplay.classList.remove('owner', 'instructor');
 
                 let roleText = currentUserRole;
                 if (currentUserRole === 'studio_owner') {
