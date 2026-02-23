@@ -1633,7 +1633,20 @@
         }
 
         async function lookupUserRole(email) {
-            // Check clients table first (studio_owner)
+            // Check studio_instructors table first (studio_instructor)
+            const { data: instructor } = await supabaseClient
+                .from('studio_instructors')
+                .select('id, studio_id, instructor_email')
+                .eq('instructor_email', email)
+                .eq('status', 'active')
+                .limit(1)
+                .maybeSingle();
+
+            if (instructor) {
+                return { role: 'studio_instructor', studioId: instructor.studio_id };
+            }
+
+            // Check clients table (studio_owner)
             const { data: client } = await supabaseClient
                 .from('clients')
                 .select('id, email')
@@ -1642,18 +1655,6 @@
 
             if (client) {
                 return { role: 'studio_owner', studioId: client.id };
-            }
-
-            // Check studio_instructors table (studio_instructor)
-            const { data: instructor } = await supabaseClient
-                .from('studio_instructors')
-                .select('id, studio_id, email')
-                .eq('email', email)
-                .eq('status', 'active')
-                .maybeSingle();
-
-            if (instructor) {
-                return { role: 'studio_instructor', studioId: instructor.studio_id };
             }
 
             return null;
