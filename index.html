@@ -273,6 +273,116 @@
             margin-bottom: 16px;
         }
 
+        /* Delivery History */
+        .delivery-history {
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .delivery-history h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 16px;
+        }
+        .delivery-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .delivery-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .delivery-card:hover {
+            border-color: #6366f1;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+            transform: translateY(-1px);
+        }
+        .delivery-card-left {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .delivery-date {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        .delivery-platforms {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .platform-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            color: #fff;
+        }
+        .platform-badge.instagram { background: #E1306C; }
+        .platform-badge.facebook { background: #1877F2; }
+        .platform-badge.twitter { background: #1DA1F2; }
+        .platform-badge.linkedin { background: #0A66C2; }
+        .platform-badge.tiktok { background: #010101; }
+        .delivery-card-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .delivery-post-count {
+            font-size: 13px;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        .delivery-arrow {
+            color: #94a3b8;
+            font-size: 18px;
+        }
+        .delivery-loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+        }
+        .delivery-loading .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .back-to-history {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            margin: 16px 20px 0;
+            font-size: 13px;
+            font-weight: 500;
+            color: #6366f1;
+            background: #eef2ff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .back-to-history:hover {
+            background: #e0e7ff;
+        }
+
         /* Edit Photo Button */
         .btn-edit-photo {
             background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
@@ -1691,11 +1801,101 @@
             if (contentDeliveryId) {
                 loadContent();
             } else {
-                document.getElementById('contentContainer').innerHTML =
-                    '<div style="text-align: center; padding: 60px 20px; color: #64748b;">' +
-                        '<div style="font-size: 48px; margin-bottom: 16px;">&#128233;</div>' +
-                        '<p style="font-size: 18px; font-weight: 600;">No content delivery selected</p>' +
-                        '<p style="font-size: 14px; margin-top: 8px;">Open a link from your content delivery email to view your posts.</p>' +
+                // No specific delivery — show delivery history list
+                resolvedStudioId = roleInfo.studioId;
+                loadDeliveryHistory();
+            }
+        }
+
+        // ============================================
+        // DELIVERY HISTORY (shown when no ?id= param)
+        // ============================================
+
+        async function loadDeliveryHistory() {
+            const container = document.getElementById('contentContainer');
+
+            // Hide platform tabs (not relevant for history view)
+            document.getElementById('platformTabs').style.display = 'none';
+
+            // Show loading spinner
+            container.innerHTML =
+                '<div class="delivery-loading">' +
+                    '<div class="spinner"></div>' +
+                    '<p>Loading your deliveries...</p>' +
+                '</div>';
+
+            try {
+                const { data: deliveries, error } = await supabaseClient
+                    .from('content_deliveries')
+                    .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content')
+                    .eq('studio_id', resolvedStudioId)
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('[History] Query error:', error);
+                    throw error;
+                }
+
+                if (!deliveries || deliveries.length === 0) {
+                    container.innerHTML =
+                        '<div class="empty-state">' +
+                            '<div class="empty-state-icon">&#128233;</div>' +
+                            '<p style="font-size: 18px; font-weight: 600;">No deliveries yet</p>' +
+                            '<p style="font-size: 14px; margin-top: 8px;">Your content deliveries will appear here once generated.</p>' +
+                        '</div>';
+                    return;
+                }
+
+                var html = '<div class="delivery-history">' +
+                    '<h2>&#128197; Content Deliveries</h2>' +
+                    '<div class="delivery-list">';
+
+                deliveries.forEach(function(d) {
+                    // Format date
+                    var dateStr = 'Unknown date';
+                    if (d.created_at) {
+                        var dt = new Date(d.created_at);
+                        dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                    }
+
+                    // Count posts per platform
+                    var platforms = [];
+                    var totalPosts = 0;
+                    var ig = Array.isArray(d.instagram_content) ? d.instagram_content.length : 0;
+                    var fb = Array.isArray(d.facebook_content) ? d.facebook_content.length : 0;
+                    var tw = Array.isArray(d.twitter_content) ? d.twitter_content.length : 0;
+                    var li = Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0;
+                    var tk = Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0;
+
+                    if (ig > 0) platforms.push('<span class="platform-badge instagram">IG ' + ig + '</span>');
+                    if (fb > 0) platforms.push('<span class="platform-badge facebook">FB ' + fb + '</span>');
+                    if (tw > 0) platforms.push('<span class="platform-badge twitter">X ' + tw + '</span>');
+                    if (li > 0) platforms.push('<span class="platform-badge linkedin">LI ' + li + '</span>');
+                    if (tk > 0) platforms.push('<span class="platform-badge tiktok">TT ' + tk + '</span>');
+                    totalPosts = ig + fb + tw + li + tk;
+
+                    html += '<div class="delivery-card" onclick="window.location.href=window.location.pathname+\'?id=' + d.id + '\'">' +
+                        '<div class="delivery-card-left">' +
+                            '<div class="delivery-date">' + dateStr + '</div>' +
+                            '<div class="delivery-platforms">' + (platforms.length > 0 ? platforms.join('') : '<span style="color:#94a3b8;font-size:12px;">No content</span>') + '</div>' +
+                        '</div>' +
+                        '<div class="delivery-card-right">' +
+                            '<span class="delivery-post-count">' + totalPosts + ' post' + (totalPosts !== 1 ? 's' : '') + '</span>' +
+                            '<span class="delivery-arrow">&#8250;</span>' +
+                        '</div>' +
+                    '</div>';
+                });
+
+                html += '</div></div>';
+                container.innerHTML = html;
+
+            } catch (err) {
+                console.error('[History] Error loading delivery history:', err);
+                container.innerHTML =
+                    '<div class="empty-state">' +
+                        '<div class="empty-state-icon">&#9888;</div>' +
+                        '<p>Error loading deliveries</p>' +
+                        '<p style="font-size: 12px; margin-top: 8px;">' + (err.message || 'Unknown error') + '</p>' +
                     '</div>';
             }
         }
@@ -2263,6 +2463,9 @@
         // ============================================
 
         function renderDashboard() {
+            // Show platform tabs (may have been hidden by history view)
+            document.getElementById('platformTabs').style.display = '';
+
             const platforms = ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok'];
             const platformEmojis = {
                 instagram: 'IG',
@@ -2355,7 +2558,9 @@
                 '</div>';
             }).join('');
 
-            document.getElementById('contentContainer').innerHTML = contentHTML;
+            // Add back-to-history button before the content
+            var backBtn = '<button class="back-to-history" onclick="window.location.href=window.location.pathname">&#8249; All Deliveries</button>';
+            document.getElementById('contentContainer').innerHTML = backBtn + contentHTML;
         }
 
         // ============================================
