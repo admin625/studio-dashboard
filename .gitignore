@@ -1,0 +1,13 @@
+# Secrets & credentials
+.env
+.env.*
+*.env
+secrets.*
+credentials.*
+*.key
+*.pem
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+node_modules/
