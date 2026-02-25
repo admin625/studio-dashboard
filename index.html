@@ -207,6 +207,16 @@
         .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .login-error { color: #ef4444; font-size: 13px; margin-top: 12px; display: none; }
         .login-error.visible { display: block; }
+        .login-success { color: #059669; font-size: 13px; margin-top: 12px; display: none; background: #ecfdf5; padding: 10px 14px; border-radius: 8px; border: 1px solid #a7f3d0; }
+        .login-success.visible { display: block; }
+        .forgot-link { display: block; margin-top: 16px; color: #667eea; font-size: 13px; font-weight: 500; cursor: pointer; text-decoration: none; transition: color 0.2s; }
+        .forgot-link:hover { color: #764ba2; text-decoration: underline; }
+        .password-wrapper { position: relative; }
+        .password-wrapper input { padding-right: 44px; }
+        .password-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 18px; padding: 4px; line-height: 1; }
+        .password-toggle:hover { color: #475569; }
+        .back-to-login { display: inline-flex; align-items: center; gap: 4px; color: #667eea; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 20px; text-decoration: none; transition: color 0.2s; }
+        .back-to-login:hover { color: #764ba2; }
         .sign-out-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-left: 12px; }
         .sign-out-btn:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
         @media (max-width: 768px) {
@@ -252,6 +262,54 @@
                 </div>
                 <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
                 <p class="login-error" id="loginError"></p>
+            </form>
+            <a class="forgot-link" id="forgotPasswordLink">Forgot password?</a>
+        </div>
+    </div>
+
+    <!-- FORGOT PASSWORD SCREEN -->
+    <div class="login-overlay hidden" id="forgotPasswordOverlay">
+        <div class="login-card">
+            <img src="assets/logo.png" alt="Fior Saoirse Logo" class="login-logo-img">
+            <a class="back-to-login" id="backToLoginFromForgot">&#8249; Back to Sign In</a>
+            <h1 style="font-size:24px">Reset Password</h1>
+            <p class="login-subtitle">Enter your email and we'll send you a reset link</p>
+            <form id="forgotPasswordForm">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="forgotEmail" placeholder="you@studio.com" required autocomplete="email">
+                </div>
+                <button type="submit" class="login-btn" id="forgotBtn">Send Reset Link</button>
+                <p class="login-error" id="forgotError"></p>
+                <p class="login-success" id="forgotSuccess"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- RESET PASSWORD SCREEN -->
+    <div class="login-overlay hidden" id="resetPasswordOverlay">
+        <div class="login-card">
+            <img src="assets/logo.png" alt="Fior Saoirse Logo" class="login-logo-img">
+            <h1 style="font-size:24px">Set New Password</h1>
+            <p class="login-subtitle">Choose a new password for your account</p>
+            <form id="resetPasswordForm">
+                <div class="form-group">
+                    <label>New Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="resetNewPassword" placeholder="Minimum 8 characters" required minlength="8" autocomplete="new-password">
+                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('resetNewPassword', this)">&#128065;</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Confirm Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="resetConfirmPassword" placeholder="Re-enter your password" required minlength="8" autocomplete="new-password">
+                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('resetConfirmPassword', this)">&#128065;</button>
+                    </div>
+                </div>
+                <button type="submit" class="login-btn" id="resetBtn">Update Password</button>
+                <p class="login-error" id="resetError"></p>
+                <p class="login-success" id="resetSuccess"></p>
             </form>
         </div>
     </div>
@@ -436,7 +494,9 @@
         // ================================================================
         const Router = {
             _lastRoute: null,
-            init() { window.addEventListener('hashchange', () => this._onHashChange()); },
+            init() {
+                window.addEventListener('hashchange', () => this._onHashChange());
+            },
             navigate(hash, replace) {
                 if (replace) { history.replaceState(null, '', hash); this._onHashChange(); }
                 else { window.location.hash = hash.startsWith('#') ? hash.slice(1) : hash; }
@@ -450,6 +510,8 @@
                 const hash = window.location.hash;
                 if (!hash || hash === '#' || hash === '#/' || hash === '#/login') {
                     this.navigate('#/deliveries', true);
+                } else if (hash === '#/forgot-password' || hash === '#/reset-password') {
+                    this._onHashChange();
                 } else { this._onHashChange(); }
             },
             _parseRoute(hash) {
@@ -458,12 +520,15 @@
                 if (m) return { name: 'delivery', params: { id: m[1] } };
                 if (hash === '#/deliveries') return { name: 'deliveries', params: {} };
                 if (hash === '#/login') return { name: 'login', params: {} };
+                if (hash === '#/forgot-password') return { name: 'forgot-password', params: {} };
+                if (hash === '#/reset-password') return { name: 'reset-password', params: {} };
                 return { name: 'default', params: {} };
             },
             _onHashChange() {
                 const route = this._parseRoute(window.location.hash);
-                if (!AppState.user && route.name !== 'login') return;
-                if (AppState.user && (route.name === 'login' || route.name === 'default')) {
+                const publicRoutes = ['login', 'forgot-password', 'reset-password'];
+                if (!AppState.user && !publicRoutes.includes(route.name)) return;
+                if (AppState.user && (route.name === 'login' || route.name === 'forgot-password' || route.name === 'default')) {
                     this.navigate('#/deliveries', true); return;
                 }
                 if (this._lastRoute && this._lastRoute.name === route.name &&
@@ -477,6 +542,8 @@
                 this._lastRoute = route;
                 switch (route.name) {
                     case 'login': Auth.showLogin(); break;
+                    case 'forgot-password': PasswordReset.showForgotForm(); break;
+                    case 'reset-password': PasswordReset.showResetForm(); break;
                     case 'deliveries': Auth.showApp(); DeliveryList.render(AppState.navGeneration); break;
                     case 'delivery': Auth.showApp(); AppState.deliveryId = route.params.id; DeliveryDetail.render(route.params.id, AppState.navGeneration); break;
                 }
@@ -500,7 +567,17 @@
                 document.getElementById('signOutBtn').addEventListener('click', () => this.signOut(), { signal: s });
                 supabaseClient.auth.onAuthStateChange(async (event, session) => {
                     console.log('[Auth] onAuthStateChange:', event, 'hasSession:', !!session, 'hasUser:', !!session?.user);
+                    if (event === 'PASSWORD_RECOVERY') {
+                        console.log('[Auth] PASSWORD_RECOVERY event received');
+                        Router.navigate('#/reset-password', true);
+                        return;
+                    }
                     if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+                        // If we're on the reset-password route, don't redirect to app — user needs to set new password
+                        if (window.location.hash === '#/reset-password') {
+                            console.log('[Auth] On reset-password route, skipping app init');
+                            return;
+                        }
                         console.log('[Auth] Processing auth event:', event, 'for', session.user.email);
                         await this._initWithUser(session.user);
                     } else if (event === 'SIGNED_OUT' && AppState.user) {
@@ -514,6 +591,13 @@
                 console.log('[Auth] _checkSession() called');
                 const { data: { session } } = await supabaseClient.auth.getSession();
                 console.log('[Auth] _checkSession result: hasSession:', !!session, 'hasUser:', !!session?.user);
+                // If on reset-password route, show reset form regardless of session state
+                if (window.location.hash === '#/reset-password') {
+                    console.log('[Auth] On reset-password route, showing reset form');
+                    AppState.authReady = true;
+                    PasswordReset.showResetForm();
+                    return;
+                }
                 if (session?.user) {
                     console.log('[Auth] Existing session for:', session.user.email);
                     await this._initWithUser(session.user);
@@ -620,8 +704,19 @@
                     return null;
                 }
             },
-            showLogin() { document.getElementById('loginOverlay').classList.remove('hidden'); document.getElementById('appShell').style.display = 'none'; },
-            showApp() { document.getElementById('loginOverlay').classList.add('hidden'); document.getElementById('appShell').style.display = 'block'; this._showUserInfo(); },
+            showLogin() {
+                document.getElementById('loginOverlay').classList.remove('hidden');
+                document.getElementById('forgotPasswordOverlay').classList.add('hidden');
+                document.getElementById('resetPasswordOverlay').classList.add('hidden');
+                document.getElementById('appShell').style.display = 'none';
+            },
+            showApp() {
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('forgotPasswordOverlay').classList.add('hidden');
+                document.getElementById('resetPasswordOverlay').classList.add('hidden');
+                document.getElementById('appShell').style.display = 'block';
+                this._showUserInfo();
+            },
             _showUserInfo() {
                 if (!AppState.email || !AppState.role) return;
                 const banner = document.getElementById('userInfoBanner');
@@ -1247,10 +1342,165 @@
         });
 
         // ================================================================
+        // PASSWORD VISIBILITY TOGGLE
+        // ================================================================
+        function togglePasswordVisibility(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.innerHTML = '&#128064;';
+            } else {
+                input.type = 'password';
+                btn.innerHTML = '&#128065;';
+            }
+        }
+
+        // ================================================================
+        // PASSWORD RESET MODULE
+        // ================================================================
+        const PasswordReset = {
+            init() {
+                document.getElementById('forgotPasswordLink').addEventListener('click', (e) => {
+                    e.preventDefault();
+                    Router.navigate('#/forgot-password');
+                });
+                document.getElementById('backToLoginFromForgot').addEventListener('click', (e) => {
+                    e.preventDefault();
+                    Router.navigate('#/login', true);
+                    Auth.showLogin();
+                });
+                document.getElementById('forgotPasswordForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this._handleForgotSubmit();
+                });
+                document.getElementById('resetPasswordForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this._handleResetSubmit();
+                });
+            },
+            _hideAllOverlays() {
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('forgotPasswordOverlay').classList.add('hidden');
+                document.getElementById('resetPasswordOverlay').classList.add('hidden');
+                document.getElementById('appShell').style.display = 'none';
+            },
+            showForgotForm() {
+                this._hideAllOverlays();
+                document.getElementById('forgotPasswordOverlay').classList.remove('hidden');
+                document.getElementById('forgotEmail').value = document.getElementById('loginEmail').value || '';
+                document.getElementById('forgotError').classList.remove('visible');
+                document.getElementById('forgotSuccess').classList.remove('visible');
+                document.getElementById('forgotBtn').disabled = false;
+                document.getElementById('forgotBtn').textContent = 'Send Reset Link';
+            },
+            showResetForm() {
+                this._hideAllOverlays();
+                document.getElementById('resetPasswordOverlay').classList.remove('hidden');
+                document.getElementById('resetNewPassword').value = '';
+                document.getElementById('resetConfirmPassword').value = '';
+                document.getElementById('resetError').classList.remove('visible');
+                document.getElementById('resetSuccess').classList.remove('visible');
+                document.getElementById('resetBtn').disabled = false;
+                document.getElementById('resetBtn').textContent = 'Update Password';
+            },
+            async _handleForgotSubmit() {
+                const email = document.getElementById('forgotEmail').value.trim();
+                const btn = document.getElementById('forgotBtn');
+                const errEl = document.getElementById('forgotError');
+                const successEl = document.getElementById('forgotSuccess');
+
+                errEl.classList.remove('visible');
+                successEl.classList.remove('visible');
+                btn.disabled = true;
+                btn.textContent = 'Sending...';
+
+                try {
+                    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+                        redirectTo: 'https://studio-dash.netlify.app#/reset-password'
+                    });
+                    if (error) {
+                        errEl.textContent = error.message;
+                        errEl.classList.add('visible');
+                        btn.disabled = false;
+                        btn.textContent = 'Send Reset Link';
+                        return;
+                    }
+                    successEl.textContent = 'Check your email! We sent a password reset link to ' + email;
+                    successEl.classList.add('visible');
+                    btn.textContent = 'Email Sent';
+                    // Re-enable after 5 seconds to allow resending
+                    setTimeout(() => { btn.disabled = false; btn.textContent = 'Resend Link'; }, 5000);
+                } catch (err) {
+                    errEl.textContent = 'Failed to send reset email: ' + (err.message || 'Unknown error');
+                    errEl.classList.add('visible');
+                    btn.disabled = false;
+                    btn.textContent = 'Send Reset Link';
+                }
+            },
+            async _handleResetSubmit() {
+                const newPw = document.getElementById('resetNewPassword').value;
+                const confirmPw = document.getElementById('resetConfirmPassword').value;
+                const btn = document.getElementById('resetBtn');
+                const errEl = document.getElementById('resetError');
+                const successEl = document.getElementById('resetSuccess');
+
+                errEl.classList.remove('visible');
+                successEl.classList.remove('visible');
+
+                // Validate
+                if (newPw.length < 8) {
+                    errEl.textContent = 'Password must be at least 8 characters long.';
+                    errEl.classList.add('visible');
+                    return;
+                }
+                if (newPw !== confirmPw) {
+                    errEl.textContent = 'Passwords do not match.';
+                    errEl.classList.add('visible');
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.textContent = 'Updating...';
+
+                try {
+                    const { error } = await supabaseClient.auth.updateUser({ password: newPw });
+                    if (error) {
+                        let msg = error.message;
+                        if (msg.includes('expired') || msg.includes('invalid')) {
+                            msg = 'This reset link has expired or is invalid. Please request a new one.';
+                        }
+                        errEl.textContent = msg;
+                        errEl.classList.add('visible');
+                        btn.disabled = false;
+                        btn.textContent = 'Update Password';
+                        return;
+                    }
+                    successEl.textContent = 'Password updated successfully! Redirecting to login...';
+                    successEl.classList.add('visible');
+                    btn.textContent = 'Password Updated';
+                    // Sign out and redirect to login
+                    setTimeout(async () => {
+                        await supabaseClient.auth.signOut();
+                        AppState.reset();
+                        window.location.hash = '#/login';
+                        document.getElementById('resetPasswordOverlay').classList.add('hidden');
+                        document.getElementById('loginOverlay').classList.remove('hidden');
+                    }, 2000);
+                } catch (err) {
+                    errEl.textContent = 'Failed to update password: ' + (err.message || 'Unknown error');
+                    errEl.classList.add('visible');
+                    btn.disabled = false;
+                    btn.textContent = 'Update Password';
+                }
+            }
+        };
+
+        // ================================================================
         // INITIALIZATION
         // ================================================================
         Auth.init();
         Router.init();
+        PasswordReset.init();
 
     </script>
     <script src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js"></script>
