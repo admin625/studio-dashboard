@@ -1691,7 +1691,13 @@
         let studioPhotos = [];        // All studio photos
         let filteredPhotos = [];      // Photos filtered by user role
         let contentDeliveryId = null;
-        let resolvedStudioId = null;  // Studio ID resolved from delivery or email lookup
+
+        // === DATA ISOLATION: Single source of truth ===
+        // Set ONCE on login from authenticated role lookup.
+        // NEVER overridden by URL params, delivery data, or user input.
+        let resolvedStudioId = null;   // For studio users (owner or studio instructor)
+        let resolvedClientId = null;   // For individual instructors (no studio)
+        let scopeType = null;          // 'studio' | 'individual' — set once on login
 
         // User identification (set from auth + database lookup)
         let currentUserEmail = null;
@@ -1753,18 +1759,25 @@
                 .maybeSingle();
 
             if (instructor) {
-                return { role: 'studio_instructor', studioId: instructor.studio_id };
+                return { role: 'studio_instructor', studioId: instructor.studio_id, clientId: null, scopeType: 'studio' };
             }
 
-            // Check clients table (studio_owner)
+            // Check clients table
             const { data: client } = await supabaseClient
                 .from('clients')
-                .select('id, email, studio_id')
+                .select('id, email, studio_id, is_studio_instructor')
                 .eq('email', email)
                 .maybeSingle();
 
             if (client) {
-                return { role: 'studio_owner', studioId: client.studio_id };
+                // Determine scope: studio user or individual
+                if (client.studio_id) {
+                    // Studio owner — scoped by studio_id
+                    return { role: 'studio_owner', studioId: client.studio_id, clientId: client.id, scopeType: 'studio' };
+                } else {
+                    // Individual instructor (no studio) — scoped by client_id
+                    return { role: 'individual', studioId: null, clientId: client.id, scopeType: 'individual' };
+                }
             }
 
             return null;
@@ -1781,14 +1794,20 @@
                 document.getElementById('contentContainer').innerHTML =
                     '<div class="empty-state">' +
                         '<div class="empty-state-icon">&#10060;</div>' +
-                        '<p>Your email (' + user.email + ') is not associated with any studio.</p>' +
+                        '<p>Your email (' + user.email + ') is not associated with any studio or account.</p>' +
                         '<p style="font-size: 12px; margin-top: 10px;">Contact your studio admin for access.</p>' +
                         '<button class="btn btn-secondary" onclick="handleDashboardSignOut()" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">Sign Out</button>' +
                     '</div>';
                 return;
             }
 
+            // === DATA ISOLATION: Set scoping IDs ONCE from auth lookup ===
+            // These are NEVER overridden by URL params, delivery data, or user input.
             currentUserRole = roleInfo.role;
+            scopeType = roleInfo.scopeType;
+            resolvedStudioId = roleInfo.studioId;   // null for individuals
+            resolvedClientId = roleInfo.clientId;    // null for studio instructors (no client record)
+            console.log('[Auth] Scope:', scopeType, '| studioId:', resolvedStudioId, '| clientId:', resolvedClientId, '| role:', currentUserRole);
 
             // Show app, hide login
             document.getElementById('loginOverlay').classList.add('hidden');
@@ -1802,7 +1821,6 @@
                 loadContent();
             } else {
                 // No specific delivery — show delivery history list
-                resolvedStudioId = roleInfo.studioId;
                 loadDeliveryHistory();
             }
         }
@@ -1825,11 +1843,19 @@
                 '</div>';
 
             try {
-                const { data: deliveries, error } = await supabaseClient
+                // Build query with scope-appropriate filter
+                let query = supabaseClient
                     .from('content_deliveries')
-                    .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content')
-                    .eq('studio_id', resolvedStudioId)
-                    .order('created_at', { ascending: false });
+                    .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
+
+                if (scopeType === 'studio') {
+                    query = query.eq('studio_id', resolvedStudioId);
+                } else {
+                    // Individual instructor — filter by client_id
+                    query = query.eq('client_id', resolvedClientId);
+                }
+
+                const { data: deliveries, error } = await query.order('created_at', { ascending: false });
 
                 if (error) {
                     console.error('[History] Query error:', error);
@@ -2180,18 +2206,20 @@
             btn.disabled = true;
             btn.textContent = 'Uploading...';
 
-            // Use the globally resolved studio_id (set during loadContent)
+            // === DATA ISOLATION: Use auth-derived scoping ID ===
             var studioId = resolvedStudioId;
-            console.log('[Upload] Using resolved studio_id:', studioId);
+            var clientId = resolvedClientId;
+            var scopeId = studioId || clientId;
+            console.log('[Upload] Scope:', scopeType, '| studioId:', studioId, '| clientId:', clientId);
 
-            if (!studioId) {
-                showUploadSummary('error', 'Could not determine studio ID. Please refresh and try again.');
+            if (!scopeId) {
+                showUploadSummary('error', 'Could not determine account ID. Please refresh and try again.');
                 btn.disabled = false;
                 btn.textContent = 'Upload';
                 return;
             }
 
-            console.log('[Upload] Starting upload of', uploadPendingFiles.length, 'files to studio', studioId, 'category:', category);
+            console.log('[Upload] Starting upload of', uploadPendingFiles.length, 'files, scope:', scopeType, scopeId, 'category:', category);
 
             var successCount = 0;
             var errorCount = 0;
@@ -2210,8 +2238,13 @@
                 fileItem.insertAdjacentHTML('beforeend', progressHTML);
 
                 try {
-                    // Storage path: studio-{studioId}/{timestamp}-{filename}
-                    var storagePath = 'studio-' + studioId + '/' + Date.now() + '-' + file.name;
+                    // === DATA ISOLATION: Scope-appropriate storage path ===
+                    var storagePath;
+                    if (scopeType === 'studio') {
+                        storagePath = 'studio-' + studioId + '/' + Date.now() + '-' + file.name;
+                    } else {
+                        storagePath = 'client-' + clientId + '/' + Date.now() + '-' + file.name;
+                    }
 
                     console.log('[Upload] Uploading:', file.name, '(' + formatBytes(file.size) + ') to', storagePath);
 
@@ -2249,19 +2282,26 @@
                     // Build tags array: for headshots, tag with empty (owner can edit later)
                     var tags = category === 'headshot' ? [] : null;
 
-                    // Insert record into studio_photos
+                    // === DATA ISOLATION: Insert with scope-appropriate ID ===
+                    var insertData = {
+                        photo_url: photoUrl,
+                        file_name: file.name,
+                        file_size: file.size,
+                        tags: tags,
+                        uploaded_by: currentUserEmail || 'unknown',
+                        is_active: true,
+                        keywords: category
+                    };
+
+                    if (scopeType === 'studio') {
+                        insertData.studio_id = studioId;
+                    } else {
+                        insertData.client_id = clientId;
+                    }
+
                     var insertResult = await supabaseClient
                         .from('studio_photos')
-                        .insert({
-                            studio_id: studioId,
-                            photo_url: photoUrl,
-                            file_name: file.name,
-                            file_size: file.size,
-                            tags: tags,
-                            uploaded_by: currentUserEmail || 'studio_owner',
-                            is_active: true,
-                            keywords: category
-                        });
+                        .insert(insertData);
 
                     if (insertResult.error) {
                         throw new Error(insertResult.error.message || 'Database insert failed');
@@ -2354,6 +2394,7 @@
                 console.log('[Dashboard] Supabase URL:', SUPABASE_URL);
                 console.log('[Dashboard] supabase-js version:', typeof supabase !== 'undefined' ? (supabase.version || 'loaded') : 'NOT LOADED');
 
+                // === DATA ISOLATION: Load delivery and verify ownership ===
                 const { data: delivery, error } = await supabaseClient
                     .from('content_deliveries')
                     .select('*')
@@ -2365,7 +2406,28 @@
                     throw error;
                 }
 
-                console.log('[Dashboard] Delivery loaded. studio_id:', delivery.studio_id);
+                console.log('[Dashboard] Delivery loaded. studio_id:', delivery.studio_id, 'client_id:', delivery.client_id);
+
+                // === DATA ISOLATION: Verify this delivery belongs to the authenticated user ===
+                // resolvedStudioId and resolvedClientId were set ONCE during auth — never override them.
+                var deliveryBelongsToUser = false;
+                if (scopeType === 'studio' && delivery.studio_id === resolvedStudioId) {
+                    deliveryBelongsToUser = true;
+                } else if (scopeType === 'individual' && delivery.client_id === resolvedClientId) {
+                    deliveryBelongsToUser = true;
+                }
+
+                if (!deliveryBelongsToUser) {
+                    console.error('[Dashboard] ACCESS DENIED: Delivery', contentDeliveryId, 'does not belong to authenticated user.');
+                    document.getElementById('contentContainer').innerHTML =
+                        '<div class="empty-state">' +
+                            '<div class="empty-state-icon">&#128274;</div>' +
+                            '<p style="font-size: 18px; font-weight: 600;">Access Denied</p>' +
+                            '<p style="font-size: 14px; margin-top: 8px;">This content delivery does not belong to your account.</p>' +
+                            '<button class="btn btn-secondary" onclick="window.location.href=window.location.pathname" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">Back to Deliveries</button>' +
+                        '</div>';
+                    return;
+                }
 
                 contentData = {
                     instagram: delivery.instagram_content || [],
@@ -2375,45 +2437,8 @@
                     tiktok: delivery.tiktok_content || []
                 };
 
-                // Resolve studio_id: use delivery's studio_id, or look up from user email
-                resolvedStudioId = delivery.studio_id;
-
-                if (!resolvedStudioId && currentUserEmail) {
-                    console.log('[Dashboard] Delivery has no studio_id, looking up from email:', currentUserEmail);
-                    try {
-                        // Check studio_accounts first (owner)
-                        var studioLookup = await supabaseClient
-                            .from('studio_accounts')
-                            .select('id')
-                            .eq('owner_email', currentUserEmail)
-                            .limit(1);
-                        if (studioLookup.data && studioLookup.data.length > 0) {
-                            resolvedStudioId = studioLookup.data[0].id;
-                            console.log('[Dashboard] Found studio_id from studio_accounts:', resolvedStudioId);
-                        } else {
-                            // Check studio_instructors (instructor)
-                            var instructorLookup = await supabaseClient
-                                .from('studio_instructors')
-                                .select('studio_id')
-                                .eq('instructor_email', currentUserEmail)
-                                .limit(1);
-                            if (instructorLookup.data && instructorLookup.data.length > 0) {
-                                resolvedStudioId = instructorLookup.data[0].studio_id;
-                                console.log('[Dashboard] Found studio_id from studio_instructors:', resolvedStudioId);
-                            }
-                        }
-                    } catch (lookupErr) {
-                        console.error('[Dashboard] Studio lookup error:', lookupErr);
-                    }
-                }
-
-                if (!resolvedStudioId) {
-                    console.warn('[Dashboard] Could not resolve studio_id - no gallery');
-                }
-
+                // Load studio photos using the auth-derived resolvedStudioId (never from delivery data)
                 if (resolvedStudioId) {
-                    // Store resolved studio_id on delivery for use by upload and other features
-                    delivery.studio_id = resolvedStudioId;
                     console.log('[Dashboard] Querying studio_photos for studio_id:', resolvedStudioId);
                     try {
                         const { data: photos, error: photoError } = await supabaseClient
@@ -2665,10 +2690,19 @@
                 var updateData = {};
                 updateData[platform + '_content'] = updatedContent;
 
-                var result = await supabaseClient
+                // === DATA ISOLATION: Update with scope filter ===
+                var updateQuery = supabaseClient
                     .from('content_deliveries')
                     .update(updateData)
                     .eq('id', contentDeliveryId);
+
+                if (scopeType === 'studio') {
+                    updateQuery = updateQuery.eq('studio_id', resolvedStudioId);
+                } else {
+                    updateQuery = updateQuery.eq('client_id', resolvedClientId);
+                }
+
+                var result = await updateQuery;
 
                 if (result.error) throw result.error;
 
@@ -2970,10 +3004,18 @@
 
                 var filename = 'edited-' + (editorCurrentPhotoId || 'photo') + '-' + Date.now() + '.jpg';
 
+                // === DATA ISOLATION: Studio-scoped storage path for edited photos ===
+                var editedPath;
+                if (scopeType === 'studio') {
+                    editedPath = 'edited/studio-' + resolvedStudioId + '/' + filename;
+                } else {
+                    editedPath = 'edited/client-' + resolvedClientId + '/' + filename;
+                }
+
                 var uploadResult = await supabaseClient
                     .storage
                     .from('studio-photos')
-                    .upload('edited/' + filename, blob, {
+                    .upload(editedPath, blob, {
                         contentType: 'image/jpeg',
                         upsert: false
                     });
@@ -2986,7 +3028,7 @@
                 var urlResult = supabaseClient
                     .storage
                     .from('studio-photos')
-                    .getPublicUrl('edited/' + filename);
+                    .getPublicUrl(editedPath);
 
                 var newPhotoUrl = urlResult.data.publicUrl;
                 console.log('Uploaded to:', newPhotoUrl);
@@ -3001,10 +3043,19 @@
                 var updateData = {};
                 updateData[editorCurrentPlatform + '_content'] = updatedContent;
 
-                var saveResult = await supabaseClient
+                // === DATA ISOLATION: Update with scope filter ===
+                var saveQuery = supabaseClient
                     .from('content_deliveries')
                     .update(updateData)
                     .eq('id', contentDeliveryId);
+
+                if (scopeType === 'studio') {
+                    saveQuery = saveQuery.eq('studio_id', resolvedStudioId);
+                } else {
+                    saveQuery = saveQuery.eq('client_id', resolvedClientId);
+                }
+
+                var saveResult = await saveQuery;
 
                 if (saveResult.error) throw saveResult.error;
 
