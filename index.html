@@ -651,10 +651,8 @@
                 Gallery.cleanup();
                 c.innerHTML = '<div class="delivery-loading"><div class="spinner"></div><p>Loading your deliveries...</p></div>';
                 try {
-                    let q = supabaseClient.from('content_deliveries')
-                        .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
-                    if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
-                    const { data: deliveries, error } = await q.order('created_at', { ascending: false });
+                    // Lightweight RPC: returns counts only, no huge JSON blobs
+                    const { data: deliveries, error } = await supabaseClient.rpc('get_delivery_list');
                     if (gen !== AppState.navGeneration) return;
                     if (error) throw error;
                     if (!deliveries || !deliveries.length) {
@@ -668,11 +666,11 @@
                         let dateStr = 'Unknown date';
                         if (d.created_at) { const dt = new Date(d.created_at); dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
                         const pf = [];
-                        const ig = Array.isArray(d.instagram_content) ? d.instagram_content.length : 0;
-                        const fb = Array.isArray(d.facebook_content) ? d.facebook_content.length : 0;
-                        const tw = Array.isArray(d.twitter_content) ? d.twitter_content.length : 0;
-                        const li = Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0;
-                        const tk = Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0;
+                        const ig = d.ig_count || 0;
+                        const fb = d.fb_count || 0;
+                        const tw = d.tw_count || 0;
+                        const li = d.li_count || 0;
+                        const tk = d.tk_count || 0;
                         if (ig) pf.push('<span class="platform-badge instagram">IG ' + ig + '</span>');
                         if (fb) pf.push('<span class="platform-badge facebook">FB ' + fb + '</span>');
                         if (tw) pf.push('<span class="platform-badge twitter">X ' + tw + '</span>');
