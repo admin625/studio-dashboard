@@ -651,8 +651,11 @@
                 Gallery.cleanup();
                 c.innerHTML = '<div class="delivery-loading"><div class="spinner"></div><p>Loading your deliveries...</p></div>';
                 try {
-                    // Lightweight RPC: returns counts only, no huge JSON blobs
-                    const { data: deliveries, error } = await supabaseClient.rpc('get_delivery_list');
+                    // Lightweight query: only fetch id, date, studio_id — no huge JSON content columns
+                    let q = supabaseClient.from('content_deliveries')
+                        .select('id, created_at, studio_id');
+                    if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
+                    const { data: deliveries, error } = await q.order('created_at', { ascending: false }).limit(50);
                     if (gen !== AppState.navGeneration) return;
                     if (error) throw error;
                     if (!deliveries || !deliveries.length) {
@@ -665,23 +668,10 @@
                     deliveries.forEach(d => {
                         let dateStr = 'Unknown date';
                         if (d.created_at) { const dt = new Date(d.created_at); dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
-                        const pf = [];
-                        const ig = d.ig_count || 0;
-                        const fb = d.fb_count || 0;
-                        const tw = d.tw_count || 0;
-                        const li = d.li_count || 0;
-                        const tk = d.tk_count || 0;
-                        if (ig) pf.push('<span class="platform-badge instagram">IG ' + ig + '</span>');
-                        if (fb) pf.push('<span class="platform-badge facebook">FB ' + fb + '</span>');
-                        if (tw) pf.push('<span class="platform-badge twitter">X ' + tw + '</span>');
-                        if (li) pf.push('<span class="platform-badge linkedin">LI ' + li + '</span>');
-                        if (tk) pf.push('<span class="platform-badge tiktok">TT ' + tk + '</span>');
-                        const total = ig + fb + tw + li + tk;
                         html += '<div class="delivery-card" data-action="navigate-delivery" data-id="' + d.id + '">' +
                             '<div class="delivery-card-left"><div class="delivery-date">' + dateStr + '</div>' +
-                            '<div class="delivery-platforms">' + (pf.length ? pf.join('') : '<span style="color:#94a3b8;font-size:12px;">No content</span>') + '</div></div>' +
-                            '<div class="delivery-card-right"><span class="delivery-post-count">' + total + ' post' + (total !== 1 ? 's' : '') + '</span>' +
-                            '<span class="delivery-arrow">&#8250;</span></div></div>';
+                            '<div class="delivery-platforms"><span style="color:#64748b;font-size:13px;">View content</span></div></div>' +
+                            '<div class="delivery-card-right"><span class="delivery-arrow">&#8250;</span></div></div>';
                     });
                     html += '</div></div>';
                     c.innerHTML = html;
