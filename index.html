@@ -568,19 +568,51 @@
                 document.getElementById('userInfoBanner').style.display = 'none';
                 Router.navigate('#/login', true);
             },
-            async _lookupUserRole(email) {
+            _withTimeout(promise, ms, label) {
+                return Promise.race([
+                    promise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT: ' + label + ' took longer than ' + ms + 'ms')), ms))
+                ]);
+            },
+            async _lookupUserRole(email, attempt) {
+                attempt = attempt || 1;
+                console.log('[Auth] _lookupUserRole() called for:', email, '(attempt ' + attempt + ')');
                 try {
-                    const { data: instr } = await supabaseClient.from('studio_instructors')
+                    console.log('[Auth] Querying studio_instructors...');
+                    const instrQuery = supabaseClient.from('studio_instructors')
                         .select('id, studio_id').eq('instructor_email', email).eq('status', 'active').limit(1).maybeSingle();
-                    if (instr) return { role: 'studio_instructor', studioId: instr.studio_id, clientId: null, scopeType: 'studio' };
-                    const { data: client } = await supabaseClient.from('clients')
+                    const { data: instr, error: instrErr } = await this._withTimeout(instrQuery, 5000, 'studio_instructors query');
+                    console.log('[Auth] studio_instructors result:', { data: instr, error: instrErr ? instrErr.message : null });
+                    if (instrErr) console.error('[Auth] studio_instructors query error:', instrErr);
+                    if (instr) {
+                        console.log('[Auth] Role found: studio_instructor, studioId:', instr.studio_id);
+                        return { role: 'studio_instructor', studioId: instr.studio_id, clientId: null, scopeType: 'studio' };
+                    }
+                    console.log('[Auth] Not an instructor, querying clients...');
+                    const clientQuery = supabaseClient.from('clients')
                         .select('id, email, studio_id, is_studio_instructor').eq('email', email).maybeSingle();
+                    const { data: client, error: clientErr } = await this._withTimeout(clientQuery, 5000, 'clients query');
+                    console.log('[Auth] clients result:', { data: client, error: clientErr ? clientErr.message : null });
+                    if (clientErr) console.error('[Auth] clients query error:', clientErr);
                     if (client) {
-                        if (client.studio_id) return { role: 'studio_owner', studioId: client.studio_id, clientId: client.id, scopeType: 'studio' };
+                        if (client.studio_id) {
+                            console.log('[Auth] Role found: studio_owner, studioId:', client.studio_id, 'clientId:', client.id);
+                            return { role: 'studio_owner', studioId: client.studio_id, clientId: client.id, scopeType: 'studio' };
+                        }
+                        console.log('[Auth] Role found: individual, clientId:', client.id);
                         return { role: 'individual', studioId: null, clientId: client.id, scopeType: 'individual' };
                     }
+                    console.warn('[Auth] No role found for:', email);
                     return null;
-                } catch (err) { console.error('[Auth] lookupUserRole error:', err); return null; }
+                } catch (err) {
+                    console.error('[Auth] _lookupUserRole error (attempt ' + attempt + '):', err.message || err);
+                    if (attempt < 2) {
+                        console.log('[Auth] Retrying role lookup...');
+                        return this._lookupUserRole(email, attempt + 1);
+                    }
+                    console.error('[Auth] Role lookup failed after 2 attempts');
+                    return null;
+                }
             },
             showLogin() { document.getElementById('loginOverlay').classList.remove('hidden'); document.getElementById('appShell').style.display = 'none'; },
             showApp() { document.getElementById('loginOverlay').classList.add('hidden'); document.getElementById('appShell').style.display = 'block'; this._showUserInfo(); },
