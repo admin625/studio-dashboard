@@ -1703,6 +1703,10 @@
         let currentUserEmail = null;
         let currentUserRole = null;
 
+        // Guard against duplicate initAppWithAuth calls
+        let initRunning = false;
+        let initCompleted = false;
+
         // Get delivery ID from URL (still supported for email deep links)
         const urlParams = new URLSearchParams(window.location.search);
         contentDeliveryId = urlParams.get('id');
@@ -1722,17 +1726,29 @@
             loginBtn.disabled = true;
             loginBtn.textContent = 'Signing in...';
 
-            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            try {
+                const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
-            if (error) {
-                errorEl.textContent = error.message;
+                if (error) {
+                    errorEl.textContent = error.message;
+                    errorEl.classList.add('visible');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Sign In';
+                    return;
+                }
+
+                // onAuthStateChange will handle the rest — but re-enable button as safety net
+                setTimeout(function() {
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Sign In';
+                }, 5000);
+            } catch (err) {
+                console.error('[Auth] Login exception:', err);
+                errorEl.textContent = 'Login failed: ' + (err.message || 'Unknown error');
                 errorEl.classList.add('visible');
                 loginBtn.disabled = false;
                 loginBtn.textContent = 'Sign In';
-                return;
             }
-
-            // onAuthStateChange will handle the rest
         }
 
         async function handleDashboardSignOut() {
@@ -1740,8 +1756,15 @@
             currentUserEmail = null;
             currentUserRole = null;
             contentData = null;
+            contentDeliveryId = null;
             studioPhotos = [];
             filteredPhotos = [];
+            resolvedStudioId = null;
+            resolvedClientId = null;
+            scopeType = null;
+            initCompleted = false;
+            initRunning = false;
+            history.replaceState(null, '', window.location.pathname);
             document.getElementById('appShell').style.display = 'none';
             document.getElementById('loginOverlay').classList.remove('hidden');
             document.getElementById('loginPassword').value = '';
@@ -1749,79 +1772,119 @@
         }
 
         async function lookupUserRole(email) {
-            // Check studio_instructors table first (studio_instructor)
-            const { data: instructor } = await supabaseClient
-                .from('studio_instructors')
-                .select('id, studio_id, instructor_email')
-                .eq('instructor_email', email)
-                .eq('status', 'active')
-                .limit(1)
-                .maybeSingle();
+            try {
+                // Check studio_instructors table first (studio_instructor)
+                const { data: instructor, error: instrError } = await supabaseClient
+                    .from('studio_instructors')
+                    .select('id, studio_id, instructor_email')
+                    .eq('instructor_email', email)
+                    .eq('status', 'active')
+                    .limit(1)
+                    .maybeSingle();
 
-            if (instructor) {
-                return { role: 'studio_instructor', studioId: instructor.studio_id, clientId: null, scopeType: 'studio' };
-            }
-
-            // Check clients table
-            const { data: client } = await supabaseClient
-                .from('clients')
-                .select('id, email, studio_id, is_studio_instructor')
-                .eq('email', email)
-                .maybeSingle();
-
-            if (client) {
-                // Determine scope: studio user or individual
-                if (client.studio_id) {
-                    // Studio owner — scoped by studio_id
-                    return { role: 'studio_owner', studioId: client.studio_id, clientId: client.id, scopeType: 'studio' };
-                } else {
-                    // Individual instructor (no studio) — scoped by client_id
-                    return { role: 'individual', studioId: null, clientId: client.id, scopeType: 'individual' };
+                if (instrError) {
+                    console.error('[Auth] studio_instructors query error:', instrError);
                 }
-            }
 
-            return null;
+                if (instructor) {
+                    return { role: 'studio_instructor', studioId: instructor.studio_id, clientId: null, scopeType: 'studio' };
+                }
+
+                // Check clients table
+                const { data: client, error: clientError } = await supabaseClient
+                    .from('clients')
+                    .select('id, email, studio_id, is_studio_instructor')
+                    .eq('email', email)
+                    .maybeSingle();
+
+                if (clientError) {
+                    console.error('[Auth] clients query error:', clientError);
+                }
+
+                if (client) {
+                    // Determine scope: studio user or individual
+                    if (client.studio_id) {
+                        // Studio owner — scoped by studio_id
+                        return { role: 'studio_owner', studioId: client.studio_id, clientId: client.id, scopeType: 'studio' };
+                    } else {
+                        // Individual instructor (no studio) — scoped by client_id
+                        return { role: 'individual', studioId: null, clientId: client.id, scopeType: 'individual' };
+                    }
+                }
+
+                return null;
+            } catch (err) {
+                console.error('[Auth] lookupUserRole exception:', err);
+                return null;
+            }
         }
 
         async function initAppWithAuth(user) {
-            currentUserEmail = user.email;
+            // Guard: prevent duplicate concurrent calls
+            if (initRunning) {
+                console.log('[Auth] initAppWithAuth already running, skipping duplicate call');
+                return;
+            }
+            if (initCompleted && currentUserEmail === user.email) {
+                console.log('[Auth] initAppWithAuth already completed for', user.email, ', skipping');
+                return;
+            }
+            initRunning = true;
 
-            // Look up role from database
-            const roleInfo = await lookupUserRole(user.email);
-            if (!roleInfo) {
+            try {
+                currentUserEmail = user.email;
+
+                // Look up role from database
+                const roleInfo = await lookupUserRole(user.email);
+                if (!roleInfo) {
+                    document.getElementById('appShell').style.display = 'block';
+                    document.getElementById('loginOverlay').classList.add('hidden');
+                    document.getElementById('contentContainer').innerHTML =
+                        '<div class="empty-state">' +
+                            '<div class="empty-state-icon">&#10060;</div>' +
+                            '<p>Your email (' + user.email + ') is not associated with any studio or account.</p>' +
+                            '<p style="font-size: 12px; margin-top: 10px;">Contact your studio admin for access.</p>' +
+                            '<button class="btn btn-secondary" onclick="handleDashboardSignOut()" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">Sign Out</button>' +
+                        '</div>';
+                    return;
+                }
+
+                // === DATA ISOLATION: Set scoping IDs ONCE from auth lookup ===
+                // These are NEVER overridden by URL params, delivery data, or user input.
+                currentUserRole = roleInfo.role;
+                scopeType = roleInfo.scopeType;
+                resolvedStudioId = roleInfo.studioId;   // null for individuals
+                resolvedClientId = roleInfo.clientId;    // null for studio instructors (no client record)
+                console.log('[Auth] Scope:', scopeType, '| studioId:', resolvedStudioId, '| clientId:', resolvedClientId, '| role:', currentUserRole);
+
+                // Show app, hide login
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('appShell').style.display = 'block';
+
+                // Show user info
+                showUserInfo();
+
+                // Load content if delivery ID is provided
+                if (contentDeliveryId) {
+                    loadContent();
+                } else {
+                    // No specific delivery — show delivery history list
+                    loadDeliveryHistory();
+                }
+
+                initCompleted = true;
+            } catch (err) {
+                console.error('[Auth] initAppWithAuth error:', err);
                 document.getElementById('appShell').style.display = 'block';
                 document.getElementById('loginOverlay').classList.add('hidden');
                 document.getElementById('contentContainer').innerHTML =
                     '<div class="empty-state">' +
-                        '<div class="empty-state-icon">&#10060;</div>' +
-                        '<p>Your email (' + user.email + ') is not associated with any studio or account.</p>' +
-                        '<p style="font-size: 12px; margin-top: 10px;">Contact your studio admin for access.</p>' +
+                        '<div class="empty-state-icon">&#9888;</div>' +
+                        '<p>Error initializing dashboard: ' + (err.message || 'Unknown error') + '</p>' +
                         '<button class="btn btn-secondary" onclick="handleDashboardSignOut()" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">Sign Out</button>' +
                     '</div>';
-                return;
-            }
-
-            // === DATA ISOLATION: Set scoping IDs ONCE from auth lookup ===
-            // These are NEVER overridden by URL params, delivery data, or user input.
-            currentUserRole = roleInfo.role;
-            scopeType = roleInfo.scopeType;
-            resolvedStudioId = roleInfo.studioId;   // null for individuals
-            resolvedClientId = roleInfo.clientId;    // null for studio instructors (no client record)
-            console.log('[Auth] Scope:', scopeType, '| studioId:', resolvedStudioId, '| clientId:', resolvedClientId, '| role:', currentUserRole);
-
-            // Show app, hide login
-            document.getElementById('loginOverlay').classList.add('hidden');
-            document.getElementById('appShell').style.display = 'block';
-
-            // Show user info
-            showUserInfo();
-
-            // Load content if delivery ID is provided
-            if (contentDeliveryId) {
-                loadContent();
-            } else {
-                // No specific delivery — show delivery history list
-                loadDeliveryHistory();
+            } finally {
+                initRunning = false;
             }
         }
 
@@ -1848,12 +1911,13 @@
                     .from('content_deliveries')
                     .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
 
-                if (scopeType === 'studio') {
+                if (scopeType === 'studio' && resolvedStudioId) {
                     query = query.eq('studio_id', resolvedStudioId);
-                } else {
-                    // Individual instructor — filter by client_id
-                    query = query.eq('client_id', resolvedClientId);
+                } else if (resolvedStudioId) {
+                    // Fallback: use studio_id if available
+                    query = query.eq('studio_id', resolvedStudioId);
                 }
+                // Note: individual instructor scoping (client_id) not yet supported in DB schema
 
                 const { data: deliveries, error } = await query.order('created_at', { ascending: false });
 
@@ -1900,7 +1964,7 @@
                     if (tk > 0) platforms.push('<span class="platform-badge tiktok">TT ' + tk + '</span>');
                     totalPosts = ig + fb + tw + li + tk;
 
-                    html += '<div class="delivery-card" onclick="window.location.href=window.location.pathname+\'?id=' + d.id + '\'">' +
+                    html += '<div class="delivery-card" onclick="navigateToDelivery(\'' + d.id + '\')">' +
                         '<div class="delivery-card-left">' +
                             '<div class="delivery-date">' + dateStr + '</div>' +
                             '<div class="delivery-platforms">' + (platforms.length > 0 ? platforms.join('') : '<span style="color:#94a3b8;font-size:12px;">No content</span>') + '</div>' +
@@ -1926,21 +1990,52 @@
             }
         }
 
+        // ============================================
+        // SPA NAVIGATION: No page reloads for delivery clicks
+        // ============================================
+
+        function navigateToDelivery(id) {
+            contentDeliveryId = id;
+            history.pushState({ deliveryId: id }, '', window.location.pathname + '?id=' + id);
+            loadContent();
+        }
+
+        function navigateToHistory() {
+            contentDeliveryId = null;
+            contentData = null;
+            history.pushState({ deliveryId: null }, '', window.location.pathname);
+            loadDeliveryHistory();
+        }
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', function(event) {
+            if (event.state && event.state.deliveryId) {
+                contentDeliveryId = event.state.deliveryId;
+                loadContent();
+            } else {
+                contentDeliveryId = null;
+                contentData = null;
+                loadDeliveryHistory();
+            }
+        });
+
         // Init: Check session on page load
         (async function() {
-            // Listen for auth state changes
+            // Listen for auth state changes (login/logout only)
             supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 if (event === 'SIGNED_IN' && session?.user) {
                     await initAppWithAuth(session.user);
                 } else if (event === 'SIGNED_OUT') {
                     currentUserEmail = null;
                     currentUserRole = null;
+                    initCompleted = false;
                     document.getElementById('appShell').style.display = 'none';
                     document.getElementById('loginOverlay').classList.remove('hidden');
                 }
+                // Ignore INITIAL_SESSION, TOKEN_REFRESHED — handled by getSession below
             });
 
-            // Check for existing session
+            // Check for existing session (handles page load + cached sessions)
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (session?.user) {
                 await initAppWithAuth(session.user);
@@ -2424,7 +2519,7 @@
                             '<div class="empty-state-icon">&#128274;</div>' +
                             '<p style="font-size: 18px; font-weight: 600;">Access Denied</p>' +
                             '<p style="font-size: 14px; margin-top: 8px;">This content delivery does not belong to your account.</p>' +
-                            '<button class="btn btn-secondary" onclick="window.location.href=window.location.pathname" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">Back to Deliveries</button>' +
+                            '<button class="btn btn-secondary" onclick="navigateToHistory()" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">Back to Deliveries</button>' +
                         '</div>';
                     return;
                 }
@@ -2584,7 +2679,7 @@
             }).join('');
 
             // Add back-to-history button before the content
-            var backBtn = '<button class="back-to-history" onclick="window.location.href=window.location.pathname">&#8249; All Deliveries</button>';
+            var backBtn = '<button class="back-to-history" onclick="navigateToHistory()">&#8249; All Deliveries</button>';
             document.getElementById('contentContainer').innerHTML = backBtn + contentHTML;
         }
 
