@@ -487,36 +487,53 @@
         const Auth = {
             _ac: null, _initRunning: false,
             init() {
+                console.log('[Auth] init() called');
                 this._ac = new AbortController();
                 const s = this._ac.signal;
                 document.getElementById('loginForm').addEventListener('submit', (e) => { e.preventDefault(); this._handleLogin(); }, { signal: s });
                 document.getElementById('signOutBtn').addEventListener('click', () => this.signOut(), { signal: s });
                 supabaseClient.auth.onAuthStateChange(async (event, session) => {
-                    if (event === 'SIGNED_IN' && session?.user) await this._initWithUser(session.user);
-                    else if (event === 'SIGNED_OUT' && AppState.user) { AppState.reset(); AppState.authReady = true; Router.navigate('#/login', true); }
+                    console.log('[Auth] onAuthStateChange:', event, 'hasSession:', !!session, 'hasUser:', !!session?.user);
+                    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+                        console.log('[Auth] Processing auth event:', event, 'for', session.user.email);
+                        await this._initWithUser(session.user);
+                    } else if (event === 'SIGNED_OUT' && AppState.user) {
+                        console.log('[Auth] Signed out, resetting state');
+                        AppState.reset(); AppState.authReady = true; Router.navigate('#/login', true);
+                    }
                 });
                 this._checkSession();
             },
             async _checkSession() {
+                console.log('[Auth] _checkSession() called');
                 const { data: { session } } = await supabaseClient.auth.getSession();
-                if (session?.user) await this._initWithUser(session.user);
-                else { AppState.authReady = true; this.showLogin(); Router.start(); }
+                console.log('[Auth] _checkSession result: hasSession:', !!session, 'hasUser:', !!session?.user);
+                if (session?.user) {
+                    console.log('[Auth] Existing session for:', session.user.email);
+                    await this._initWithUser(session.user);
+                } else {
+                    console.log('[Auth] No existing session, showing login');
+                    AppState.authReady = true; this.showLogin(); Router.start();
+                }
             },
             async _initWithUser(user) {
-                if (this._initRunning) return;
-                if (AppState.email === user.email && AppState.role) return;
+                console.log('[Auth] _initWithUser() called for:', user.email, 'initRunning:', this._initRunning, 'existingRole:', AppState.role);
+                if (this._initRunning) { console.log('[Auth] _initWithUser skipped (already running)'); return; }
+                if (AppState.email === user.email && AppState.role) { console.log('[Auth] _initWithUser skipped (already initialized)'); if (!AppState.authReady) { AppState.authReady = true; Router.start(); } return; }
                 this._initRunning = true;
                 try {
                     AppState.user = user; AppState.email = user.email;
+                    console.log('[Auth] Looking up role for:', user.email);
                     const ri = await this._lookupUserRole(user.email);
+                    console.log('[Auth] Role lookup result:', ri);
                     if (!ri) { AppState.role = null; AppState.authReady = true; this.showApp(); this._showNoAccount(user.email); return; }
                     AppState.role = ri.role; AppState.scopeType = ri.scopeType;
                     AppState.resolvedStudioId = ri.studioId; AppState.resolvedClientId = ri.clientId;
                     AppState.authReady = true;
-                    console.log('[Auth] Scope:', AppState.scopeType, '| studioId:', AppState.resolvedStudioId, '| role:', AppState.role);
-                    this._showUserInfo(); Router.start();
+                    console.log('[Auth] SUCCESS — Scope:', AppState.scopeType, '| studioId:', AppState.resolvedStudioId, '| role:', AppState.role);
+                    this.showApp(); this._showUserInfo(); Router.start();
                 } catch (err) {
-                    console.error('[Auth] init error:', err); AppState.authReady = true;
+                    console.error('[Auth] _initWithUser error:', err); AppState.authReady = true;
                     this.showApp(); this._showError(err.message || 'Unknown error');
                 } finally { this._initRunning = false; }
             },
@@ -526,11 +543,19 @@
                 const btn = document.getElementById('loginBtn');
                 const errEl = document.getElementById('loginError');
                 errEl.classList.remove('visible'); btn.disabled = true; btn.textContent = 'Signing in...';
+                console.log('[Auth] _handleLogin() called for:', email);
                 try {
-                    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-                    if (error) { errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; return; }
-                    setTimeout(() => { btn.disabled = false; btn.textContent = 'Sign In'; }, 5000);
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                    if (error) { console.error('[Auth] signIn error:', error.message); errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; return; }
+                    console.log('[Auth] signInWithPassword SUCCESS, user:', data?.user?.email);
+                    // Belt-and-suspenders: call _initWithUser directly instead of relying solely on onAuthStateChange
+                    if (data?.user) {
+                        console.log('[Auth] Calling _initWithUser directly from _handleLogin');
+                        await this._initWithUser(data.user);
+                    }
+                    btn.disabled = false; btn.textContent = 'Sign In';
                 } catch (err) {
+                    console.error('[Auth] _handleLogin exception:', err);
                     errEl.textContent = 'Login failed: ' + (err.message || 'Unknown error');
                     errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In';
                 }
