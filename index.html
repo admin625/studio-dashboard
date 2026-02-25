@@ -1759,12 +1759,12 @@
             // Check clients table (studio_owner)
             const { data: client } = await supabaseClient
                 .from('clients')
-                .select('id, email')
+                .select('id, email, studio_id')
                 .eq('email', email)
                 .maybeSingle();
 
             if (client) {
-                return { role: 'studio_owner', studioId: client.id };
+                return { role: 'studio_owner', studioId: client.studio_id };
             }
 
             return null;
@@ -2385,7 +2385,7 @@
                         var studioLookup = await supabaseClient
                             .from('studio_accounts')
                             .select('id')
-                            .eq('email', currentUserEmail)
+                            .eq('owner_email', currentUserEmail)
                             .limit(1);
                         if (studioLookup.data && studioLookup.data.length > 0) {
                             resolvedStudioId = studioLookup.data[0].id;
@@ -2395,7 +2395,7 @@
                             var instructorLookup = await supabaseClient
                                 .from('studio_instructors')
                                 .select('studio_id')
-                                .eq('email', currentUserEmail)
+                                .eq('instructor_email', currentUserEmail)
                                 .limit(1);
                             if (instructorLookup.data && instructorLookup.data.length > 0) {
                                 resolvedStudioId = instructorLookup.data[0].studio_id;
