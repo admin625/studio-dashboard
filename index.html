@@ -968,32 +968,14 @@
                 attempt = attempt || 1;
                 console.log('[Auth] _lookupUserRole() called for:', email, '(attempt ' + attempt + ')');
                 try {
-                    console.log('[Auth] Querying studio_instructors...');
-                    const instrQuery = supabaseClient.from('studio_instructors')
-                        .select('id, studio_id').eq('instructor_email', email).eq('status', 'active').limit(1).maybeSingle();
-                    const { data: instr, error: instrErr } = await this._withTimeout(instrQuery, 5000, 'studio_instructors query');
-                    console.log('[Auth] studio_instructors result:', { data: instr, error: instrErr ? instrErr.message : null });
-                    if (instrErr) console.error('[Auth] studio_instructors query error:', instrErr);
-                    if (instr) {
-                        console.log('[Auth] Role found: studio_instructor, studioId:', instr.studio_id);
-                        return { role: 'studio_instructor', studioId: instr.studio_id, clientId: null, scopeType: 'studio' };
-                    }
-                    console.log('[Auth] Not an instructor, querying clients...');
-                    const clientQuery = supabaseClient.from('clients')
-                        .select('id, email, studio_id, is_studio_instructor').eq('email', email).maybeSingle();
-                    const { data: client, error: clientErr } = await this._withTimeout(clientQuery, 5000, 'clients query');
-                    console.log('[Auth] clients result:', { data: client, error: clientErr ? clientErr.message : null });
-                    if (clientErr) console.error('[Auth] clients query error:', clientErr);
-                    if (client) {
-                        if (client.studio_id) {
-                            console.log('[Auth] Role found: studio_owner, studioId:', client.studio_id, 'clientId:', client.id);
-                            return { role: 'studio_owner', studioId: client.studio_id, clientId: client.id, scopeType: 'studio' };
-                        }
-                        console.log('[Auth] Role found: individual, clientId:', client.id);
-                        return { role: 'individual', studioId: null, clientId: client.id, scopeType: 'individual' };
-                    }
-                    console.warn('[Auth] No role found for:', email);
-                    return null;
+                    console.log('[Auth] Calling lookup_user_role RPC...');
+                    const rpcQuery = supabaseClient.rpc('lookup_user_role');
+                    const { data, error } = await this._withTimeout(rpcQuery, 15000, 'lookup_user_role RPC');
+                    console.log('[Auth] lookup_user_role result:', { data, error: error ? error.message : null });
+                    if (error) { console.error('[Auth] lookup_user_role error:', error); return null; }
+                    if (!data) { console.warn('[Auth] No role found for:', email); return null; }
+                    console.log('[Auth] Role found:', data.role, 'studioId:', data.studioId, 'clientId:', data.clientId);
+                    return { role: data.role, studioId: data.studioId, clientId: data.clientId, scopeType: data.scopeType };
                 } catch (err) {
                     console.error('[Auth] _lookupUserRole error (attempt ' + attempt + '):', err.message || err);
                     if (attempt < 2) {
