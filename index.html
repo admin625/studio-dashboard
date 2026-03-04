@@ -404,6 +404,15 @@
         </div>
     </div>
 
+    <!-- DASHBOARD LOADING (between sign-in and data ready) -->
+    <div class="login-overlay hidden" id="dashboardLoadingOverlay">
+        <div class="login-card" style="text-align:center">
+            <img src="assets/logo.png" alt="Fior Saoirse Logo" class="login-logo-img">
+            <div class="spinner" style="margin:20px auto"></div>
+            <p style="color:#64748b;font-size:15px" id="dashboardLoadingMsg">Loading your dashboard...</p>
+        </div>
+    </div>
+
     <!-- MAIN APP (hidden until authenticated) -->
     <div id="appShell" style="display:none">
     <div class="loading-overlay hidden" id="loadingOverlay">
@@ -884,6 +893,9 @@
                 if (this._initRunning) { console.log('[Auth] _initWithUser skipped (already running)'); return; }
                 if (AppState.email === user.email && AppState.role) { console.log('[Auth] _initWithUser skipped (already initialized)'); if (!AppState.authReady) { AppState.authReady = true; Router.start(); } return; }
                 this._initRunning = true;
+                // Show dashboard loading overlay during data fetch
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('dashboardLoadingOverlay').classList.remove('hidden');
                 try {
                     AppState.user = user; AppState.email = user.email;
                     console.log('[Auth] Looking up role for:', user.email);
@@ -918,12 +930,15 @@
                     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
                     if (error) { console.error('[Auth] signIn error:', error.message); errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading'); return; }
                     console.log('[Auth] signInWithPassword SUCCESS, user:', data?.user?.email);
+                    // Show dashboard loading overlay, hide login
+                    document.getElementById('loginOverlay').classList.add('hidden');
+                    document.getElementById('dashboardLoadingOverlay').classList.remove('hidden');
+                    btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading');
                     // Belt-and-suspenders: call _initWithUser directly instead of relying solely on onAuthStateChange
                     if (data?.user) {
                         console.log('[Auth] Calling _initWithUser directly from _handleLogin');
                         await this._initWithUser(data.user);
                     }
-                    btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading');
                 } catch (err) {
                     console.error('[Auth] _handleLogin exception:', err);
                     errEl.textContent = 'Login failed: ' + (err.message || 'Unknown error');
@@ -990,12 +1005,14 @@
                 document.getElementById('loginOverlay').classList.remove('hidden');
                 document.getElementById('forgotPasswordOverlay').classList.add('hidden');
                 document.getElementById('resetPasswordOverlay').classList.add('hidden');
+                document.getElementById('dashboardLoadingOverlay').classList.add('hidden');
                 document.getElementById('appShell').style.display = 'none';
             },
             showApp() {
                 document.getElementById('loginOverlay').classList.add('hidden');
                 document.getElementById('forgotPasswordOverlay').classList.add('hidden');
                 document.getElementById('resetPasswordOverlay').classList.add('hidden');
+                document.getElementById('dashboardLoadingOverlay').classList.add('hidden');
                 document.getElementById('appShell').style.display = 'block';
                 this._showUserInfo();
             },
