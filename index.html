@@ -1859,7 +1859,6 @@
                 this._editPollStart = Date.now();
                 var self = this;
                 this._editPollTimer = setInterval(function() { self._pollForEdit(); }, this.EDIT_POLL_INTERVAL);
-                document.getElementById('editorPrompt').value = '';
             },
             _reset() {
                 this._stopEditPoll();
