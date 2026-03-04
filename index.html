@@ -560,6 +560,8 @@
         // FEATURE FLAGS
         // ================================================================
         const FEATURE_VIDEO_REELS = false;
+        const REELS_BETA_USERS = ['katie@thelocalkollective.com'];
+        function isReelsEnabled() { return FEATURE_VIDEO_REELS || REELS_BETA_USERS.indexOf(AppState.email) !== -1; }
 
         // ================================================================
         // HELPERS
@@ -1039,7 +1041,7 @@
 
                 const backBtn = '<button class="back-to-history" data-action="navigate-history">&#8249; All Deliveries</button>';
                 let videoHTML = '';
-                if (FEATURE_VIDEO_REELS) {
+                if (isReelsEnabled()) {
                     const vd = AppState.videoData;
                     if (vd && vd.video_status) {
                         videoHTML = '<div class="video-section">';
@@ -1599,7 +1601,7 @@
                 case 'close-generate-modal': ContentGenerator.close(); break;
                 case 'submit-generate': ContentGenerator.submit(); break;
                 case 'retry-video':
-                    if (!FEATURE_VIDEO_REELS) break;
+                    if (!isReelsEnabled()) break;
                     target.disabled = true; target.textContent = 'Retrying...';
                     fetch('/.netlify/functions/proxy-webhook?target=video-reel', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
