@@ -24,18 +24,6 @@ exports.handler = async (event) => {
     return respond(500, { error: envVar + ' is not configured. Set it in Netlify environment variables.' });
   }
 
-  // Fire-and-forget mode: send request to n8n but return 202 immediately
-  // n8n workflows take 1-3+ minutes (AI generation); Netlify functions timeout at 10-26s
-  if (params.fireAndForget === 'true') {
-    console.log('[proxy-webhook] Fire-and-forget to', target);
-    fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': event.headers['content-type'] || 'application/json' },
-      body: event.body,
-    }).catch(err => console.error('[proxy-webhook] Background request failed:', err.message));
-    return respond(202, { accepted: true, message: 'Request accepted, processing in background' });
-  }
-
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',

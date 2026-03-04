@@ -1841,11 +1841,11 @@
                     this._editOrigPhotoUrl = AppState.contentData[this._platform][this._postIndex].photo_url || this._origUrl;
                 }
 
-                console.log('[PhotoEditor] Fire-and-forget POST to', PHOTO_EDITOR_WEBHOOK + '&fireAndForget=true');
+                console.log('[PhotoEditor] POST to', PHOTO_EDITOR_WEBHOOK);
                 console.log('[PhotoEditor] Payload: photo_id:', this._photoId, '| delivery_id:', AppState.deliveryId, '| platform:', this._platform, '| post_index:', this._postIndex);
 
-                // Fire and forget — don't await response body
-                fetch(PHOTO_EDITOR_WEBHOOK + '&fireAndForget=true', {
+                // Don't await response body — dashboard polls Supabase for the result
+                fetch(PHOTO_EDITOR_WEBHOOK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
