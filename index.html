@@ -1038,10 +1038,27 @@
             _knownIds: new Set(),
             _highlightIds: new Set(),
             async _fetchDeliveries() {
+                var result = await supabaseClient.rpc('get_delivery_summaries', {
+                    p_studio_id: AppState.resolvedStudioId || null
+                });
+                if (!result.error) return result;
+                console.warn('[DeliveryList] RPC failed, falling back to direct query:', result.error.message);
                 let q = supabaseClient.from('content_deliveries')
                     .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
                 if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
-                return q.order('created_at', { ascending: false });
+                var fallback = await q.order('created_at', { ascending: false }).limit(50);
+                if (fallback.error) return fallback;
+                fallback.data = (fallback.data || []).map(function(d) {
+                    return {
+                        id: d.id, created_at: d.created_at,
+                        instagram_count: Array.isArray(d.instagram_content) ? d.instagram_content.length : 0,
+                        facebook_count: Array.isArray(d.facebook_content) ? d.facebook_content.length : 0,
+                        twitter_count: Array.isArray(d.twitter_content) ? d.twitter_content.length : 0,
+                        linkedin_count: Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0,
+                        tiktok_count: Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0,
+                    };
+                });
+                return fallback;
             },
             _renderCards(deliveries, container) {
                 const genBtn = '<button class="btn-generate-content" data-action="open-generate-modal">+ Generate New Content</button>';
@@ -1050,11 +1067,11 @@
                     let dateStr = 'Unknown date';
                     if (d.created_at) { const dt = new Date(d.created_at); dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
                     const pf = [];
-                    const ig = Array.isArray(d.instagram_content) ? d.instagram_content.length : 0;
-                    const fb = Array.isArray(d.facebook_content) ? d.facebook_content.length : 0;
-                    const tw = Array.isArray(d.twitter_content) ? d.twitter_content.length : 0;
-                    const li = Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0;
-                    const tk = Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0;
+                    const ig = d.instagram_count != null ? d.instagram_count : (Array.isArray(d.instagram_content) ? d.instagram_content.length : 0);
+                    const fb = d.facebook_count != null ? d.facebook_count : (Array.isArray(d.facebook_content) ? d.facebook_content.length : 0);
+                    const tw = d.twitter_count != null ? d.twitter_count : (Array.isArray(d.twitter_content) ? d.twitter_content.length : 0);
+                    const li = d.linkedin_count != null ? d.linkedin_count : (Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0);
+                    const tk = d.tiktok_count != null ? d.tiktok_count : (Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0);
                     if (ig) pf.push('<span class="platform-badge instagram">IG ' + ig + '</span>');
                     if (fb) pf.push('<span class="platform-badge facebook">FB ' + fb + '</span>');
                     if (tw) pf.push('<span class="platform-badge twitter">X ' + tw + '</span>');
