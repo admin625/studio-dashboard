@@ -17,9 +17,11 @@ exports.handler = async (event) => {
     return respond(400, { error: 'Invalid target' });
   }
 
-  const webhookUrl = process.env[TARGETS[target]];
+  const envVar = TARGETS[target];
+  const webhookUrl = process.env[envVar];
   if (!webhookUrl) {
-    return respond(500, { error: 'Server misconfigured' });
+    console.error('[proxy-webhook] ' + envVar + ' env var is not set');
+    return respond(500, { error: envVar + ' is not configured. Set it in Netlify environment variables.' });
   }
 
   try {

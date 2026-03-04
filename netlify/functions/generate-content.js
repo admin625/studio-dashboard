@@ -8,7 +8,8 @@ exports.handler = async (event) => {
 
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
   if (!webhookUrl) {
-    return respond(500, { error: 'Server misconfigured' });
+    console.error('[generate-content] N8N_WEBHOOK_URL env var is not set');
+    return respond(500, { error: 'N8N_WEBHOOK_URL is not configured. Set it in Netlify environment variables.' });
   }
 
   let body;
@@ -28,6 +29,10 @@ exports.handler = async (event) => {
     return respond(400, { error: 'At least one platform is required' });
   }
 
+  console.log('[generate-content] Forwarding to:', webhookUrl);
+  console.log('[generate-content] Payload keys:', Object.keys(body).join(', '));
+  console.log('[generate-content] Platforms:', JSON.stringify(body.platforms));
+
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
@@ -35,10 +40,12 @@ exports.handler = async (event) => {
       body: JSON.stringify(body),
     });
     const text = await res.text();
+    console.log('[generate-content] Upstream status:', res.status, 'body length:', text.length);
     let data;
     try { data = JSON.parse(text); } catch { data = text; }
     return respond(res.status, data);
   } catch (err) {
+    console.error('[generate-content] Upstream fetch failed:', err.message);
     return respond(502, { error: 'Upstream request failed', detail: err.message });
   }
 };

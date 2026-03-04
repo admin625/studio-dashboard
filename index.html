@@ -224,7 +224,10 @@
         .generate-status { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; }
         .generate-status.success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
         .generate-status.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .generate-status.loading { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; display: flex; align-items: center; gap: 8px; }
         .generate-status.hidden { display: none; }
+        .spinner-inline { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin-inline 0.8s linear infinite; vertical-align: middle; }
+        @keyframes spin-inline { to { transform: rotate(360deg); } }
         .photo-editor-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .photo-editor-modal.hidden { display: none; }
         .editor-container { background: #1a1a2e; border-radius: 20px; width: 100%; max-width: 1200px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); }
@@ -1515,8 +1518,9 @@
                     return;
                 }
                 const btn = document.getElementById('genSubmitBtn');
-                btn.disabled = true; btn.textContent = 'Generating...';
-                this._showStatus('', '');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-inline"></span> Generating...';
+                this._showStatus('loading', 'Generating your content \u2014 this may take a minute...');
 
                 const val = (id) => (document.getElementById(id).value || '').trim();
                 const themesRaw = val('genContentThemes');
@@ -1550,24 +1554,32 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
-                    if (!response.ok) throw new Error('Server returned ' + response.status);
-                    this._showStatus('success', 'Content generated! Refreshing your deliveries...');
-                    btn.textContent = 'Done!';
+                    let errDetail = '';
+                    if (!response.ok) {
+                        try {
+                            const errBody = await response.json();
+                            errDetail = errBody.error || errBody.detail || JSON.stringify(errBody);
+                        } catch { errDetail = 'Server returned ' + response.status; }
+                        throw new Error(errDetail);
+                    }
+                    this._showStatus('success', 'Content generated successfully! Refreshing your deliveries...');
+                    btn.innerHTML = 'Done!';
                     setTimeout(() => {
                         this.close();
                         Router.navigate('#/deliveries', true);
                         DeliveryList.render(AppState.navGeneration);
                     }, 2000);
                 } catch (err) {
-                    this._showStatus('error', 'Generation failed: ' + (err.message || 'Unknown error'));
-                    btn.disabled = false; btn.textContent = 'Retry';
+                    this._showStatus('error', 'Generation failed: ' + (err.message || 'Unknown error') + '. Click Retry to try again.');
+                    btn.disabled = false;
+                    btn.innerHTML = 'Retry';
                 }
             },
             _showStatus(type, msg) {
                 const el = document.getElementById('genStatus');
                 if (!type) { el.classList.add('hidden'); return; }
                 el.className = 'generate-status ' + type;
-                el.textContent = msg;
+                el.innerHTML = (type === 'loading' ? '<span class="spinner-inline"></span> ' : '') + msg;
             }
         };
 
