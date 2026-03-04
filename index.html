@@ -182,19 +182,38 @@
         .btn-generate-content:disabled { opacity: 0.6; cursor: not-allowed; }
         .generate-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 15000; padding: 20px; }
         .generate-modal.hidden { display: none; }
-        .generate-modal-card { background: white; border-radius: 20px; padding: 32px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 80px rgba(0,0,0,0.3); }
+        .generate-modal-card { background: white; border-radius: 20px; padding: 32px; width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 80px rgba(0,0,0,0.3); }
         .generate-modal-card h2 { font-size: 22px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
         .generate-modal-card .modal-subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
         .generate-modal-card .form-section { margin-bottom: 20px; }
-        .generate-modal-card .form-section label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px; }
-        .generate-modal-card .platform-checkboxes { display: flex; flex-wrap: wrap; gap: 10px; }
-        .platform-check { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #f1f5f9; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 13px; font-weight: 600; color: #475569; }
-        .platform-check:hover { border-color: #667eea; background: #eef2ff; }
-        .platform-check input { display: none; }
-        .platform-check.checked { background: #eef2ff; border-color: #667eea; color: #4338ca; }
-        .generate-modal-card textarea { width: 100%; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 14px; resize: vertical; min-height: 60px; transition: border-color 0.2s; }
-        .generate-modal-card textarea:focus { outline: none; border-color: #667eea; }
-        .generate-modal-card textarea::placeholder { color: #94a3b8; }
+        .generate-modal-card .form-section > label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px; }
+        .generate-modal-card .section-hint { font-size: 11px; color: #94a3b8; font-weight: 400; }
+        .generate-modal-card .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 520px) { .generate-modal-card .form-row { grid-template-columns: 1fr; } }
+        .generate-modal-card input[type="text"], .generate-modal-card textarea, .generate-modal-card select {
+            width: 100%; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 14px; transition: border-color 0.2s; box-sizing: border-box; background: white; color: #1e293b;
+        }
+        .generate-modal-card input[type="text"]:focus, .generate-modal-card textarea:focus, .generate-modal-card select:focus { outline: none; border-color: #667eea; }
+        .generate-modal-card textarea { resize: vertical; min-height: 60px; }
+        .generate-modal-card input::placeholder, .generate-modal-card textarea::placeholder { color: #94a3b8; }
+        .generate-modal-card .platform-rows { display: flex; flex-direction: column; gap: 8px; }
+        .platform-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; transition: all 0.2s; }
+        .platform-row.active { background: #eef2ff; border-color: #667eea; }
+        .platform-row .plat-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: #475569; min-width: 120px; }
+        .platform-row .plat-toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: #667eea; cursor: pointer; }
+        .platform-row .plat-opts { display: flex; align-items: center; gap: 12px; flex: 1; }
+        .platform-row .plat-opts.disabled { opacity: 0.3; pointer-events: none; }
+        .platform-row .plat-opts label { font-size: 12px; color: #64748b; font-weight: 500; white-space: nowrap; }
+        .platform-row .plat-opts select { width: 60px; padding: 4px 6px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; }
+        .platform-row .plat-opts .img-toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b; cursor: pointer; }
+        .platform-row .plat-opts .img-toggle input { width: 14px; height: 14px; accent-color: #667eea; }
+        .generate-modal-card .form-divider { border: none; border-top: 1px solid #e2e8f0; margin: 24px 0; }
+        .generate-modal-card .collapsible-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 10px 0; }
+        .generate-modal-card .collapsible-header h3 { font-size: 14px; font-weight: 600; color: #475569; margin: 0; }
+        .generate-modal-card .collapsible-header .toggle-arrow { font-size: 12px; color: #94a3b8; transition: transform 0.2s; }
+        .generate-modal-card .collapsible-header .toggle-arrow.open { transform: rotate(180deg); }
+        .generate-modal-card .collapsible-body { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+        .generate-modal-card .collapsible-body.open { max-height: 1000px; }
         .generate-modal-actions { display: flex; gap: 10px; margin-top: 24px; }
         .generate-modal-actions .btn { flex: 1; padding: 14px; font-size: 15px; }
         .generate-modal-actions .btn-cancel { background: #f1f5f9; color: #475569; }
@@ -448,25 +467,146 @@
     <div class="generate-modal hidden" id="generateModal">
         <div class="generate-modal-card">
             <h2>Generate New Content</h2>
-            <p class="modal-subtitle">Select your platforms and customize this batch of content.</p>
+            <p class="modal-subtitle">Configure your content batch. Fields marked * are required.</p>
+
+            <!-- PLATFORMS with post count & image toggle per platform -->
             <div class="form-section">
-                <label>Platforms *</label>
-                <div class="platform-checkboxes" id="genPlatforms">
-                    <label class="platform-check checked"><input type="checkbox" value="instagram" checked>IG Instagram</label>
-                    <label class="platform-check"><input type="checkbox" value="facebook">FB Facebook</label>
-                    <label class="platform-check"><input type="checkbox" value="twitter">X Twitter/X</label>
-                    <label class="platform-check"><input type="checkbox" value="linkedin">LI LinkedIn</label>
-                    <label class="platform-check"><input type="checkbox" value="tiktok">TT TikTok</label>
+                <label>Platforms * <span class="section-hint">(select at least one, set posts per platform)</span></label>
+                <div class="platform-rows" id="genPlatforms">
+                    <div class="platform-row active" data-platform="instagram">
+                        <label class="plat-toggle"><input type="checkbox" checked> Instagram</label>
+                        <div class="plat-opts">
+                            <label>Posts <select class="plat-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+                            <label class="img-toggle"><input type="checkbox" checked> Include images</label>
+                        </div>
+                    </div>
+                    <div class="platform-row" data-platform="facebook">
+                        <label class="plat-toggle"><input type="checkbox"> Facebook</label>
+                        <div class="plat-opts disabled">
+                            <label>Posts <select class="plat-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+                            <label class="img-toggle"><input type="checkbox" checked> Include images</label>
+                        </div>
+                    </div>
+                    <div class="platform-row" data-platform="twitter">
+                        <label class="plat-toggle"><input type="checkbox"> Twitter/X</label>
+                        <div class="plat-opts disabled">
+                            <label>Posts <select class="plat-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+                            <label class="img-toggle"><input type="checkbox" checked> Include images</label>
+                        </div>
+                    </div>
+                    <div class="platform-row" data-platform="linkedin">
+                        <label class="plat-toggle"><input type="checkbox"> LinkedIn</label>
+                        <div class="plat-opts disabled">
+                            <label>Posts <select class="plat-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+                            <label class="img-toggle"><input type="checkbox" checked> Include images</label>
+                        </div>
+                    </div>
+                    <div class="platform-row" data-platform="tiktok">
+                        <label class="plat-toggle"><input type="checkbox"> TikTok</label>
+                        <div class="plat-opts disabled">
+                            <label>Posts <select class="plat-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+                            <label class="img-toggle"><input type="checkbox"> Include images</label>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <hr class="form-divider">
+
+            <!-- BRAND & VOICE -->
             <div class="form-section">
-                <label>Content Focus <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
-                <textarea id="genContentFocus" placeholder="e.g. Summer boot camp launch, new instructor spotlight, class schedule changes..."></textarea>
+                <label>Brand Voice *</label>
+                <input type="text" id="genBrandVoice" placeholder="e.g. Energetic, motivating, and community-focused" value="Energetic, motivating, and community-focused">
+            </div>
+            <div class="form-row">
+                <div class="form-section">
+                    <label>Target Audience *</label>
+                    <input type="text" id="genTargetAudience" placeholder="e.g. Fitness enthusiasts and local community" value="Fitness enthusiasts and local community members">
+                </div>
+                <div class="form-section">
+                    <label>Fitness Focus *</label>
+                    <input type="text" id="genFitnessFocus" placeholder="e.g. HIIT, yoga, strength training">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-section">
+                    <label>Primary Goal *</label>
+                    <select id="genPrimaryGoal">
+                        <option value="Grow community engagement and class bookings">Grow engagement & bookings</option>
+                        <option value="Increase brand awareness">Increase brand awareness</option>
+                        <option value="Drive new member signups">Drive new member signups</option>
+                        <option value="Retain existing members">Retain existing members</option>
+                        <option value="Promote a specific event or launch">Promote event/launch</option>
+                    </select>
+                </div>
+                <div class="form-section">
+                    <label>Mood / Tone</label>
+                    <select id="genCaptionStyle">
+                        <option value="engaging">Engaging</option>
+                        <option value="professional">Professional</option>
+                        <option value="casual">Casual & Fun</option>
+                        <option value="inspirational">Inspirational</option>
+                        <option value="educational">Educational</option>
+                        <option value="storytelling">Storytelling</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- CTA -->
+            <div class="form-section">
+                <label>Call to Action (CTA) *</label>
+                <input type="text" id="genCTA" placeholder="e.g. Book a class today! / Sign up for your free trial" value="Book a class today!">
+            </div>
+
+            <!-- HASHTAGS -->
+            <div class="form-row">
+                <div class="form-section">
+                    <label>Hashtag Preference</label>
+                    <select id="genHashtagPref">
+                        <option value="moderate">Moderate (5-10)</option>
+                        <option value="minimal">Minimal (1-4)</option>
+                        <option value="heavy">Heavy (10+)</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+                <div class="form-section">
+                    <label>Custom Hashtags <span class="section-hint">(optional)</span></label>
+                    <input type="text" id="genCustomHashtags" placeholder="e.g. #FitFam #YogaLife #StudioName">
+                </div>
+            </div>
+
+            <hr class="form-divider">
+
+            <!-- CONTENT THEMES & PROMOTIONS -->
+            <div class="form-section">
+                <label>Content Themes <span class="section-hint">(comma-separated, optional)</span></label>
+                <input type="text" id="genContentThemes" placeholder="e.g. Summer bootcamp, New instructor, Community spotlight">
             </div>
             <div class="form-section">
-                <label>Promotions or CTAs <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+                <label>Promotions <span class="section-hint">(optional)</span></label>
                 <textarea id="genPromotions" placeholder="e.g. 20% off first month, free trial class this weekend..." style="min-height:50px;"></textarea>
             </div>
+
+            <!-- ADVANCED (collapsible) -->
+            <div class="collapsible-header" id="genAdvancedToggle">
+                <h3>Advanced Options</h3>
+                <span class="toggle-arrow">&#9660;</span>
+            </div>
+            <div class="collapsible-body" id="genAdvancedBody">
+                <div class="form-section">
+                    <label>Unique Value Proposition <span class="section-hint">(optional)</span></label>
+                    <input type="text" id="genUniqueValue" placeholder="e.g. Only studio in the area with infrared sauna recovery">
+                </div>
+                <div class="form-section">
+                    <label>Signature Style <span class="section-hint">(optional)</span></label>
+                    <input type="text" id="genSignatureStyle" placeholder="e.g. Always end with an emoji, use alliteration in headers">
+                </div>
+                <div class="form-section">
+                    <label>Avoid Topics <span class="section-hint">(optional)</span></label>
+                    <input type="text" id="genAvoidTopics" placeholder="e.g. Weight loss language, competitor mentions">
+                </div>
+            </div>
+
             <div class="generate-status hidden" id="genStatus"></div>
             <div class="generate-modal-actions">
                 <button class="btn btn-cancel" data-action="close-generate-modal">Cancel</button>
@@ -1320,18 +1460,32 @@
                 if (this._ac) this._ac.abort();
                 this._ac = new AbortController();
                 const s = this._ac.signal;
-                document.querySelectorAll('#genPlatforms .platform-check').forEach(label => {
-                    label.addEventListener('click', () => {
-                        const cb = label.querySelector('input');
-                        cb.checked = !cb.checked;
-                        label.classList.toggle('checked', cb.checked);
+                // Platform row toggle: enable/disable options when checkbox changes
+                document.querySelectorAll('#genPlatforms .platform-row').forEach(row => {
+                    const cb = row.querySelector('.plat-toggle input[type="checkbox"]');
+                    const opts = row.querySelector('.plat-opts');
+                    cb.addEventListener('change', () => {
+                        row.classList.toggle('active', cb.checked);
+                        opts.classList.toggle('disabled', !cb.checked);
                     }, { signal: s });
                 });
+                // Advanced section toggle
+                document.getElementById('genAdvancedToggle').addEventListener('click', () => {
+                    const body = document.getElementById('genAdvancedBody');
+                    const arrow = document.querySelector('#genAdvancedToggle .toggle-arrow');
+                    body.classList.toggle('open');
+                    arrow.classList.toggle('open');
+                }, { signal: s });
             },
             open() {
                 this.init();
-                document.getElementById('genContentFocus').value = '';
-                document.getElementById('genPromotions').value = '';
+                // Reset optional text fields
+                ['genPromotions', 'genContentThemes', 'genCustomHashtags', 'genUniqueValue', 'genSignatureStyle', 'genAvoidTopics'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+                // Close advanced section
+                document.getElementById('genAdvancedBody').classList.remove('open');
+                document.querySelector('#genAdvancedToggle .toggle-arrow').classList.remove('open');
                 const statusEl = document.getElementById('genStatus');
                 statusEl.classList.add('hidden');
                 document.getElementById('genSubmitBtn').disabled = false;
@@ -1342,9 +1496,20 @@
                 document.getElementById('generateModal').classList.add('hidden');
                 if (this._ac) { this._ac.abort(); this._ac = null; }
             },
-            async submit() {
+            _getPlatforms() {
                 const platforms = [];
-                document.querySelectorAll('#genPlatforms input:checked').forEach(cb => platforms.push(cb.value));
+                document.querySelectorAll('#genPlatforms .platform-row').forEach(row => {
+                    const cb = row.querySelector('.plat-toggle input[type="checkbox"]');
+                    if (!cb.checked) return;
+                    const name = row.getAttribute('data-platform');
+                    const postCount = parseInt(row.querySelector('.plat-count').value, 10) || 3;
+                    const includeImages = row.querySelector('.img-toggle input').checked;
+                    platforms.push({ name: name, postCount: postCount, includeImages: includeImages });
+                });
+                return platforms;
+            },
+            async submit() {
+                const platforms = this._getPlatforms();
                 if (!platforms.length) {
                     this._showStatus('error', 'Please select at least one platform.');
                     return;
@@ -1352,8 +1517,11 @@
                 const btn = document.getElementById('genSubmitBtn');
                 btn.disabled = true; btn.textContent = 'Generating...';
                 this._showStatus('', '');
-                const contentFocus = document.getElementById('genContentFocus').value.trim();
-                const promotions = document.getElementById('genPromotions').value.trim();
+
+                const val = (id) => (document.getElementById(id).value || '').trim();
+                const themesRaw = val('genContentThemes');
+                const contentThemes = themesRaw ? themesRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
                 const payload = {
                     email: AppState.email,
                     studio_id: AppState.resolvedStudioId,
@@ -1361,15 +1529,19 @@
                     user_role: AppState.role,
                     platforms: platforms,
                     client_type: 'fitness_studio',
-                    brand_voice: 'Energetic, motivating, and community-focused',
-                    target_audience: 'Fitness enthusiasts and local community members',
-                    fitness_focus: contentFocus || 'General fitness, wellness, and community',
-                    primary_goal: 'Grow community engagement and class bookings',
-                    cta: promotions ? promotions : 'Book a class today!',
-                    caption_style: 'engaging',
-                    hashtag_preference: 'moderate',
-                    content_themes: contentFocus ? [contentFocus] : [],
-                    promotions: promotions,
+                    brand_voice: val('genBrandVoice') || 'Energetic, motivating, and community-focused',
+                    target_audience: val('genTargetAudience') || 'Fitness enthusiasts and local community members',
+                    fitness_focus: val('genFitnessFocus') || 'General fitness, wellness, and community',
+                    primary_goal: val('genPrimaryGoal'),
+                    cta: val('genCTA') || 'Book a class today!',
+                    caption_style: val('genCaptionStyle'),
+                    hashtag_preference: val('genHashtagPref'),
+                    content_themes: contentThemes,
+                    custom_hashtags: val('genCustomHashtags'),
+                    promotions: val('genPromotions'),
+                    avoid_topics: val('genAvoidTopics'),
+                    unique_value: val('genUniqueValue'),
+                    signature_style: val('genSignatureStyle'),
                     preferOwnPhotos: !AppState.aiPhotosEnabled
                 };
                 try {
