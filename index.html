@@ -901,22 +901,26 @@
                 document.getElementById('loginOverlay').classList.add('hidden');
                 document.getElementById('dashboardLoadingOverlay').classList.remove('hidden');
                 try {
+                    var t0 = performance.now();
                     AppState.user = user; AppState.email = user.email;
-                    console.log('[Auth] Looking up role for:', user.email);
+                    console.log('[Perf] _initWithUser START');
+                    var tRole = performance.now();
                     const ri = await this._lookupUserRole(user.email);
-                    console.log('[Auth] Role lookup result:', ri);
+                    console.log('[Perf] Role lookup:', (performance.now() - tRole).toFixed(0) + 'ms', ri);
                     if (!ri) { AppState.role = null; AppState.authReady = true; this._initCompleted = true; this.showApp(); this._showNoAccount(user.email); return; }
                     AppState.role = ri.role; AppState.scopeType = ri.scopeType;
                     AppState.resolvedStudioId = ri.studioId; AppState.resolvedClientId = ri.clientId;
                     if (ri.studioId) {
                         try {
+                            var tSettings = performance.now();
                             const { data: studioSettings } = await supabaseClient.from('studio_accounts')
                                 .select('ai_photos_enabled').eq('id', ri.studioId).single();
+                            console.log('[Perf] studio_accounts query:', (performance.now() - tSettings).toFixed(0) + 'ms');
                             if (studioSettings) AppState.aiPhotosEnabled = !!studioSettings.ai_photos_enabled;
-                        } catch (e) { /* ignore - setting defaults to false */ }
+                        } catch (e) { console.log('[Perf] studio_accounts query failed:', e.message); }
                     }
                     AppState.authReady = true; this._initCompleted = true;
-                    console.log('[Auth] SUCCESS — Scope:', AppState.scopeType, '| studioId:', AppState.resolvedStudioId, '| role:', AppState.role);
+                    console.log('[Perf] _initWithUser TOTAL:', (performance.now() - t0).toFixed(0) + 'ms | Scope:', AppState.scopeType, '| studioId:', AppState.resolvedStudioId, '| role:', AppState.role);
                     this.showApp(); this._showUserInfo(); Router.start();
                 } catch (err) {
                     console.error('[Auth] _initWithUser error:', err); AppState.authReady = true;
@@ -971,28 +975,32 @@
                 attempt = attempt || 1;
                 console.log('[Auth] _lookupUserRole() called for:', email, '(attempt ' + attempt + ')');
                 try {
-                    console.log('[Auth] Querying studio_instructors...');
-                    const instrQuery = supabaseClient.from('studio_instructors')
-                        .select('id, studio_id').eq('instructor_email', email).eq('status', 'active').limit(1).maybeSingle();
-                    const { data: instr, error: instrErr } = await this._withTimeout(instrQuery, 15000, 'studio_instructors query');
-                    console.log('[Auth] studio_instructors result:', { data: instr, error: instrErr ? instrErr.message : null });
-                    if (instrErr) console.error('[Auth] studio_instructors query error:', instrErr);
-                    if (instr) {
-                        console.log('[Auth] Role found: studio_instructor, studioId:', instr.studio_id);
+                    // Fire both queries in parallel
+                    var tBoth = performance.now();
+                    const instrPromise = this._withTimeout(
+                        supabaseClient.from('studio_instructors')
+                            .select('id, studio_id').eq('instructor_email', email).eq('status', 'active').limit(1).maybeSingle(),
+                        15000, 'studio_instructors query'
+                    );
+                    const clientPromise = this._withTimeout(
+                        supabaseClient.from('clients')
+                            .select('id, email, studio_id').eq('email', email).limit(1).maybeSingle(),
+                        15000, 'clients query'
+                    );
+                    const [instrResult, clientResult] = await Promise.all([instrPromise, clientPromise]);
+                    console.log('[Perf] Role queries (parallel):', (performance.now() - tBoth).toFixed(0) + 'ms');
+                    const { data: instr, error: instrErr } = instrResult;
+                    const { data: client, error: clientErr } = clientResult;
+                    console.log('[Auth] studio_instructors:', { data: instr, error: instrErr ? instrErr.message : null });
+                    console.log('[Auth] clients:', { data: client, error: clientErr ? clientErr.message : null });
+                    // Instructor takes priority
+                    if (!instrErr && instr) {
                         return { role: 'studio_instructor', studioId: instr.studio_id, clientId: null, scopeType: 'studio' };
                     }
-                    console.log('[Auth] Not an instructor, querying clients...');
-                    const clientQuery = supabaseClient.from('clients')
-                        .select('id, email, studio_id').eq('email', email).limit(1).maybeSingle();
-                    const { data: client, error: clientErr } = await this._withTimeout(clientQuery, 15000, 'clients query');
-                    console.log('[Auth] clients result:', { data: client, error: clientErr ? clientErr.message : null });
-                    if (clientErr) console.error('[Auth] clients query error:', clientErr);
-                    if (client) {
+                    if (!clientErr && client) {
                         if (client.studio_id) {
-                            console.log('[Auth] Role found: studio_owner, studioId:', client.studio_id, 'clientId:', client.id);
                             return { role: 'studio_owner', studioId: client.studio_id, clientId: client.id, scopeType: 'studio' };
                         }
-                        console.log('[Auth] Role found: individual, clientId:', client.id);
                         return { role: 'individual', studioId: null, clientId: client.id, scopeType: 'individual' };
                     }
                     console.warn('[Auth] No role found for:', email);
@@ -1061,18 +1069,20 @@
             _knownIds: new Set(),
             _highlightIds: new Set(),
             async _fetchDeliveries() {
+                var t0 = performance.now();
                 const result = await supabaseClient.rpc('get_delivery_summaries', {
                     p_studio_id: AppState.resolvedStudioId || null
                 });
+                console.log('[Perf] get_delivery_summaries RPC:', (performance.now() - t0).toFixed(0) + 'ms', result.error ? 'ERROR: ' + result.error.message : result.data?.length + ' rows');
                 if (!result.error) return result;
                 // Fallback: direct query if RPC fails (e.g. schema cache stale)
-                console.warn('[DeliveryList] RPC failed, falling back to direct query:', result.error.message);
+                var tFb = performance.now();
                 let q = supabaseClient.from('content_deliveries')
                     .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
                 if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
                 const fallback = await q.order('created_at', { ascending: false }).limit(50);
+                console.log('[Perf] Delivery fallback query:', (performance.now() - tFb).toFixed(0) + 'ms', fallback.error ? 'ERROR' : fallback.data?.length + ' rows');
                 if (fallback.error) return fallback;
-                // Convert full JSONB to counts to match RPC format
                 fallback.data = (fallback.data || []).map(d => ({
                     id: d.id, created_at: d.created_at,
                     instagram_count: Array.isArray(d.instagram_content) ? d.instagram_content.length : 0,
@@ -1112,6 +1122,7 @@
                 container.innerHTML = html;
             },
             async render(gen) {
+                var tRender = performance.now();
                 const c = document.getElementById('contentContainer');
                 document.getElementById('platformTabs').style.display = 'none';
                 Gallery.cleanup();
@@ -1122,6 +1133,7 @@
                     if (error) throw error;
                     this._knownIds = new Set((deliveries || []).map(d => d.id));
                     this._highlightIds = new Set();
+                    console.log('[Perf] DeliveryList.render TOTAL:', (performance.now() - tRender).toFixed(0) + 'ms', (deliveries || []).length, 'deliveries');
                     if (!deliveries || !deliveries.length) {
                         const emptyGenBtn = '<button class="btn-generate-content" data-action="open-generate-modal" style="margin-top:20px;">+ Generate Your First Content</button>';
                         c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#128233;</div>' +
@@ -1153,8 +1165,18 @@
                 c.innerHTML = '<div class="delivery-loading"><div class="spinner"></div><p>Loading content...</p></div>';
                 let photoLoadError = false;
                 try {
-                    const { data: delivery, error } = await supabaseClient.from('content_deliveries').select('*').eq('id', deliveryId).single();
+                    // Fire delivery + photos queries in parallel
+                    var tDetail = performance.now();
+                    const deliveryPromise = supabaseClient.from('content_deliveries').select('*').eq('id', deliveryId).single();
+                    const photosPromise = AppState.resolvedStudioId
+                        ? supabaseClient.from('studio_photos').select('*').eq('studio_id', AppState.resolvedStudioId).eq('is_active', true)
+                        : Promise.resolve({ data: null, error: null });
+                    const [deliveryResult, photosResult] = await Promise.all([deliveryPromise, photosPromise]);
+                    console.log('[Perf] DeliveryDetail parallel fetch:', (performance.now() - tDetail).toFixed(0) + 'ms');
                     if (gen !== AppState.navGeneration) return;
+                    const { data: delivery, error } = deliveryResult;
+                    console.log('[Perf]   delivery query:', error ? 'ERROR' : 'ok');
+                    console.log('[Perf]   photos query:', photosResult.error ? 'ERROR' : (photosResult.data?.length || 0) + ' photos');
                     if (error) throw error;
                     // Verify ownership
                     let belongs = false;
@@ -1178,17 +1200,13 @@
                         video_render_id: delivery.video_render_id || null,
                         video_error: delivery.video_error || null
                     };
-                    // Load studio photos
+                    // Process photos result
                     if (AppState.resolvedStudioId) {
-                        try {
-                            const { data: photos, error: pe } = await supabaseClient.from('studio_photos').select('*')
-                                .eq('studio_id', AppState.resolvedStudioId).eq('is_active', true);
-                            if (gen !== AppState.navGeneration) return;
-                            if (pe) { photoLoadError = true; } else if (photos) {
-                                AppState.studioPhotos = photos;
-                                AppState.filteredPhotos = filterPhotosForUser(photos);
-                            } else { photoLoadError = true; }
-                        } catch (e) { photoLoadError = true; }
+                        const { data: photos, error: pe } = photosResult;
+                        if (pe) { photoLoadError = true; } else if (photos) {
+                            AppState.studioPhotos = photos;
+                            AppState.filteredPhotos = filterPhotosForUser(photos);
+                        } else { photoLoadError = true; }
                     }
                     if (gen !== AppState.navGeneration) return;
                     Gallery.render(photoLoadError);
