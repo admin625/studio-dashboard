@@ -291,7 +291,10 @@
         .login-card input:focus { outline: none; border-color: #667eea; }
         .login-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 10px; color: white; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.3s; margin-top: 8px; }
         .login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4); }
-        .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .login-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+        .login-btn.loading { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+        .login-btn.loading::before { content: ''; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: btn-spin 0.6s linear infinite; flex-shrink: 0; }
+        @keyframes btn-spin { to { transform: rotate(360deg); } }
         .login-error { color: #ef4444; font-size: 13px; margin-top: 12px; display: none; }
         .login-error.visible { display: block; }
         .login-success { color: #059669; font-size: 13px; margin-top: 12px; display: none; background: #ecfdf5; padding: 10px 14px; border-radius: 8px; border: 1px solid #a7f3d0; }
@@ -909,22 +912,22 @@
                 const password = document.getElementById('loginPassword').value;
                 const btn = document.getElementById('loginBtn');
                 const errEl = document.getElementById('loginError');
-                errEl.classList.remove('visible'); btn.disabled = true; btn.textContent = 'Signing in...';
+                errEl.classList.remove('visible'); btn.disabled = true; btn.textContent = 'Signing in\u2026'; btn.classList.add('loading');
                 console.log('[Auth] _handleLogin() called for:', email);
                 try {
                     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-                    if (error) { console.error('[Auth] signIn error:', error.message); errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; return; }
+                    if (error) { console.error('[Auth] signIn error:', error.message); errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading'); return; }
                     console.log('[Auth] signInWithPassword SUCCESS, user:', data?.user?.email);
                     // Belt-and-suspenders: call _initWithUser directly instead of relying solely on onAuthStateChange
                     if (data?.user) {
                         console.log('[Auth] Calling _initWithUser directly from _handleLogin');
                         await this._initWithUser(data.user);
                     }
-                    btn.disabled = false; btn.textContent = 'Sign In';
+                    btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading');
                 } catch (err) {
                     console.error('[Auth] _handleLogin exception:', err);
                     errEl.textContent = 'Login failed: ' + (err.message || 'Unknown error');
-                    errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In';
+                    errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading');
                 }
             },
             async signOut() {
