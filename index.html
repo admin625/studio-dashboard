@@ -1711,11 +1711,12 @@
             },
             close() {
                 document.getElementById('photoEditorModal').classList.add('hidden');
+                this._stopEditPoll();
                 if (this._fetchController) { this._fetchController.abort(); this._fetchController = null; }
                 if (this._ac) { this._ac.abort(); this._ac = null; }
                 this._iteration = 1; this._lastBase64 = null; this._origUrl = null;
                 this._photoId = null; this._platform = null; this._postIndex = null;
-                this._selectedColor = null;
+                this._selectedColor = null; this._editOrigPhotoUrl = null;
                 document.getElementById('editorColorTag').classList.remove('visible');
             },
             setQuickPrompt(type) {
@@ -1731,64 +1732,124 @@
                 btnText.textContent = this._lastBase64 ? 'Generate Iteration ' + (this._iteration + 1) : 'Generate Edit';
                 console.log('[PhotoEditor] _updateBtn() hasPrompt:', hasPrompt, 'disabled:', !hasPrompt);
             },
+            _editPollTimer: null,
+            _editPollStart: 0,
+            _editOrigPhotoUrl: null,
+            EDIT_POLL_INTERVAL: 15000,
+            EDIT_POLL_TIMEOUT: 180000,
+            _stopEditPoll() {
+                if (this._editPollTimer) { clearInterval(this._editPollTimer); this._editPollTimer = null; }
+            },
+            async _pollForEdit() {
+                var elapsed = Date.now() - this._editPollStart;
+                if (elapsed >= this.EDIT_POLL_TIMEOUT) {
+                    this._stopEditPoll();
+                    console.log('[PhotoEditor] Poll timeout after 3 minutes');
+                    var loading = document.getElementById('editorLoading');
+                    var loadText = document.getElementById('editorLoadingText');
+                    loading.classList.add('hidden');
+                    var errEl = document.getElementById('editorError');
+                    errEl.textContent = 'Taking longer than expected. The edit may still be processing \u2014 try refreshing the delivery in a minute.';
+                    errEl.classList.remove('hidden');
+                    errEl.style.cssText = 'color:#92400e;background:#fffbeb;border:1px solid #fde68a;padding:8px 12px;border-radius:6px;font-size:13px;';
+                    document.getElementById('editorGenerateBtn').classList.remove('loading');
+                    this._updateBtn();
+                    return;
+                }
+                try {
+                    console.log('[PhotoEditor] Polling for edit... (' + Math.round(elapsed / 1000) + 's elapsed)');
+                    var { data: delivery, error } = await supabaseClient.from('content_deliveries').select('*').eq('id', AppState.deliveryId).single();
+                    if (error || !delivery) return;
+                    var platformKey = this._platform + '_content';
+                    var posts = delivery[platformKey];
+                    if (!Array.isArray(posts) || !posts[this._postIndex]) return;
+                    var currentUrl = posts[this._postIndex].photo_url;
+                    if (currentUrl && currentUrl !== this._editOrigPhotoUrl) {
+                        console.log('[PhotoEditor] Edit detected! New URL:', currentUrl);
+                        this._stopEditPoll();
+                        document.getElementById('editorPreviewImage').src = currentUrl;
+                        document.getElementById('editorLoading').classList.add('hidden');
+                        document.getElementById('editorGenerateBtn').classList.remove('loading');
+                        document.getElementById('editorAutoContinue').classList.remove('hidden');
+                        document.getElementById('editorResetBtn').classList.remove('hidden');
+                        document.getElementById('editorSaveBtn').disabled = true;
+                        this._editOrigPhotoUrl = currentUrl;
+                        this._iteration++;
+                        document.getElementById('editorIterationBadge').textContent = 'Iteration ' + this._iteration;
+                        document.getElementById('editorIterationBadge').classList.remove('iterating');
+                        AppState.contentData[this._platform] = posts;
+                        var errEl = document.getElementById('editorError');
+                        errEl.textContent = 'Edit complete! The updated photo has been saved to your post.';
+                        errEl.classList.remove('hidden');
+                        errEl.style.cssText = 'color:#059669;background:#ecfdf5;border:1px solid #a7f3d0;padding:8px 12px;border-radius:6px;font-size:13px;';
+                        setTimeout(function() { errEl.classList.add('hidden'); errEl.style.cssText = ''; }, 8000);
+                        document.getElementById('editorPrompt').value = '';
+                        this._updateBtn();
+                    }
+                } catch (e) { console.warn('[PhotoEditor] Poll error:', e.message); }
+            },
             async _generate() {
                 console.log('[PhotoEditor] _generate() called');
                 const prompt = document.getElementById('editorPrompt').value.trim();
                 if (!prompt) { console.log('[PhotoEditor] No prompt, returning'); return; }
-                let sourceBase64 = null, useIteration = false;
-                if (this._lastBase64) { sourceBase64 = this._lastBase64; useIteration = true; this._iteration++; }
+                this._stopEditPoll();
+                let useIteration = false;
+                if (this._lastBase64 || this._iteration > 1) { useIteration = true; }
                 const badge = document.getElementById('editorIterationBadge');
                 const genBtn = document.getElementById('editorGenerateBtn');
                 const loading = document.getElementById('editorLoading');
                 const loadText = document.getElementById('editorLoadingText');
                 const errEl = document.getElementById('editorError');
-                if (useIteration) { badge.textContent = 'Iteration ' + this._iteration; badge.classList.add('iterating'); }
+                if (useIteration) { badge.textContent = 'Editing...'; badge.classList.add('iterating'); }
                 genBtn.classList.add('loading'); genBtn.disabled = true;
                 loading.classList.remove('hidden');
-                loadText.textContent = useIteration ? 'Generating iteration ' + this._iteration + '...' : 'Generating edit...';
-                errEl.classList.add('hidden');
-                try {
-                    let finalPrompt = prompt;
-                    if (this._selectedColor) finalPrompt += '. Incorporate this color prominently: ' + this._selectedColor;
-                    const payload = { prompt: finalPrompt, photo_id: this._photoId, iteration: this._iteration, user_email: AppState.email || 'anonymous', user_role: AppState.role || 'studio_owner' };
-                    if (this._selectedColor) payload.color = this._selectedColor;
-                    if (useIteration) payload.iteration_image = sourceBase64; else payload.photo_url = this._origUrl;
-                    console.log('[PhotoEditor] POSTing to', PHOTO_EDITOR_WEBHOOK, '| photo_id:', this._photoId, '| iteration:', this._iteration, '| has_base64:', !!sourceBase64);
-                    this._fetchController = new AbortController();
-                    const response = await fetch(PHOTO_EDITOR_WEBHOOK, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload), signal: this._fetchController.signal
-                    });
-                    this._fetchController = null;
-                    console.log('[PhotoEditor] Response status:', response.status);
-                    if (!response.ok) throw new Error('Server error: ' + response.status);
-                    const data = await response.json();
-                    if (!data.success || !data.editedImage) throw new Error(data.message || 'No edited image returned');
-                    this._lastBase64 = data.editedImage;
-                    document.getElementById('editorPreviewImage').src = 'data:image/jpeg;base64,' + data.editedImage;
-                    document.getElementById('editorAutoContinue').classList.remove('hidden');
-                    document.getElementById('editorResetBtn').classList.remove('hidden');
-                    document.getElementById('editorSaveBtn').disabled = false;
-                    if (data.editedImage && !data.aiResponse) {
-                        errEl.textContent = "Edit complete! Try rephrasing if not quite right.";
-                        errEl.classList.remove('hidden'); errEl.style.cssText = 'color:#059669;background:#ecfdf5;border:1px solid #a7f3d0;padding:8px 12px;border-radius:6px;font-size:13px;';
-                        setTimeout(() => { errEl.classList.add('hidden'); errEl.style.cssText = ''; }, 8000);
-                    } else if (data.aiResponse) {
-                        errEl.textContent = data.aiResponse; errEl.classList.remove('hidden');
-                        errEl.style.cssText = 'color:#4b5563;background:#f9fafb;border:1px solid #e5e7eb;padding:8px 12px;border-radius:6px;font-size:13px;';
-                    }
-                    document.getElementById('editorPrompt').value = '';
-                    document.getElementById('editorPrompt').focus();
-                } catch (err) {
-                    if (err.name === 'AbortError') { console.log('[PhotoEditor] Request aborted'); return; }
-                    console.error('[PhotoEditor] Error:', err.message);
-                    errEl.textContent = 'Error: ' + err.message; errEl.classList.remove('hidden'); errEl.style.cssText = '';
-                    if (useIteration && this._iteration > 1) { this._iteration--; badge.textContent = 'Iteration ' + this._iteration; }
-                } finally {
-                    genBtn.classList.remove('loading'); loading.classList.add('hidden'); this._updateBtn();
+                loadText.textContent = 'Editing your photo \u2014 this may take a minute...';
+                errEl.classList.add('hidden'); errEl.style.cssText = '';
+
+                let finalPrompt = prompt;
+                if (this._selectedColor) finalPrompt += '. Incorporate this color prominently: ' + this._selectedColor;
+                const payload = {
+                    prompt: finalPrompt,
+                    photo_id: this._photoId,
+                    iteration: this._iteration,
+                    user_email: AppState.email || 'anonymous',
+                    user_role: AppState.role || 'studio_owner',
+                    delivery_id: AppState.deliveryId,
+                    platform: this._platform,
+                    post_index: this._postIndex
+                };
+                if (this._selectedColor) payload.color = this._selectedColor;
+                if (this._lastBase64) payload.iteration_image = this._lastBase64;
+                else payload.photo_url = this._origUrl;
+
+                // Capture current photo_url to detect changes
+                this._editOrigPhotoUrl = this._origUrl;
+                if (AppState.contentData && AppState.contentData[this._platform] && AppState.contentData[this._platform][this._postIndex]) {
+                    this._editOrigPhotoUrl = AppState.contentData[this._platform][this._postIndex].photo_url || this._origUrl;
                 }
+
+                console.log('[PhotoEditor] Fire-and-forget POST to', PHOTO_EDITOR_WEBHOOK + '&fireAndForget=true');
+                console.log('[PhotoEditor] Payload: photo_id:', this._photoId, '| delivery_id:', AppState.deliveryId, '| platform:', this._platform, '| post_index:', this._postIndex);
+
+                // Fire and forget — don't await response body
+                fetch(PHOTO_EDITOR_WEBHOOK + '&fireAndForget=true', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(function(r) {
+                    console.log('[PhotoEditor] Proxy accepted:', r.status);
+                }).catch(function(err) {
+                    console.warn('[PhotoEditor] Proxy request error (workflow may still run):', err.message);
+                });
+
+                // Start polling for changes
+                this._editPollStart = Date.now();
+                var self = this;
+                this._editPollTimer = setInterval(function() { self._pollForEdit(); }, this.EDIT_POLL_INTERVAL);
+                document.getElementById('editorPrompt').value = '';
             },
             _reset() {
+                this._stopEditPoll();
                 this._iteration = 1; this._lastBase64 = null;
                 document.getElementById('editorPreviewImage').src = this._origUrl;
                 document.getElementById('editorIterationBadge').textContent = 'Iteration 1';
