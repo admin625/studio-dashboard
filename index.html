@@ -146,6 +146,25 @@
         .success-message.hidden { display: none; }
         .photo-count-info { font-size: 12px; color: #64748b; margin-top: 10px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; }
         .photo-count-info.restricted { background: #fef3c7; color: #92400e; }
+        .video-section { background: white; padding: 24px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .video-section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+        .video-section-header h3 { font-size: 18px; font-weight: 700; color: #1e293b; margin: 0; }
+        .video-section-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .video-section-badge.complete { background: #d1fae5; color: #059669; }
+        .video-section-badge.rendering { background: #fef3c7; color: #92400e; }
+        .video-section-badge.failed { background: #fee2e2; color: #991b1b; }
+        .video-player-container { position: relative; max-width: 400px; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 16px; }
+        .video-player-container video { width: 100%; display: block; border-radius: 12px; }
+        .video-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn-download-video { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+        .btn-download-video:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); }
+        .video-rendering { display: flex; align-items: center; gap: 12px; padding: 20px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; }
+        .video-rendering .spinner { width: 28px; height: 28px; border-width: 3px; margin: 0; flex-shrink: 0; }
+        .video-rendering p { color: #92400e; font-size: 14px; margin: 0; }
+        .video-error { padding: 16px 20px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; }
+        .video-error p { color: #991b1b; font-size: 14px; margin: 0 0 12px; }
+        .video-error .error-detail { font-size: 12px; color: #b91c1c; background: #fee2e2; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-family: monospace; }
+        .btn-retry-video { background: #dc2626; color: white; font-size: 13px; padding: 8px 16px; }
         .photo-editor-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .photo-editor-modal.hidden { display: none; }
         .editor-container { background: #1a1a2e; border-radius: 20px; width: 100%; max-width: 1200px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); }
@@ -826,6 +845,12 @@
                         twitter: delivery.twitter_content || [], linkedin: delivery.linkedin_content || [],
                         tiktok: delivery.tiktok_content || []
                     };
+                    AppState.videoData = {
+                        video_url: delivery.video_url || null,
+                        video_status: delivery.video_status || null,
+                        video_render_id: delivery.video_render_id || null,
+                        video_error: delivery.video_error || null
+                    };
                     // Load studio photos
                     if (AppState.resolvedStudioId) {
                         try {
@@ -894,7 +919,30 @@
                 }).join('');
 
                 const backBtn = '<button class="back-to-history" data-action="navigate-history">&#8249; All Deliveries</button>';
-                document.getElementById('contentContainer').innerHTML = backBtn + contentHTML;
+                let videoHTML = '';
+                const vd = AppState.videoData;
+                if (vd && vd.video_status) {
+                    videoHTML = '<div class="video-section">';
+                    videoHTML += '<div class="video-section-header"><h3>Video Reel</h3>';
+                    if (vd.video_status === 'complete') {
+                        videoHTML += '<span class="video-section-badge complete">Complete</span></div>';
+                        videoHTML += '<div class="video-player-container"><video controls preload="metadata" playsinline>';
+                        videoHTML += '<source src="' + escapeAttr(vd.video_url) + '" type="video/mp4">Your browser does not support video.</video></div>';
+                        videoHTML += '<div class="video-actions">';
+                        videoHTML += '<a href="' + escapeAttr(vd.video_url) + '" download class="btn btn-download-video">Download Video</a>';
+                        videoHTML += '</div>';
+                    } else if (vd.video_status === 'rendering') {
+                        videoHTML += '<span class="video-section-badge rendering">Rendering</span></div>';
+                        videoHTML += '<div class="video-rendering"><div class="spinner"></div><p>Your video reel is being rendered. This usually takes 1-2 minutes. Refresh the page to check for updates.</p></div>';
+                    } else if (vd.video_status === 'failed') {
+                        videoHTML += '<span class="video-section-badge failed">Failed</span></div>';
+                        videoHTML += '<div class="video-error"><p>Video rendering failed.</p>';
+                        if (vd.video_error) videoHTML += '<div class="error-detail">' + escapeAttr(vd.video_error) + '</div>';
+                        videoHTML += '<button class="btn btn-retry-video" data-action="retry-video">Retry Video</button></div>';
+                    }
+                    videoHTML += '</div>';
+                }
+                document.getElementById('contentContainer').innerHTML = backBtn + videoHTML + contentHTML;
             },
             _renderSwapSection(platform, postIndex, post) {
                 const currentPhotoId = post.matched_photo_id;
@@ -1338,6 +1386,14 @@
                 case 'open-photo': window.open(target.dataset.url, '_blank'); break;
                 case 'remove-upload-file': Upload.removeFile(parseInt(target.dataset.index)); break;
                 case 'quick-prompt': PhotoEditor.setQuickPrompt(target.dataset.type); break;
+                case 'retry-video':
+                    target.disabled = true; target.textContent = 'Retrying...';
+                    fetch('https://jmac.app.n8n.cloud/webhook/fca-video-reel', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ delivery_id: AppState.deliveryId, studio_name: 'Fitness Studio' })
+                    }).then(() => { target.textContent = 'Retry requested - refresh in 2 min'; target.style.background = '#059669'; })
+                    .catch(() => { target.disabled = false; target.textContent = 'Retry Video'; alert('Failed to request retry'); });
+                    break;
             }
         });
 
