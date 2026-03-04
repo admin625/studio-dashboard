@@ -224,10 +224,17 @@
         .generate-status { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; }
         .generate-status.success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
         .generate-status.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-        .generate-status.loading { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; display: flex; align-items: center; gap: 8px; }
         .generate-status.hidden { display: none; }
         .spinner-inline { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin-inline 0.8s linear infinite; vertical-align: middle; }
         @keyframes spin-inline { to { transform: rotate(360deg); } }
+        .gen-progress-banner { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; font-size: 14px; color: #1e40af; font-weight: 500; animation: banner-in 0.4s ease; }
+        .gen-progress-banner.success { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+        .gen-progress-banner.timeout { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+        .gen-progress-banner .banner-dismiss { margin-left: auto; background: none; border: none; font-size: 18px; cursor: pointer; color: inherit; opacity: 0.5; padding: 0 4px; }
+        .gen-progress-banner .banner-dismiss:hover { opacity: 1; }
+        @keyframes banner-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .delivery-card.new-highlight { animation: card-glow 2s ease; }
+        @keyframes card-glow { 0% { box-shadow: 0 0 0 3px rgba(34,197,94,0.5); } 100% { box-shadow: none; } }
         .photo-editor-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .photo-editor-modal.hidden { display: none; }
         .editor-container { background: #1a1a2e; border-radius: 20px; width: 100%; max-width: 1200px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); }
@@ -923,6 +930,7 @@
                 }
             },
             async signOut() {
+                ContentGenerator._stopPolling();
                 await supabaseClient.auth.signOut();
                 AppState.reset(); AppState.authReady = true;
                 document.getElementById('loginPassword').value = '';
@@ -1026,58 +1034,69 @@
         // DELIVERY LIST MODULE
         // ================================================================
         const DeliveryList = {
+            _knownIds: new Set(),
+            _highlightIds: new Set(),
+            async _fetchDeliveries() {
+                let q = supabaseClient.from('content_deliveries')
+                    .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
+                if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
+                return q.order('created_at', { ascending: false });
+            },
+            _renderCards(deliveries, container) {
+                const genBtn = '<button class="btn-generate-content" data-action="open-generate-modal">+ Generate New Content</button>';
+                let html = genBtn + '<div id="genBannerSlot"></div><div class="delivery-history"><h2>&#128197; Content Deliveries</h2><div class="delivery-list">';
+                deliveries.forEach(d => {
+                    let dateStr = 'Unknown date';
+                    if (d.created_at) { const dt = new Date(d.created_at); dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
+                    const pf = [];
+                    const ig = Array.isArray(d.instagram_content) ? d.instagram_content.length : 0;
+                    const fb = Array.isArray(d.facebook_content) ? d.facebook_content.length : 0;
+                    const tw = Array.isArray(d.twitter_content) ? d.twitter_content.length : 0;
+                    const li = Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0;
+                    const tk = Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0;
+                    if (ig) pf.push('<span class="platform-badge instagram">IG ' + ig + '</span>');
+                    if (fb) pf.push('<span class="platform-badge facebook">FB ' + fb + '</span>');
+                    if (tw) pf.push('<span class="platform-badge twitter">X ' + tw + '</span>');
+                    if (li) pf.push('<span class="platform-badge linkedin">LI ' + li + '</span>');
+                    if (tk) pf.push('<span class="platform-badge tiktok">TT ' + tk + '</span>');
+                    const total = ig + fb + tw + li + tk;
+                    const isNew = this._highlightIds.has(d.id);
+                    html += '<div class="delivery-card' + (isNew ? ' new-highlight' : '') + '" data-action="navigate-delivery" data-id="' + d.id + '">' +
+                        '<div class="delivery-card-left"><div class="delivery-date">' + dateStr + '</div>' +
+                        '<div class="delivery-platforms">' + (pf.length ? pf.join('') : '<span style="color:#94a3b8;font-size:12px;">No content</span>') + '</div></div>' +
+                        '<div class="delivery-card-right"><span class="delivery-post-count">' + total + ' post' + (total !== 1 ? 's' : '') + '</span>' +
+                        '<span class="delivery-arrow">&#8250;</span></div></div>';
+                });
+                html += '</div></div>';
+                container.innerHTML = html;
+            },
             async render(gen) {
                 const c = document.getElementById('contentContainer');
                 document.getElementById('platformTabs').style.display = 'none';
                 Gallery.cleanup();
                 c.innerHTML = '<div class="delivery-loading"><div class="spinner"></div><p>Loading your deliveries...</p></div>';
                 try {
-                    let q = supabaseClient.from('content_deliveries')
-                        .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
-                    if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
-                    const { data: deliveries, error } = await q.order('created_at', { ascending: false });
+                    const { data: deliveries, error } = await this._fetchDeliveries();
                     if (gen !== AppState.navGeneration) return;
                     if (error) throw error;
+                    this._knownIds = new Set((deliveries || []).map(d => d.id));
+                    this._highlightIds = new Set();
                     if (!deliveries || !deliveries.length) {
                         const emptyGenBtn = '<button class="btn-generate-content" data-action="open-generate-modal" style="margin-top:20px;">+ Generate Your First Content</button>';
                         c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#128233;</div>' +
                             '<p style="font-size:18px;font-weight:600;">No deliveries yet</p>' +
                             '<p style="font-size:14px;margin-top:8px;">Your content deliveries will appear here once generated.</p>' +
-                            emptyGenBtn + '</div>';
+                            emptyGenBtn + '</div><div id="genBannerSlot"></div>';
                         return;
                     }
-                    const genBtn = '<button class="btn-generate-content" data-action="open-generate-modal">+ Generate New Content</button>';
-                    let html = genBtn + '<div class="delivery-history"><h2>&#128197; Content Deliveries</h2><div class="delivery-list">';
-                    deliveries.forEach(d => {
-                        let dateStr = 'Unknown date';
-                        if (d.created_at) { const dt = new Date(d.created_at); dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
-                        const pf = [];
-                        const ig = Array.isArray(d.instagram_content) ? d.instagram_content.length : 0;
-                        const fb = Array.isArray(d.facebook_content) ? d.facebook_content.length : 0;
-                        const tw = Array.isArray(d.twitter_content) ? d.twitter_content.length : 0;
-                        const li = Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0;
-                        const tk = Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0;
-                        if (ig) pf.push('<span class="platform-badge instagram">IG ' + ig + '</span>');
-                        if (fb) pf.push('<span class="platform-badge facebook">FB ' + fb + '</span>');
-                        if (tw) pf.push('<span class="platform-badge twitter">X ' + tw + '</span>');
-                        if (li) pf.push('<span class="platform-badge linkedin">LI ' + li + '</span>');
-                        if (tk) pf.push('<span class="platform-badge tiktok">TT ' + tk + '</span>');
-                        const total = ig + fb + tw + li + tk;
-                        html += '<div class="delivery-card" data-action="navigate-delivery" data-id="' + d.id + '">' +
-                            '<div class="delivery-card-left"><div class="delivery-date">' + dateStr + '</div>' +
-                            '<div class="delivery-platforms">' + (pf.length ? pf.join('') : '<span style="color:#94a3b8;font-size:12px;">No content</span>') + '</div></div>' +
-                            '<div class="delivery-card-right"><span class="delivery-post-count">' + total + ' post' + (total !== 1 ? 's' : '') + '</span>' +
-                            '<span class="delivery-arrow">&#8250;</span></div></div>';
-                    });
-                    html += '</div></div>';
-                    c.innerHTML = html;
+                    this._renderCards(deliveries, c);
                 } catch (err) {
                     if (gen !== AppState.navGeneration) return;
                     c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><p>Error loading deliveries</p>' +
                         '<p style="font-size:12px;margin-top:8px;">' + escapeAttr(err.message || 'Unknown error') + '</p></div>';
                 }
             },
-            cleanup() {}
+            cleanup() { this._highlightIds = new Set(); }
         };
 
         // ================================================================
@@ -1459,11 +1478,14 @@
         // ================================================================
         const ContentGenerator = {
             _ac: null,
+            _pollTimer: null,
+            _pollStart: 0,
+            POLL_INTERVAL: 30000,
+            POLL_TIMEOUT: 300000,
             init() {
                 if (this._ac) this._ac.abort();
                 this._ac = new AbortController();
                 const s = this._ac.signal;
-                // Platform row toggle: enable/disable options when checkbox changes
                 document.querySelectorAll('#genPlatforms .platform-row').forEach(row => {
                     const cb = row.querySelector('.plat-toggle input[type="checkbox"]');
                     const opts = row.querySelector('.plat-opts');
@@ -1472,7 +1494,6 @@
                         opts.classList.toggle('disabled', !cb.checked);
                     }, { signal: s });
                 });
-                // Advanced section toggle
                 document.getElementById('genAdvancedToggle').addEventListener('click', () => {
                     const body = document.getElementById('genAdvancedBody');
                     const arrow = document.querySelector('#genAdvancedToggle .toggle-arrow');
@@ -1482,15 +1503,12 @@
             },
             open() {
                 this.init();
-                // Reset optional text fields
                 ['genPromotions', 'genContentThemes', 'genCustomHashtags', 'genUniqueValue', 'genSignatureStyle', 'genAvoidTopics'].forEach(id => {
                     document.getElementById(id).value = '';
                 });
-                // Close advanced section
                 document.getElementById('genAdvancedBody').classList.remove('open');
                 document.querySelector('#genAdvancedToggle .toggle-arrow').classList.remove('open');
-                const statusEl = document.getElementById('genStatus');
-                statusEl.classList.add('hidden');
+                document.getElementById('genStatus').classList.add('hidden');
                 document.getElementById('genSubmitBtn').disabled = false;
                 document.getElementById('genSubmitBtn').textContent = 'Generate Content';
                 document.getElementById('generateModal').classList.remove('hidden');
@@ -1511,16 +1529,68 @@
                 });
                 return platforms;
             },
+            _showBanner(type, msg) {
+                var slot = document.getElementById('genBannerSlot');
+                if (!slot) return;
+                if (type === 'progress') {
+                    slot.innerHTML = '<div class="gen-progress-banner"><span class="spinner-inline"></span><span>' + msg + '</span><button class="banner-dismiss" data-action="dismiss-gen-banner">&times;</button></div>';
+                } else if (type === 'success') {
+                    slot.innerHTML = '<div class="gen-progress-banner success"><span>' + msg + '</span><button class="banner-dismiss" data-action="dismiss-gen-banner">&times;</button></div>';
+                } else if (type === 'timeout') {
+                    slot.innerHTML = '<div class="gen-progress-banner timeout"><span>' + msg + '</span><button class="banner-dismiss" data-action="dismiss-gen-banner">&times;</button></div>';
+                }
+            },
+            _dismissBanner() {
+                var slot = document.getElementById('genBannerSlot');
+                if (slot) slot.innerHTML = '';
+            },
+            _stopPolling() {
+                if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+            },
+            async _poll() {
+                if (AppState.currentRoute && AppState.currentRoute.name !== 'deliveries') return;
+                var elapsed = Date.now() - this._pollStart;
+                if (elapsed >= this.POLL_TIMEOUT) {
+                    this._stopPolling();
+                    this._showBanner('timeout', 'Taking a bit longer than usual \u2014 you\u2019ll also receive an email when it\u2019s ready.');
+                    return;
+                }
+                try {
+                    var { data: deliveries, error } = await DeliveryList._fetchDeliveries();
+                    if (error || !deliveries) return;
+                    var newIds = [];
+                    deliveries.forEach(function(d) { if (!DeliveryList._knownIds.has(d.id)) newIds.push(d.id); });
+                    if (newIds.length > 0) {
+                        this._stopPolling();
+                        DeliveryList._highlightIds = new Set(newIds);
+                        newIds.forEach(function(id) { DeliveryList._knownIds.add(id); });
+                        var c = document.getElementById('contentContainer');
+                        DeliveryList._renderCards(deliveries, c);
+                        this._showBanner('success', 'Your new content is ready! (' + newIds.length + ' new deliver' + (newIds.length === 1 ? 'y' : 'ies') + ')');
+                        setTimeout(function() {
+                            var first = document.querySelector('.delivery-card.new-highlight');
+                            if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
+                    }
+                } catch (e) { console.warn('[Poll] Error:', e.message); }
+            },
+            _startPolling() {
+                this._stopPolling();
+                this._pollStart = Date.now();
+                var self = this;
+                this._pollTimer = setInterval(function() { self._poll(); }, this.POLL_INTERVAL);
+            },
             async submit() {
                 const platforms = this._getPlatforms();
                 if (!platforms.length) {
-                    this._showStatus('error', 'Please select at least one platform.');
+                    document.getElementById('genStatus').className = 'generate-status error';
+                    document.getElementById('genStatus').textContent = 'Please select at least one platform.';
                     return;
                 }
                 const btn = document.getElementById('genSubmitBtn');
                 btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-inline"></span> Generating...';
-                this._showStatus('loading', 'Generating your content \u2014 this may take a minute...');
+                btn.innerHTML = '<span class="spinner-inline"></span> Submitting...';
+                document.getElementById('genStatus').classList.add('hidden');
 
                 const val = (id) => (document.getElementById(id).value || '').trim();
                 const themesRaw = val('genContentThemes');
@@ -1548,38 +1618,28 @@
                     signature_style: val('genSignatureStyle'),
                     preferOwnPhotos: !AppState.aiPhotosEnabled
                 };
-                try {
-                    const response = await fetch('/.netlify/functions/generate-content', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    let errDetail = '';
-                    if (!response.ok) {
-                        try {
-                            const errBody = await response.json();
-                            errDetail = errBody.error || errBody.detail || JSON.stringify(errBody);
-                        } catch { errDetail = 'Server returned ' + response.status; }
-                        throw new Error(errDetail);
-                    }
-                    this._showStatus('success', 'Content generated successfully! Refreshing your deliveries...');
-                    btn.innerHTML = 'Done!';
-                    setTimeout(() => {
-                        this.close();
-                        Router.navigate('#/deliveries', true);
-                        DeliveryList.render(AppState.navGeneration);
-                    }, 2000);
-                } catch (err) {
-                    this._showStatus('error', 'Generation failed: ' + (err.message || 'Unknown error') + '. Click Retry to try again.');
-                    btn.disabled = false;
-                    btn.innerHTML = 'Retry';
+
+                // Fire the request but don't wait for n8n to finish
+                fetch('/.netlify/functions/generate-content', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(function(response) {
+                    if (!response.ok) console.warn('[Generate] Server responded with', response.status);
+                    else console.log('[Generate] Server accepted request');
+                }).catch(function(err) {
+                    console.warn('[Generate] Request error (workflow continues):', err.message);
+                });
+
+                // Close modal immediately, show progress banner, start polling
+                this.close();
+                // Ensure we're on the deliveries view
+                if (!AppState.currentRoute || AppState.currentRoute.name !== 'deliveries') {
+                    Router.navigate('#/deliveries', true);
+                    await DeliveryList.render(AppState.navGeneration);
                 }
-            },
-            _showStatus(type, msg) {
-                const el = document.getElementById('genStatus');
-                if (!type) { el.classList.add('hidden'); return; }
-                el.className = 'generate-status ' + type;
-                el.innerHTML = (type === 'loading' ? '<span class="spinner-inline"></span> ' : '') + msg;
+                this._showBanner('progress', 'Your content is being crafted by our AI agent \u2014 expect it in about 3\u20135 minutes...');
+                this._startPolling();
             }
         };
 
@@ -1784,6 +1844,7 @@
                 case 'open-generate-modal': ContentGenerator.open(); break;
                 case 'close-generate-modal': ContentGenerator.close(); break;
                 case 'submit-generate': ContentGenerator.submit(); break;
+                case 'dismiss-gen-banner': ContentGenerator._dismissBanner(); break;
                 case 'retry-video':
                     if (!isReelsEnabled()) break;
                     target.disabled = true; target.textContent = 'Retrying...';
