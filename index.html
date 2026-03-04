@@ -902,7 +902,7 @@
                     console.log('[Auth] Looking up role for:', user.email);
                     const ri = await this._lookupUserRole(user.email);
                     console.log('[Auth] Role lookup result:', ri);
-                    if (!ri) { AppState.role = null; AppState.authReady = true; this.showApp(); this._showNoAccount(user.email); return; }
+                    if (!ri) { AppState.role = null; AppState.authReady = true; this._initCompleted = true; this.showApp(); this._showNoAccount(user.email); return; }
                     AppState.role = ri.role; AppState.scopeType = ri.scopeType;
                     AppState.resolvedStudioId = ri.studioId; AppState.resolvedClientId = ri.clientId;
                     if (ri.studioId) {
@@ -912,13 +912,13 @@
                             if (studioSettings) AppState.aiPhotosEnabled = !!studioSettings.ai_photos_enabled;
                         } catch (e) { /* ignore - setting defaults to false */ }
                     }
-                    AppState.authReady = true;
+                    AppState.authReady = true; this._initCompleted = true;
                     console.log('[Auth] SUCCESS — Scope:', AppState.scopeType, '| studioId:', AppState.resolvedStudioId, '| role:', AppState.role);
                     this.showApp(); this._showUserInfo(); Router.start();
                 } catch (err) {
                     console.error('[Auth] _initWithUser error:', err); AppState.authReady = true;
                     this.showApp(); this._showError(err.message || 'Unknown error');
-                } finally { this._initRunning = false; this._initCompleted = true; }
+                } finally { this._initRunning = false; }
             },
             async _handleLogin() {
                 const email = document.getElementById('loginEmail').value.trim();
@@ -926,6 +926,7 @@
                 const btn = document.getElementById('loginBtn');
                 const errEl = document.getElementById('loginError');
                 errEl.classList.remove('visible'); btn.disabled = true; btn.textContent = 'Signing in\u2026'; btn.classList.add('loading');
+                this._initCompleted = false;
                 console.log('[Auth] _handleLogin() called for:', email);
                 try {
                     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
