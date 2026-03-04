@@ -889,8 +889,9 @@
                 }
             },
             async _initWithUser(user) {
-                console.log('[Auth] _initWithUser() called for:', user.email, 'initRunning:', this._initRunning, 'existingRole:', AppState.role);
+                console.log('[Auth] _initWithUser() called for:', user.email, 'initRunning:', this._initRunning, 'initCompleted:', this._initCompleted, 'existingRole:', AppState.role);
                 if (this._initRunning) { console.log('[Auth] _initWithUser skipped (already running)'); return; }
+                if (this._initCompleted) { console.log('[Auth] _initWithUser skipped (already completed)'); return; }
                 if (AppState.email === user.email && AppState.role) { console.log('[Auth] _initWithUser skipped (already initialized)'); if (!AppState.authReady) { AppState.authReady = true; Router.start(); } return; }
                 this._initRunning = true;
                 // Show dashboard loading overlay during data fetch
@@ -917,7 +918,7 @@
                 } catch (err) {
                     console.error('[Auth] _initWithUser error:', err); AppState.authReady = true;
                     this.showApp(); this._showError(err.message || 'Unknown error');
-                } finally { this._initRunning = false; }
+                } finally { this._initRunning = false; this._initCompleted = true; }
             },
             async _handleLogin() {
                 const email = document.getElementById('loginEmail').value.trim();
@@ -947,6 +948,7 @@
             },
             async signOut() {
                 ContentGenerator._stopPolling();
+                this._initCompleted = false;
                 await supabaseClient.auth.signOut();
                 AppState.reset(); AppState.authReady = true;
                 document.getElementById('loginPassword').value = '';
@@ -1055,10 +1057,9 @@
             _knownIds: new Set(),
             _highlightIds: new Set(),
             async _fetchDeliveries() {
-                let q = supabaseClient.from('content_deliveries')
-                    .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
-                if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
-                return q.order('created_at', { ascending: false });
+                return supabaseClient.rpc('get_delivery_summaries', {
+                    p_studio_id: AppState.resolvedStudioId || null
+                });
             },
             _renderCards(deliveries, container) {
                 const genBtn = '<button class="btn-generate-content" data-action="open-generate-modal">+ Generate New Content</button>';
@@ -1067,11 +1068,11 @@
                     let dateStr = 'Unknown date';
                     if (d.created_at) { const dt = new Date(d.created_at); dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
                     const pf = [];
-                    const ig = Array.isArray(d.instagram_content) ? d.instagram_content.length : 0;
-                    const fb = Array.isArray(d.facebook_content) ? d.facebook_content.length : 0;
-                    const tw = Array.isArray(d.twitter_content) ? d.twitter_content.length : 0;
-                    const li = Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0;
-                    const tk = Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0;
+                    const ig = d.instagram_count || 0;
+                    const fb = d.facebook_count || 0;
+                    const tw = d.twitter_count || 0;
+                    const li = d.linkedin_count || 0;
+                    const tk = d.tiktok_count || 0;
                     if (ig) pf.push('<span class="platform-badge instagram">IG ' + ig + '</span>');
                     if (fb) pf.push('<span class="platform-badge facebook">FB ' + fb + '</span>');
                     if (tw) pf.push('<span class="platform-badge twitter">X ' + tw + '</span>');
