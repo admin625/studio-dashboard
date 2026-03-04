@@ -939,11 +939,13 @@
                     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
                     if (error) { console.error('[Auth] signIn error:', error.message); errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading'); return; }
                     console.log('[Auth] signInWithPassword SUCCESS, user:', data?.user?.email);
-                    // Show dashboard loading overlay, hide login
-                    document.getElementById('loginOverlay').classList.add('hidden');
-                    document.getElementById('dashboardLoadingOverlay').classList.remove('hidden');
                     btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading');
-                    // Belt-and-suspenders: call _initWithUser directly instead of relying solely on onAuthStateChange
+                    // Show loading overlay only if init hasn't already completed (via onAuthStateChange)
+                    if (!this._initCompleted) {
+                        document.getElementById('loginOverlay').classList.add('hidden');
+                        document.getElementById('dashboardLoadingOverlay').classList.remove('hidden');
+                    }
+                    // Belt-and-suspenders: call _initWithUser directly — if already completed, it just ensures UI transition
                     if (data?.user) {
                         console.log('[Auth] Calling _initWithUser directly from _handleLogin');
                         await this._initWithUser(data.user);
