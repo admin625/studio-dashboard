@@ -1658,12 +1658,17 @@
                 energy: 'Add a sense of energy and motion to the image. Subtle motion blur or dynamic lighting.',
                 professional: 'Make this image look more professional and polished. Clean up imperfections, enhance colors.'
             },
+            _listenersAttached: false,
             init() {
                 if (this._ac) this._ac.abort();
                 this._ac = new AbortController();
                 const s = this._ac.signal;
+                console.log('[PhotoEditor] init() — attaching listeners');
                 document.getElementById('editorCloseBtn').addEventListener('click', () => this.close(), { signal: s });
-                document.getElementById('editorGenerateBtn').addEventListener('click', () => this._generate(), { signal: s });
+                document.getElementById('editorGenerateBtn').addEventListener('click', () => {
+                    console.log('[PhotoEditor] Generate button clicked');
+                    this._generate();
+                }, { signal: s });
                 document.getElementById('editorResetBtn').addEventListener('click', () => this._reset(), { signal: s });
                 document.getElementById('editorSaveBtn').addEventListener('click', () => this._save(), { signal: s });
                 document.getElementById('editorPrompt').addEventListener('input', () => this._updateBtn(), { signal: s });
@@ -1682,8 +1687,10 @@
                 document.addEventListener('keydown', e => {
                     if (e.key === 'Escape' && !document.getElementById('photoEditorModal').classList.contains('hidden')) this.close();
                 }, { signal: s });
+                this._listenersAttached = true;
             },
             open(platform, postIndex, photoUrl, photoId) {
+                console.log('[PhotoEditor] open() platform:', platform, 'postIndex:', postIndex, 'photoId:', photoId);
                 this.init();
                 this._iteration = 1; this._lastBase64 = null;
                 this._origUrl = photoUrl; this._photoId = photoId;
@@ -1717,14 +1724,17 @@
                 document.getElementById('editorPrompt').focus();
             },
             _updateBtn() {
-                const hasPrompt = document.getElementById('editorPrompt').value.trim().length > 0;
+                const prompt = document.getElementById('editorPrompt').value.trim();
+                const hasPrompt = prompt.length > 0;
                 document.getElementById('editorGenerateBtn').disabled = !hasPrompt;
                 const btnText = document.getElementById('editorGenerateBtn').querySelector('.btn-text');
                 btnText.textContent = this._lastBase64 ? 'Generate Iteration ' + (this._iteration + 1) : 'Generate Edit';
+                console.log('[PhotoEditor] _updateBtn() hasPrompt:', hasPrompt, 'disabled:', !hasPrompt);
             },
             async _generate() {
+                console.log('[PhotoEditor] _generate() called');
                 const prompt = document.getElementById('editorPrompt').value.trim();
-                if (!prompt) return;
+                if (!prompt) { console.log('[PhotoEditor] No prompt, returning'); return; }
                 let sourceBase64 = null, useIteration = false;
                 if (this._lastBase64) { sourceBase64 = this._lastBase64; useIteration = true; this._iteration++; }
                 const badge = document.getElementById('editorIterationBadge');
@@ -1743,12 +1753,14 @@
                     const payload = { prompt: finalPrompt, photo_id: this._photoId, iteration: this._iteration, user_email: AppState.email || 'anonymous', user_role: AppState.role || 'studio_owner' };
                     if (this._selectedColor) payload.color = this._selectedColor;
                     if (useIteration) payload.iteration_image = sourceBase64; else payload.photo_url = this._origUrl;
+                    console.log('[PhotoEditor] POSTing to', PHOTO_EDITOR_WEBHOOK, '| photo_id:', this._photoId, '| iteration:', this._iteration, '| has_base64:', !!sourceBase64);
                     this._fetchController = new AbortController();
                     const response = await fetch(PHOTO_EDITOR_WEBHOOK, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload), signal: this._fetchController.signal
                     });
                     this._fetchController = null;
+                    console.log('[PhotoEditor] Response status:', response.status);
                     if (!response.ok) throw new Error('Server error: ' + response.status);
                     const data = await response.json();
                     if (!data.success || !data.editedImage) throw new Error(data.message || 'No edited image returned');
@@ -1768,7 +1780,8 @@
                     document.getElementById('editorPrompt').value = '';
                     document.getElementById('editorPrompt').focus();
                 } catch (err) {
-                    if (err.name === 'AbortError') return;
+                    if (err.name === 'AbortError') { console.log('[PhotoEditor] Request aborted'); return; }
+                    console.error('[PhotoEditor] Error:', err.message);
                     errEl.textContent = 'Error: ' + err.message; errEl.classList.remove('hidden'); errEl.style.cssText = '';
                     if (useIteration && this._iteration > 1) { this._iteration--; badge.textContent = 'Iteration ' + this._iteration; }
                 } finally {
