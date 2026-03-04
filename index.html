@@ -177,6 +177,35 @@
         .toggle-slider:before { content: ""; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
         .toggle-switch input:checked + .toggle-slider { background: #667eea; }
         .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
+        .btn-generate-content { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.3s ease; margin-bottom: 20px; }
+        .btn-generate-content:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4); }
+        .btn-generate-content:disabled { opacity: 0.6; cursor: not-allowed; }
+        .generate-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 15000; padding: 20px; }
+        .generate-modal.hidden { display: none; }
+        .generate-modal-card { background: white; border-radius: 20px; padding: 32px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 80px rgba(0,0,0,0.3); }
+        .generate-modal-card h2 { font-size: 22px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+        .generate-modal-card .modal-subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+        .generate-modal-card .form-section { margin-bottom: 20px; }
+        .generate-modal-card .form-section label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px; }
+        .generate-modal-card .platform-checkboxes { display: flex; flex-wrap: wrap; gap: 10px; }
+        .platform-check { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #f1f5f9; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 13px; font-weight: 600; color: #475569; }
+        .platform-check:hover { border-color: #667eea; background: #eef2ff; }
+        .platform-check input { display: none; }
+        .platform-check.checked { background: #eef2ff; border-color: #667eea; color: #4338ca; }
+        .generate-modal-card textarea { width: 100%; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 14px; resize: vertical; min-height: 60px; transition: border-color 0.2s; }
+        .generate-modal-card textarea:focus { outline: none; border-color: #667eea; }
+        .generate-modal-card textarea::placeholder { color: #94a3b8; }
+        .generate-modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+        .generate-modal-actions .btn { flex: 1; padding: 14px; font-size: 15px; }
+        .generate-modal-actions .btn-cancel { background: #f1f5f9; color: #475569; }
+        .generate-modal-actions .btn-cancel:hover { background: #e2e8f0; }
+        .generate-modal-actions .btn-submit { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .generate-modal-actions .btn-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4); }
+        .generate-modal-actions .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+        .generate-status { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+        .generate-status.success { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+        .generate-status.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .generate-status.hidden { display: none; }
         .photo-editor-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .photo-editor-modal.hidden { display: none; }
         .editor-container { background: #1a1a2e; border-radius: 20px; width: 100%; max-width: 1200px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); }
@@ -414,6 +443,36 @@
         </div>
         <div class="platform-tabs" id="platformTabs"></div>
         <div id="contentContainer"></div>
+    </div>
+    <!-- Generate Content Modal -->
+    <div class="generate-modal hidden" id="generateModal">
+        <div class="generate-modal-card">
+            <h2>Generate New Content</h2>
+            <p class="modal-subtitle">Select your platforms and customize this batch of content.</p>
+            <div class="form-section">
+                <label>Platforms *</label>
+                <div class="platform-checkboxes" id="genPlatforms">
+                    <label class="platform-check checked"><input type="checkbox" value="instagram" checked>IG Instagram</label>
+                    <label class="platform-check"><input type="checkbox" value="facebook">FB Facebook</label>
+                    <label class="platform-check"><input type="checkbox" value="twitter">X Twitter/X</label>
+                    <label class="platform-check"><input type="checkbox" value="linkedin">LI LinkedIn</label>
+                    <label class="platform-check"><input type="checkbox" value="tiktok">TT TikTok</label>
+                </div>
+            </div>
+            <div class="form-section">
+                <label>Content Focus <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+                <textarea id="genContentFocus" placeholder="e.g. Summer boot camp launch, new instructor spotlight, class schedule changes..."></textarea>
+            </div>
+            <div class="form-section">
+                <label>Promotions or CTAs <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+                <textarea id="genPromotions" placeholder="e.g. 20% off first month, free trial class this weekend..." style="min-height:50px;"></textarea>
+            </div>
+            <div class="generate-status hidden" id="genStatus"></div>
+            <div class="generate-modal-actions">
+                <button class="btn btn-cancel" data-action="close-generate-modal">Cancel</button>
+                <button class="btn btn-submit" id="genSubmitBtn" data-action="submit-generate">Generate Content</button>
+            </div>
+        </div>
     </div>
     <!-- Photo Editor Modal -->
     <div class="photo-editor-modal hidden" id="photoEditorModal">
@@ -835,12 +894,15 @@
                     if (gen !== AppState.navGeneration) return;
                     if (error) throw error;
                     if (!deliveries || !deliveries.length) {
+                        const emptyGenBtn = AppState.role === 'studio_owner' ? '<button class="btn-generate-content" data-action="open-generate-modal" style="margin-top:20px;">+ Generate Your First Content</button>' : '';
                         c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#128233;</div>' +
                             '<p style="font-size:18px;font-weight:600;">No deliveries yet</p>' +
-                            '<p style="font-size:14px;margin-top:8px;">Your content deliveries will appear here once generated.</p></div>';
+                            '<p style="font-size:14px;margin-top:8px;">Your content deliveries will appear here once generated.</p>' +
+                            emptyGenBtn + '</div>';
                         return;
                     }
-                    let html = '<div class="delivery-history"><h2>&#128197; Content Deliveries</h2><div class="delivery-list">';
+                    const genBtn = AppState.role === 'studio_owner' ? '<button class="btn-generate-content" data-action="open-generate-modal">+ Generate New Content</button>' : '';
+                    let html = genBtn + '<div class="delivery-history"><h2>&#128197; Content Deliveries</h2><div class="delivery-list">';
                     deliveries.forEach(d => {
                         let dateStr = 'Unknown date';
                         if (d.created_at) { const dt = new Date(d.created_at); dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
@@ -1248,6 +1310,94 @@
         };
 
         // ================================================================
+        // CONTENT GENERATOR MODULE
+        // ================================================================
+        const ContentGenerator = {
+            _ac: null,
+            init() {
+                if (this._ac) this._ac.abort();
+                this._ac = new AbortController();
+                const s = this._ac.signal;
+                document.querySelectorAll('#genPlatforms .platform-check').forEach(label => {
+                    label.addEventListener('click', () => {
+                        const cb = label.querySelector('input');
+                        cb.checked = !cb.checked;
+                        label.classList.toggle('checked', cb.checked);
+                    }, { signal: s });
+                });
+            },
+            open() {
+                this.init();
+                document.getElementById('genContentFocus').value = '';
+                document.getElementById('genPromotions').value = '';
+                const statusEl = document.getElementById('genStatus');
+                statusEl.classList.add('hidden');
+                document.getElementById('genSubmitBtn').disabled = false;
+                document.getElementById('genSubmitBtn').textContent = 'Generate Content';
+                document.getElementById('generateModal').classList.remove('hidden');
+            },
+            close() {
+                document.getElementById('generateModal').classList.add('hidden');
+                if (this._ac) { this._ac.abort(); this._ac = null; }
+            },
+            async submit() {
+                const platforms = [];
+                document.querySelectorAll('#genPlatforms input:checked').forEach(cb => platforms.push(cb.value));
+                if (!platforms.length) {
+                    this._showStatus('error', 'Please select at least one platform.');
+                    return;
+                }
+                const btn = document.getElementById('genSubmitBtn');
+                btn.disabled = true; btn.textContent = 'Generating...';
+                this._showStatus('', '');
+                const contentFocus = document.getElementById('genContentFocus').value.trim();
+                const promotions = document.getElementById('genPromotions').value.trim();
+                const payload = {
+                    email: AppState.email,
+                    studio_id: AppState.resolvedStudioId,
+                    client_id: AppState.resolvedClientId,
+                    user_role: AppState.role,
+                    platforms: platforms,
+                    client_type: 'fitness_studio',
+                    brand_voice: 'Energetic, motivating, and community-focused',
+                    target_audience: 'Fitness enthusiasts and local community members',
+                    fitness_focus: contentFocus || 'General fitness, wellness, and community',
+                    primary_goal: 'Grow community engagement and class bookings',
+                    cta: promotions ? promotions : 'Book a class today!',
+                    caption_style: 'engaging',
+                    hashtag_preference: 'moderate',
+                    content_themes: contentFocus ? [contentFocus] : [],
+                    promotions: promotions,
+                    preferOwnPhotos: !AppState.aiPhotosEnabled
+                };
+                try {
+                    const response = await fetch('https://jmac.app.n8n.cloud/webhook/fca-studio-agent', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error('Server returned ' + response.status);
+                    this._showStatus('success', 'Content generated! Refreshing your deliveries...');
+                    btn.textContent = 'Done!';
+                    setTimeout(() => {
+                        this.close();
+                        Router.navigate('#/deliveries', true);
+                        DeliveryList.render(AppState.navGeneration);
+                    }, 2000);
+                } catch (err) {
+                    this._showStatus('error', 'Generation failed: ' + (err.message || 'Unknown error'));
+                    btn.disabled = false; btn.textContent = 'Retry';
+                }
+            },
+            _showStatus(type, msg) {
+                const el = document.getElementById('genStatus');
+                if (!type) { el.classList.add('hidden'); return; }
+                el.className = 'generate-status ' + type;
+                el.textContent = msg;
+            }
+        };
+
+        // ================================================================
         // PHOTO EDITOR MODULE
         // ================================================================
         const PhotoEditor = {
@@ -1445,6 +1595,9 @@
                 case 'open-photo': window.open(target.dataset.url, '_blank'); break;
                 case 'remove-upload-file': Upload.removeFile(parseInt(target.dataset.index)); break;
                 case 'quick-prompt': PhotoEditor.setQuickPrompt(target.dataset.type); break;
+                case 'open-generate-modal': ContentGenerator.open(); break;
+                case 'close-generate-modal': ContentGenerator.close(); break;
+                case 'submit-generate': ContentGenerator.submit(); break;
                 case 'retry-video':
                     if (!FEATURE_VIDEO_REELS) break;
                     target.disabled = true; target.textContent = 'Retrying...';
@@ -1455,6 +1608,9 @@
                     .catch(() => { target.disabled = false; target.textContent = 'Retry Video'; alert('Failed to request retry'); });
                     break;
             }
+        });
+        document.getElementById('generateModal').addEventListener('click', function(e) {
+            if (e.target === this) ContentGenerator.close();
         });
 
         // ================================================================
