@@ -894,8 +894,8 @@
             async _initWithUser(user) {
                 console.log('[Auth] _initWithUser() called for:', user.email, 'initRunning:', this._initRunning, 'initCompleted:', this._initCompleted, 'existingRole:', AppState.role);
                 if (this._initRunning) { console.log('[Auth] _initWithUser skipped (already running)'); return; }
-                if (this._initCompleted) { console.log('[Auth] _initWithUser skipped (already completed)'); return; }
-                if (AppState.email === user.email && AppState.role) { console.log('[Auth] _initWithUser skipped (already initialized)'); if (!AppState.authReady) { AppState.authReady = true; Router.start(); } return; }
+                if (this._initCompleted) { console.log('[Auth] _initWithUser skipped (already completed)'); if (AppState.role) { this.showApp(); this._showUserInfo(); Router.start(); } return; }
+                if (AppState.email === user.email && AppState.role) { console.log('[Auth] _initWithUser skipped (already initialized)'); AppState.authReady = true; this.showApp(); this._showUserInfo(); Router.start(); return; }
                 this._initRunning = true;
                 // Show dashboard loading overlay during data fetch
                 document.getElementById('loginOverlay').classList.add('hidden');
