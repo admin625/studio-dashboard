@@ -74,8 +74,6 @@
         .btn-edit-photo { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; display: flex; align-items: center; gap: 6px; }
         .btn-edit-photo:hover { box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4); }
         .photo-swap-section { margin-top: 30px; padding-top: 30px; border-top: 2px solid #f1f5f9; }
-        .photo-swap-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .photo-swap-header h4 { color: #475569; font-size: 16px; display: flex; align-items: center; gap: 8px; }
         .toggle-gallery-btn { padding: 8px 16px; background: #f1f5f9; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; color: #475569; cursor: pointer; transition: all 0.2s ease; }
         .toggle-gallery-btn:hover { background: #e2e8f0; }
         .photo-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; margin-top: 15px; }
@@ -1260,9 +1258,13 @@
                     headHTML += '</div></div>';
                 }
                 const countInfo = AppState.filteredPhotos.length ? '<div class="photo-count-info">' + AppState.filteredPhotos.length + ' photos available (' + cats.activity.length + ' activity, ' + cats.headshots.length + ' headshots)</div>' : '';
-                return '<div class="photo-swap-section"><div class="photo-swap-header"><h4>Swap Photo</h4>' +
-                    '<button class="toggle-gallery-btn" data-action="toggle-swap-gallery" data-platform="' + platform + '" data-index="' + postIndex + '">Show Gallery</button></div>' +
-                    '<div class="photo-gallery hidden" id="gallery-' + platform + '-' + postIndex + '">' + actHTML + headHTML + countInfo + '</div>' +
+                return '<div class="photo-swap-section">' +
+                    '<button class="toggle-gallery-btn" data-action="toggle-swap-gallery" data-platform="' + platform + '" data-index="' + postIndex + '">Swap Photo</button>' +
+                    '<div class="photo-gallery hidden" id="gallery-' + platform + '-' + postIndex + '">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                    '<span style="font-size:14px;font-weight:600;color:#475569;">Select a replacement photo</span>' +
+                    '<span data-action="cancel-swap-gallery" data-platform="' + platform + '" data-index="' + postIndex + '" style="font-size:13px;color:#64748b;cursor:pointer;">Cancel</span></div>' +
+                    actHTML + headHTML + countInfo + '</div>' +
                     '<div class="success-message hidden" id="success-' + platform + '-' + postIndex + '">Photo updated successfully!</div></div>';
             },
             switchTab(platform, clickedBtn) {
@@ -1284,8 +1286,14 @@
             },
             toggleSwapGallery(platform, postIndex, btn) {
                 const g = document.getElementById('gallery-' + platform + '-' + postIndex);
-                if (g.classList.contains('hidden')) { g.classList.remove('hidden'); btn.textContent = 'Hide Gallery'; }
-                else { g.classList.add('hidden'); btn.textContent = 'Show Gallery'; }
+                if (g.classList.contains('hidden')) { g.classList.remove('hidden'); btn.textContent = 'Hide'; }
+                else { g.classList.add('hidden'); btn.textContent = 'Swap Photo'; }
+            },
+            cancelSwapGallery(platform, postIndex) {
+                const g = document.getElementById('gallery-' + platform + '-' + postIndex);
+                if (g) g.classList.add('hidden');
+                const card = g && g.closest('.photo-swap-section');
+                if (card) { const btn = card.querySelector('.toggle-gallery-btn'); if (btn) btn.textContent = 'Swap Photo'; }
             },
             async swapPhoto(platform, postIndex, newUrl, newPhotoId) {
                 document.getElementById('loadingOverlay').classList.remove('hidden');
@@ -1353,6 +1361,8 @@
                     html += '</div></div>';
                 }
                 content.innerHTML = html;
+                content.classList.add('collapsed');
+                document.getElementById('galleryToggleIcon').classList.remove('open');
             },
             toggle() {
                 document.getElementById('studioGalleryContent').classList.toggle('collapsed');
@@ -1911,6 +1921,7 @@
                 case 'copy-caption': DeliveryDetail.copyCaption(target.dataset.platform, parseInt(target.dataset.index), target); break;
                 case 'edit-photo': PhotoEditor.open(target.dataset.platform, parseInt(target.dataset.index), target.dataset.url, target.dataset.photoId); break;
                 case 'toggle-swap-gallery': DeliveryDetail.toggleSwapGallery(target.dataset.platform, parseInt(target.dataset.index), target); break;
+                case 'cancel-swap-gallery': DeliveryDetail.cancelSwapGallery(target.dataset.platform, parseInt(target.dataset.index)); break;
                 case 'swap-photo': DeliveryDetail.swapPhoto(target.dataset.platform, parseInt(target.dataset.index), target.dataset.url, target.dataset.photoId); break;
                 case 'open-photo': window.open(target.dataset.url, '_blank'); break;
                 case 'remove-upload-file': Upload.removeFile(parseInt(target.dataset.index)); break;
