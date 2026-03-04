@@ -165,6 +165,18 @@
         .video-error p { color: #991b1b; font-size: 14px; margin: 0 0 12px; }
         .video-error .error-detail { font-size: 12px; color: #b91c1c; background: #fee2e2; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-family: monospace; }
         .btn-retry-video { background: #dc2626; color: white; font-size: 13px; padding: 8px 16px; }
+        .studio-settings { background: white; padding: 20px 24px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .studio-settings h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px; }
+        .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .setting-label { flex: 1; }
+        .setting-label .setting-title { font-size: 14px; font-weight: 600; color: #334155; }
+        .setting-label .setting-desc { font-size: 12px; color: #64748b; margin-top: 2px; }
+        .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #cbd5e1; border-radius: 26px; transition: 0.3s; }
+        .toggle-slider:before { content: ""; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+        .toggle-switch input:checked + .toggle-slider { background: #667eea; }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
         .photo-editor-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .photo-editor-modal.hidden { display: none; }
         .editor-container { background: #1a1a2e; border-radius: 20px; width: 100%; max-width: 1200px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); }
@@ -352,6 +364,20 @@
                 <button class="sign-out-btn" id="signOutBtn">Sign Out</button>
             </div>
         </div>
+        <!-- Studio Settings (owner only) -->
+        <div class="studio-settings" id="studioSettingsSection" style="display: none;">
+            <h3>Studio Settings</h3>
+            <div class="setting-row">
+                <div class="setting-label">
+                    <div class="setting-title">Use AI-Generated Photos</div>
+                    <div class="setting-desc">Let AI create photos to match your content. Results may vary &mdash; you can always swap for your own photos.</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="aiPhotosToggle">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
         <!-- Studio Photo Gallery -->
         <div class="studio-gallery-section" id="studioGallerySection" style="display: none;">
             <div class="studio-gallery-header" id="galleryHeader">
@@ -472,6 +498,11 @@
         const PHOTO_EDITOR_WEBHOOK = 'https://jmac.app.n8n.cloud/webhook/fca-photo-editor-test';
 
         // ================================================================
+        // FEATURE FLAGS
+        // ================================================================
+        const FEATURE_VIDEO_REELS = false;
+
+        // ================================================================
         // HELPERS
         // ================================================================
         function escapeAttr(str) {
@@ -499,12 +530,14 @@
             contentData: null, deliveryId: null,
             studioPhotos: [], filteredPhotos: [],
             navGeneration: 0, currentRoute: null, authReady: false,
+            aiPhotosEnabled: false,
             reset() {
                 this.user = null; this.email = null; this.role = null;
                 this.scopeType = null; this.resolvedStudioId = null; this.resolvedClientId = null;
                 this.contentData = null; this.deliveryId = null;
                 this.studioPhotos = []; this.filteredPhotos = [];
                 this.navGeneration++; this.currentRoute = null;
+                this.aiPhotosEnabled = false;
             }
         };
 
@@ -584,6 +617,15 @@
                 const s = this._ac.signal;
                 document.getElementById('loginForm').addEventListener('submit', (e) => { e.preventDefault(); this._handleLogin(); }, { signal: s });
                 document.getElementById('signOutBtn').addEventListener('click', () => this.signOut(), { signal: s });
+                document.getElementById('aiPhotosToggle').addEventListener('change', async (e) => {
+                    const enabled = e.target.checked;
+                    AppState.aiPhotosEnabled = enabled;
+                    if (AppState.resolvedStudioId) {
+                        try {
+                            await supabaseClient.rpc('update_studio_ai_photos', { p_studio_id: AppState.resolvedStudioId, p_enabled: enabled });
+                        } catch (err) { console.warn('[Settings] Failed to save AI photos setting:', err.message); }
+                    }
+                }, { signal: s });
                 supabaseClient.auth.onAuthStateChange(async (event, session) => {
                     console.log('[Auth] onAuthStateChange:', event, 'hasSession:', !!session, 'hasUser:', !!session?.user);
                     if (event === 'PASSWORD_RECOVERY') {
@@ -638,6 +680,13 @@
                     if (!ri) { AppState.role = null; AppState.authReady = true; this.showApp(); this._showNoAccount(user.email); return; }
                     AppState.role = ri.role; AppState.scopeType = ri.scopeType;
                     AppState.resolvedStudioId = ri.studioId; AppState.resolvedClientId = ri.clientId;
+                    if (ri.studioId) {
+                        try {
+                            const { data: studioSettings } = await supabaseClient.from('studio_accounts')
+                                .select('ai_photos_enabled').eq('id', ri.studioId).single();
+                            if (studioSettings) AppState.aiPhotosEnabled = !!studioSettings.ai_photos_enabled;
+                        } catch (e) { /* ignore - setting defaults to false */ }
+                    }
                     AppState.authReady = true;
                     console.log('[Auth] SUCCESS — Scope:', AppState.scopeType, '| studioId:', AppState.resolvedStudioId, '| role:', AppState.role);
                     this.showApp(); this._showUserInfo(); Router.start();
@@ -675,6 +724,7 @@
                 document.getElementById('loginPassword').value = '';
                 document.getElementById('loginError').classList.remove('visible');
                 document.getElementById('userInfoBanner').style.display = 'none';
+                document.getElementById('studioSettingsSection').style.display = 'none';
                 Router.navigate('#/login', true);
             },
             _withTimeout(promise, ms, label) {
@@ -746,6 +796,13 @@
                 else if (AppState.role === 'studio_instructor') { rd.textContent = 'Instructor'; rd.classList.add('instructor'); }
                 else rd.textContent = AppState.role;
                 banner.style.display = 'flex';
+                const settingsSection = document.getElementById('studioSettingsSection');
+                if (AppState.role === 'studio_owner') {
+                    settingsSection.style.display = 'block';
+                    document.getElementById('aiPhotosToggle').checked = AppState.aiPhotosEnabled;
+                } else {
+                    settingsSection.style.display = 'none';
+                }
             },
             _showNoAccount(email) {
                 document.getElementById('contentContainer').innerHTML =
@@ -920,27 +977,29 @@
 
                 const backBtn = '<button class="back-to-history" data-action="navigate-history">&#8249; All Deliveries</button>';
                 let videoHTML = '';
-                const vd = AppState.videoData;
-                if (vd && vd.video_status) {
-                    videoHTML = '<div class="video-section">';
-                    videoHTML += '<div class="video-section-header"><h3>Video Reel</h3>';
-                    if (vd.video_status === 'complete') {
-                        videoHTML += '<span class="video-section-badge complete">Complete</span></div>';
-                        videoHTML += '<div class="video-player-container"><video controls preload="metadata" playsinline>';
-                        videoHTML += '<source src="' + escapeAttr(vd.video_url) + '" type="video/mp4">Your browser does not support video.</video></div>';
-                        videoHTML += '<div class="video-actions">';
-                        videoHTML += '<a href="' + escapeAttr(vd.video_url) + '" download class="btn btn-download-video">Download Video</a>';
+                if (FEATURE_VIDEO_REELS) {
+                    const vd = AppState.videoData;
+                    if (vd && vd.video_status) {
+                        videoHTML = '<div class="video-section">';
+                        videoHTML += '<div class="video-section-header"><h3>Video Reel</h3>';
+                        if (vd.video_status === 'complete') {
+                            videoHTML += '<span class="video-section-badge complete">Complete</span></div>';
+                            videoHTML += '<div class="video-player-container"><video controls preload="metadata" playsinline>';
+                            videoHTML += '<source src="' + escapeAttr(vd.video_url) + '" type="video/mp4">Your browser does not support video.</video></div>';
+                            videoHTML += '<div class="video-actions">';
+                            videoHTML += '<a href="' + escapeAttr(vd.video_url) + '" download class="btn btn-download-video">Download Video</a>';
+                            videoHTML += '</div>';
+                        } else if (vd.video_status === 'rendering') {
+                            videoHTML += '<span class="video-section-badge rendering">Rendering</span></div>';
+                            videoHTML += '<div class="video-rendering"><div class="spinner"></div><p>Your video reel is being rendered. This usually takes 1-2 minutes. Refresh the page to check for updates.</p></div>';
+                        } else if (vd.video_status === 'failed') {
+                            videoHTML += '<span class="video-section-badge failed">Failed</span></div>';
+                            videoHTML += '<div class="video-error"><p>Video rendering failed.</p>';
+                            if (vd.video_error) videoHTML += '<div class="error-detail">' + escapeAttr(vd.video_error) + '</div>';
+                            videoHTML += '<button class="btn btn-retry-video" data-action="retry-video">Retry Video</button></div>';
+                        }
                         videoHTML += '</div>';
-                    } else if (vd.video_status === 'rendering') {
-                        videoHTML += '<span class="video-section-badge rendering">Rendering</span></div>';
-                        videoHTML += '<div class="video-rendering"><div class="spinner"></div><p>Your video reel is being rendered. This usually takes 1-2 minutes. Refresh the page to check for updates.</p></div>';
-                    } else if (vd.video_status === 'failed') {
-                        videoHTML += '<span class="video-section-badge failed">Failed</span></div>';
-                        videoHTML += '<div class="video-error"><p>Video rendering failed.</p>';
-                        if (vd.video_error) videoHTML += '<div class="error-detail">' + escapeAttr(vd.video_error) + '</div>';
-                        videoHTML += '<button class="btn btn-retry-video" data-action="retry-video">Retry Video</button></div>';
                     }
-                    videoHTML += '</div>';
                 }
                 document.getElementById('contentContainer').innerHTML = backBtn + videoHTML + contentHTML;
             },
@@ -1387,6 +1446,7 @@
                 case 'remove-upload-file': Upload.removeFile(parseInt(target.dataset.index)); break;
                 case 'quick-prompt': PhotoEditor.setQuickPrompt(target.dataset.type); break;
                 case 'retry-video':
+                    if (!FEATURE_VIDEO_REELS) break;
                     target.disabled = true; target.textContent = 'Retrying...';
                     fetch('https://jmac.app.n8n.cloud/webhook/fca-video-reel', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
