@@ -231,6 +231,23 @@
         .gen-progress-banner .banner-dismiss { margin-left: auto; background: none; border: none; font-size: 18px; cursor: pointer; color: inherit; opacity: 0.5; padding: 0 4px; }
         .gen-progress-banner .banner-dismiss:hover { opacity: 1; }
         @keyframes banner-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Freestyle Mode */
+        .freestyle-toggle-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 100%); border: 1px solid #e0e7ff; border-radius: 12px; margin-bottom: 20px; }
+        .freestyle-toggle-row .ft-label { font-size: 15px; font-weight: 700; color: #1e293b; }
+        .freestyle-toggle-row .ft-helper { font-size: 12px; color: #64748b; margin-left: auto; }
+        .ft-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+        .ft-switch input { opacity: 0; width: 0; height: 0; }
+        .ft-switch-slider { position: absolute; inset: 0; background: #cbd5e1; border-radius: 24px; cursor: pointer; transition: 0.3s; }
+        .ft-switch-slider:before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+        .ft-switch input:checked + .ft-switch-slider { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .ft-switch input:checked + .ft-switch-slider:before { transform: translateX(20px); }
+        .freestyle-area { width: 100%; min-height: 140px; padding: 16px; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 15px; font-family: inherit; line-height: 1.6; resize: vertical; transition: border-color 0.2s; }
+        .freestyle-area:focus { outline: none; border-color: #667eea; }
+        .freestyle-area::placeholder { color: #94a3b8; font-size: 13px; line-height: 1.5; }
+        .freestyle-templates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+        .freestyle-tpl-btn { padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-weight: 500; color: #475569; cursor: pointer; text-align: left; transition: all 0.2s; }
+        .freestyle-tpl-btn:hover { border-color: #667eea; background: #eef2ff; color: #4338ca; }
+        @media (max-width: 520px) { .freestyle-templates { grid-template-columns: 1fr; } }
         .delivery-card.new-highlight { animation: card-glow 2s ease; }
         @keyframes card-glow { 0% { box-shadow: 0 0 0 3px rgba(34,197,94,0.5); } 100% { box-shadow: none; } }
         .photo-editor-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -480,6 +497,16 @@
             <h2>Generate New Content</h2>
             <p class="modal-subtitle">Configure your content batch. Fields marked * are required.</p>
 
+            <!-- Freestyle Mode Toggle (owner only) -->
+            <div class="freestyle-toggle-row" id="freestyleToggleRow" style="display:none;">
+                <label class="ft-switch">
+                    <input type="checkbox" id="freestyleToggle">
+                    <span class="ft-switch-slider"></span>
+                </label>
+                <span class="ft-label">Freestyle Mode</span>
+                <span class="ft-helper">Describe what you want in your own words</span>
+            </div>
+
             <!-- PLATFORMS with post count & image toggle per platform -->
             <div class="form-section">
                 <label>Platforms * <span class="section-hint">(select at least one, set posts per platform)</span></label>
@@ -522,6 +549,8 @@
                 </div>
             </div>
 
+            <!-- Standard form fields (hidden in freestyle mode) -->
+            <div id="standardFields">
             <hr class="form-divider">
 
             <!-- BRAND & VOICE -->
@@ -615,6 +644,25 @@
                 <div class="form-section">
                     <label>Avoid Topics <span class="section-hint">(optional)</span></label>
                     <input type="text" id="genAvoidTopics" placeholder="e.g. Weight loss language, competitor mentions">
+                </div>
+            </div>
+
+            </div><!-- /standardFields -->
+
+            <!-- Freestyle Fields (hidden by default, shown when freestyle toggle is on) -->
+            <div id="freestyleFields" style="display:none;">
+                <div class="form-section">
+                    <label>What do you want to create?</label>
+                    <textarea class="freestyle-area" id="freestylePrompt" placeholder="Tell me what you want. For example: Create 3 Instagram posts about our new summer bootcamp starting June 1st. Energetic and urgent tone. Include a 20% early bird discount. Focus on transformation and community."></textarea>
+                </div>
+                <div class="form-section">
+                    <label>Quick-Start Templates <span class="section-hint">(click to pre-fill, then customize)</span></label>
+                    <div class="freestyle-templates">
+                        <button type="button" class="freestyle-tpl-btn" data-action="freestyle-template" data-tpl="event">Promote an event</button>
+                        <button type="button" class="freestyle-tpl-btn" data-action="freestyle-template" data-tpl="instructor">Highlight an instructor</button>
+                        <button type="button" class="freestyle-tpl-btn" data-action="freestyle-template" data-tpl="transformation">Share a transformation</button>
+                        <button type="button" class="freestyle-tpl-btn" data-action="freestyle-template" data-tpl="seasonal">Seasonal campaign</button>
+                    </div>
                 </div>
             </div>
 
@@ -1512,6 +1560,12 @@
             _pollStart: 0,
             POLL_INTERVAL: 30000,
             POLL_TIMEOUT: 300000,
+            _freestyleTemplates: {
+                event: "Create posts promoting [event name] on [date]. Highlight what makes it special and include a sign-up CTA.",
+                instructor: "Feature [instructor name] and their [class type] classes. Show their personality and what students love about them.",
+                transformation: "Create posts around client transformation and results. Motivational tone, focus on the journey.",
+                seasonal: "Build a [season/holiday] campaign. Tie our classes to [seasonal theme] with a special offer."
+            },
             init() {
                 if (this._ac) this._ac.abort();
                 this._ac = new AbortController();
@@ -1530,6 +1584,24 @@
                     body.classList.toggle('open');
                     arrow.classList.toggle('open');
                 }, { signal: s });
+                document.getElementById('freestyleToggle').addEventListener('change', (e) => {
+                    this._setFreestyle(e.target.checked);
+                }, { signal: s });
+            },
+            _setFreestyle(on) {
+                document.getElementById('standardFields').style.display = on ? 'none' : '';
+                document.getElementById('freestyleFields').style.display = on ? '' : 'none';
+            },
+            setFreestyleTemplate(type) {
+                const text = this._freestyleTemplates[type] || '';
+                const el = document.getElementById('freestylePrompt');
+                el.value = text;
+                el.focus();
+                const idx = text.indexOf('[');
+                if (idx >= 0) {
+                    const end = text.indexOf(']', idx) + 1;
+                    el.setSelectionRange(idx, end);
+                }
             },
             open() {
                 this.init();
@@ -1541,6 +1613,11 @@
                 document.getElementById('genStatus').classList.add('hidden');
                 document.getElementById('genSubmitBtn').disabled = false;
                 document.getElementById('genSubmitBtn').textContent = 'Generate Content';
+                // Freestyle: show toggle only for owners, reset state
+                document.getElementById('freestyleToggleRow').style.display = AppState.role === 'studio_owner' ? 'flex' : 'none';
+                document.getElementById('freestyleToggle').checked = false;
+                document.getElementById('freestylePrompt').value = '';
+                this._setFreestyle(false);
                 document.getElementById('generateModal').classList.remove('hidden');
             },
             close() {
@@ -1626,6 +1703,19 @@
                 const themesRaw = val('genContentThemes');
                 const contentThemes = themesRaw ? themesRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
 
+                const isFreestyle = document.getElementById('freestyleToggle').checked;
+
+                if (isFreestyle) {
+                    const freestyleText = document.getElementById('freestylePrompt').value.trim();
+                    if (!freestyleText) {
+                        document.getElementById('genStatus').className = 'generate-status error';
+                        document.getElementById('genStatus').textContent = 'Please describe what content you want to create.';
+                        btn.disabled = false;
+                        btn.textContent = 'Generate Content';
+                        return;
+                    }
+                }
+
                 const payload = {
                     email: AppState.email,
                     studio_id: AppState.resolvedStudioId,
@@ -1633,21 +1723,36 @@
                     user_role: AppState.role,
                     platforms: platforms,
                     client_type: 'fitness_studio',
-                    brand_voice: val('genBrandVoice') || 'Energetic, motivating, and community-focused',
-                    target_audience: val('genTargetAudience') || 'Fitness enthusiasts and local community members',
-                    fitness_focus: val('genFitnessFocus') || 'General fitness, wellness, and community',
-                    primary_goal: val('genPrimaryGoal'),
-                    cta: val('genCTA') || 'Book a class today!',
-                    caption_style: val('genCaptionStyle'),
-                    hashtag_preference: val('genHashtagPref'),
-                    content_themes: contentThemes,
-                    custom_hashtags: val('genCustomHashtags'),
-                    promotions: val('genPromotions'),
-                    avoid_topics: val('genAvoidTopics'),
-                    unique_value: val('genUniqueValue'),
-                    signature_style: val('genSignatureStyle'),
                     preferOwnPhotos: !AppState.aiPhotosEnabled
                 };
+
+                if (isFreestyle) {
+                    payload.freestyle = true;
+                    payload.freestyle_prompt = document.getElementById('freestylePrompt').value.trim();
+                    // Still include minimal defaults for the workflow
+                    payload.brand_voice = val('genBrandVoice') || 'Energetic, motivating, and community-focused';
+                    payload.target_audience = 'Fitness enthusiasts';
+                    payload.fitness_focus = 'General fitness';
+                    payload.primary_goal = 'Grow community engagement and class bookings';
+                    payload.cta = 'Book a class today!';
+                    payload.caption_style = 'engaging';
+                    payload.hashtag_preference = 'moderate';
+                    payload.content_themes = [];
+                } else {
+                    payload.brand_voice = val('genBrandVoice') || 'Energetic, motivating, and community-focused';
+                    payload.target_audience = val('genTargetAudience') || 'Fitness enthusiasts and local community members';
+                    payload.fitness_focus = val('genFitnessFocus') || 'General fitness, wellness, and community';
+                    payload.primary_goal = val('genPrimaryGoal');
+                    payload.cta = val('genCTA') || 'Book a class today!';
+                    payload.caption_style = val('genCaptionStyle');
+                    payload.hashtag_preference = val('genHashtagPref');
+                    payload.content_themes = contentThemes;
+                    payload.custom_hashtags = val('genCustomHashtags');
+                    payload.promotions = val('genPromotions');
+                    payload.avoid_topics = val('genAvoidTopics');
+                    payload.unique_value = val('genUniqueValue');
+                    payload.signature_style = val('genSignatureStyle');
+                }
 
                 // Fire the request but don't wait for n8n to finish
                 fetch('/.netlify/functions/generate-content', {
@@ -1949,6 +2054,7 @@
                 case 'close-generate-modal': ContentGenerator.close(); break;
                 case 'submit-generate': ContentGenerator.submit(); break;
                 case 'dismiss-gen-banner': ContentGenerator._dismissBanner(); break;
+                case 'freestyle-template': ContentGenerator.setFreestyleTemplate(target.dataset.tpl); break;
                 case 'retry-video':
                     if (!isReelsEnabled()) break;
                     target.disabled = true; target.textContent = 'Retrying...';
