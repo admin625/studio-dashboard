@@ -761,6 +761,7 @@
         const FEATURE_VIDEO_REELS = false;
         const REELS_BETA_USERS = ['katie@thelocalkollective.com'];
         function isReelsEnabled() { return FEATURE_VIDEO_REELS || REELS_BETA_USERS.indexOf(AppState.email) !== -1; }
+        const FREESTYLE_OWNERS_ONLY = true;
 
         // ================================================================
         // HELPERS
@@ -1614,7 +1615,8 @@
                 document.getElementById('genSubmitBtn').disabled = false;
                 document.getElementById('genSubmitBtn').textContent = 'Generate Content';
                 // Freestyle: show toggle only for owners, reset state
-                document.getElementById('freestyleToggleRow').style.display = AppState.role === 'studio_owner' ? 'flex' : 'none';
+                const showFreestyle = !FREESTYLE_OWNERS_ONLY || AppState.role === 'studio_owner';
+                document.getElementById('freestyleToggleRow').style.display = showFreestyle ? 'flex' : 'none';
                 document.getElementById('freestyleToggle').checked = false;
                 document.getElementById('freestylePrompt').value = '';
                 this._setFreestyle(false);
