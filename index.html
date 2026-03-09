@@ -1093,18 +1093,15 @@
                 if (!result.error) return result;
                 console.warn('[DeliveryList] RPC failed, falling back to direct query:', result.error.message);
                 let q = supabaseClient.from('content_deliveries')
-                    .select('id, created_at, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content');
+                    .select('id, created_at');
                 if (AppState.resolvedStudioId) q = q.eq('studio_id', AppState.resolvedStudioId);
                 var fallback = await q.order('created_at', { ascending: false }).limit(50);
                 if (fallback.error) return fallback;
                 fallback.data = (fallback.data || []).map(function(d) {
                     return {
                         id: d.id, created_at: d.created_at,
-                        instagram_count: Array.isArray(d.instagram_content) ? d.instagram_content.length : 0,
-                        facebook_count: Array.isArray(d.facebook_content) ? d.facebook_content.length : 0,
-                        twitter_count: Array.isArray(d.twitter_content) ? d.twitter_content.length : 0,
-                        linkedin_count: Array.isArray(d.linkedin_content) ? d.linkedin_content.length : 0,
-                        tiktok_count: Array.isArray(d.tiktok_content) ? d.tiktok_content.length : 0,
+                        instagram_count: 0, facebook_count: 0,
+                        twitter_count: 0, linkedin_count: 0, tiktok_count: 0,
                     };
                 });
                 return fallback;
@@ -1176,7 +1173,7 @@
                 c.innerHTML = '<div class="delivery-loading"><div class="spinner"></div><p>Loading content...</p></div>';
                 let photoLoadError = false;
                 try {
-                    const { data: delivery, error } = await supabaseClient.from('content_deliveries').select('*').eq('id', deliveryId).single();
+                    const { data: delivery, error } = await supabaseClient.from('content_deliveries').select('id, created_at, studio_id, client_id, instructor_email, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content, video_url, video_status, video_render_id, video_error').eq('id', deliveryId).single();
                     if (gen !== AppState.navGeneration) return;
                     if (error) throw error;
                     // Verify ownership
@@ -1895,9 +1892,9 @@
                 }
                 try {
                     console.log('[PhotoEditor] Polling for edit... (' + Math.round(elapsed / 1000) + 's elapsed)');
-                    var { data: delivery, error } = await supabaseClient.from('content_deliveries').select('*').eq('id', AppState.deliveryId).single();
-                    if (error || !delivery) return;
                     var platformKey = this._platform + '_content';
+                    var { data: delivery, error } = await supabaseClient.from('content_deliveries').select(platformKey).eq('id', AppState.deliveryId).single();
+                    if (error || !delivery) return;
                     var posts = delivery[platformKey];
                     if (!Array.isArray(posts) || !posts[this._postIndex]) return;
                     var currentUrl = posts[this._postIndex].photo_url;
