@@ -41,6 +41,17 @@
         .meta-value { color: #64748b; }
         .caption { background: #f8fafc; padding: 20px; border-radius: 10px; margin: 15px 0; border-left: 4px solid #667eea; line-height: 1.6; color: #1e293b; }
         .hashtags { color: #0ea5e9; font-weight: 500; margin-top: 12px; display: block; }
+        .caption-wrapper { position: relative; }
+        .caption-edit-btn { position: absolute; top: 8px; right: 8px; background: #e2e8f0; border: none; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #64748b; cursor: pointer; transition: all 0.2s ease; }
+        .caption-edit-btn:hover { background: #667eea; color: white; }
+        .caption-editing textarea { width: 100%; min-height: 120px; border: 2px solid #667eea; border-radius: 8px; padding: 12px; font-size: 14px; font-family: inherit; line-height: 1.6; color: #1e293b; resize: vertical; box-sizing: border-box; background: white; }
+        .hashtags-editing textarea { width: 100%; min-height: 50px; border: 2px solid #0ea5e9; border-radius: 8px; padding: 10px; font-size: 14px; font-family: inherit; color: #0ea5e9; font-weight: 500; resize: vertical; box-sizing: border-box; background: white; }
+        .edit-actions { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end; }
+        .edit-actions button { padding: 6px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
+        .edit-save-btn { background: #059669; color: white; }
+        .edit-save-btn:hover { background: #047857; }
+        .edit-cancel-btn { background: #e2e8f0; color: #475569; }
+        .edit-cancel-btn:hover { background: #cbd5e1; }
         .action-buttons { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
         .btn { padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; font-size: 14px; }
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
@@ -1259,7 +1270,12 @@
                         return '<div class="post-card"><div class="post-header"><div class="post-number">Post #' + (post.post_number || idx + 1) + '</div>' +
                             (post.content_type ? '<div class="content-type-badge">' + escapeAttr(post.content_type) + '</div>' : '') +
                             '</div>' + imgH + metaH +
-                            '<div class="caption">' + (post.caption || '') + (post.hashtags ? '<span class="hashtags">' + post.hashtags + '</span>' : '') + '</div>' +
+                            '<div class="caption-wrapper"><div class="caption" id="caption-' + platform + '-' + idx + '">' +
+                            '<button class="caption-edit-btn" data-action="edit-caption" data-platform="' + platform + '" data-index="' + idx + '">Edit</button>' +
+                            (post.caption || '') + '</div>' +
+                            (post.hashtags ? '<div class="hashtags" id="hashtags-' + platform + '-' + idx + '">' +
+                            '<button class="caption-edit-btn" data-action="edit-hashtags" data-platform="' + platform + '" data-index="' + idx + '" style="top:4px;">Edit</button>' +
+                            post.hashtags + '</div>' : '') + '</div>' +
                             actH + swapH + '</div>';
                     }).join('');
                     return '<div class="platform-content ' + (pi === 0 ? 'active' : '') + '" id="' + platform + '-content">' + postsHTML + '</div>';
@@ -1380,6 +1396,80 @@
                     document.getElementById('loadingOverlay').classList.add('hidden');
                     alert('Error updating photo: ' + err.message);
                 }
+            },
+            editCaption(platform, postIndex) {
+                const el = document.getElementById('caption-' + platform + '-' + postIndex);
+                if (!el || el.classList.contains('caption-editing')) return;
+                const post = AppState.contentData[platform][postIndex];
+                el.classList.add('caption-editing');
+                el.innerHTML = '<textarea id="caption-input-' + platform + '-' + postIndex + '">' + (post.caption || '').replace(/</g, '&lt;') + '</textarea>' +
+                    '<div class="edit-actions">' +
+                    '<button class="edit-cancel-btn" data-action="cancel-edit-caption" data-platform="' + platform + '" data-index="' + postIndex + '">Cancel</button>' +
+                    '<button class="edit-save-btn" data-action="save-caption" data-platform="' + platform + '" data-index="' + postIndex + '">Save</button></div>';
+                const ta = document.getElementById('caption-input-' + platform + '-' + postIndex);
+                ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+            },
+            editHashtags(platform, postIndex) {
+                const el = document.getElementById('hashtags-' + platform + '-' + postIndex);
+                if (!el || el.classList.contains('hashtags-editing')) return;
+                const post = AppState.contentData[platform][postIndex];
+                el.classList.add('hashtags-editing');
+                el.innerHTML = '<textarea id="hashtags-input-' + platform + '-' + postIndex + '">' + (post.hashtags || '').replace(/</g, '&lt;') + '</textarea>' +
+                    '<div class="edit-actions">' +
+                    '<button class="edit-cancel-btn" data-action="cancel-edit-hashtags" data-platform="' + platform + '" data-index="' + postIndex + '">Cancel</button>' +
+                    '<button class="edit-save-btn" data-action="save-hashtags" data-platform="' + platform + '" data-index="' + postIndex + '">Save</button></div>';
+                const ta = document.getElementById('hashtags-input-' + platform + '-' + postIndex);
+                ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+            },
+            async saveCaption(platform, postIndex) {
+                const ta = document.getElementById('caption-input-' + platform + '-' + postIndex);
+                if (!ta) return;
+                const newCaption = ta.value;
+                document.getElementById('loadingOverlay').classList.remove('hidden');
+                try {
+                    const updated = AppState.contentData[platform].slice();
+                    updated[postIndex] = Object.assign({}, updated[postIndex], { caption: newCaption });
+                    const upd = {}; upd[platform + '_content'] = updated;
+                    let q = supabaseClient.from('content_deliveries').update(upd).eq('id', AppState.deliveryId);
+                    if (AppState.scopeType === 'studio') q = q.eq('studio_id', AppState.resolvedStudioId);
+                    else q = q.eq('client_id', AppState.resolvedClientId);
+                    const { error } = await q;
+                    if (error) throw error;
+                    AppState.contentData[platform] = updated;
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    this._renderDashboard(); this.switchTab(platform);
+                } catch (err) {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    alert('Error saving caption: ' + err.message);
+                }
+            },
+            async saveHashtags(platform, postIndex) {
+                const ta = document.getElementById('hashtags-input-' + platform + '-' + postIndex);
+                if (!ta) return;
+                const newHashtags = ta.value;
+                document.getElementById('loadingOverlay').classList.remove('hidden');
+                try {
+                    const updated = AppState.contentData[platform].slice();
+                    updated[postIndex] = Object.assign({}, updated[postIndex], { hashtags: newHashtags });
+                    const upd = {}; upd[platform + '_content'] = updated;
+                    let q = supabaseClient.from('content_deliveries').update(upd).eq('id', AppState.deliveryId);
+                    if (AppState.scopeType === 'studio') q = q.eq('studio_id', AppState.resolvedStudioId);
+                    else q = q.eq('client_id', AppState.resolvedClientId);
+                    const { error } = await q;
+                    if (error) throw error;
+                    AppState.contentData[platform] = updated;
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    this._renderDashboard(); this.switchTab(platform);
+                } catch (err) {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    alert('Error saving hashtags: ' + err.message);
+                }
+            },
+            cancelEditCaption(platform, postIndex) {
+                this._renderDashboard(); this.switchTab(platform);
+            },
+            cancelEditHashtags(platform, postIndex) {
+                this._renderDashboard(); this.switchTab(platform);
             },
             cleanup() { document.getElementById('contentContainer').innerHTML = ''; }
         };
@@ -2046,6 +2136,12 @@
                 case 'toggle-swap-gallery': DeliveryDetail.toggleSwapGallery(target.dataset.platform, parseInt(target.dataset.index), target); break;
                 case 'cancel-swap-gallery': DeliveryDetail.cancelSwapGallery(target.dataset.platform, parseInt(target.dataset.index)); break;
                 case 'swap-photo': DeliveryDetail.swapPhoto(target.dataset.platform, parseInt(target.dataset.index), target.dataset.url, target.dataset.photoId); break;
+                case 'edit-caption': DeliveryDetail.editCaption(target.dataset.platform, parseInt(target.dataset.index)); break;
+                case 'edit-hashtags': DeliveryDetail.editHashtags(target.dataset.platform, parseInt(target.dataset.index)); break;
+                case 'save-caption': DeliveryDetail.saveCaption(target.dataset.platform, parseInt(target.dataset.index)); break;
+                case 'save-hashtags': DeliveryDetail.saveHashtags(target.dataset.platform, parseInt(target.dataset.index)); break;
+                case 'cancel-edit-caption': DeliveryDetail.cancelEditCaption(target.dataset.platform, parseInt(target.dataset.index)); break;
+                case 'cancel-edit-hashtags': DeliveryDetail.cancelEditHashtags(target.dataset.platform, parseInt(target.dataset.index)); break;
                 case 'open-photo': window.open(target.dataset.url, '_blank'); break;
                 case 'remove-upload-file': Upload.removeFile(parseInt(target.dataset.index)); break;
                 case 'quick-prompt': PhotoEditor.setQuickPrompt(target.dataset.type); break;
