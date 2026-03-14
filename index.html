@@ -216,6 +216,11 @@
         .platform-row .plat-opts select { width: 60px; padding: 4px 6px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; }
         .platform-row .plat-opts .img-toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #64748b; cursor: pointer; }
         .platform-row .plat-opts .img-toggle input { width: 14px; height: 14px; accent-color: #667eea; }
+        .ig-formats { display: none; padding: 6px 14px 10px 36px; }
+        .ig-formats.visible { display: flex; flex-wrap: wrap; gap: 8px; }
+        .ig-formats label { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: #64748b; cursor: pointer; background: #f1f5f9; padding: 4px 10px; border-radius: 6px; border: 1px solid #e2e8f0; transition: all 0.15s; }
+        .ig-formats label:has(input:checked) { background: #eef2ff; border-color: #667eea; color: #4f46e5; }
+        .ig-formats input[type="checkbox"] { width: 14px; height: 14px; accent-color: #667eea; }
         .generate-modal-card .form-divider { border: none; border-top: 1px solid #e2e8f0; margin: 24px 0; }
         .generate-modal-card .collapsible-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 10px 0; }
         .generate-modal-card .collapsible-header h3 { font-size: 14px; font-weight: 600; color: #475569; margin: 0; }
@@ -528,6 +533,11 @@
                             <label>Posts <select class="plat-count"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
                             <label class="img-toggle"><input type="checkbox" checked> Include images</label>
                         </div>
+                    </div>
+                    <div class="ig-formats visible" id="igFormats">
+                        <label><input type="checkbox" value="feed_post" checked> Feed Post</label>
+                        <label><input type="checkbox" value="story"> Story</label>
+                        <label><input type="checkbox" value="thread"> Thread</label>
                     </div>
                     <div class="platform-row" data-platform="facebook">
                         <label class="plat-toggle"><input type="checkbox"> Facebook</label>
@@ -1664,6 +1674,9 @@
                     cb.addEventListener('change', () => {
                         row.classList.toggle('active', cb.checked);
                         opts.classList.toggle('disabled', !cb.checked);
+                        if (row.dataset.platform === 'instagram') {
+                            document.getElementById('igFormats').classList.toggle('visible', cb.checked);
+                        }
                     }, { signal: s });
                 });
                 document.getElementById('genAdvancedToggle').addEventListener('click', () => {
@@ -1721,7 +1734,15 @@
                     const name = row.getAttribute('data-platform');
                     const postCount = parseInt(row.querySelector('.plat-count').value, 10) || 3;
                     const includeImages = row.querySelector('.img-toggle input').checked;
-                    platforms.push({ name: name, postCount: postCount, includeImages: includeImages });
+                    const plat = { name: name, postCount: postCount, includeImages: includeImages };
+                    if (name === 'instagram') {
+                        const formats = [];
+                        document.querySelectorAll('#igFormats input[type="checkbox"]').forEach(fc => {
+                            if (fc.checked) formats.push(fc.value);
+                        });
+                        plat.formats = formats.length ? formats : ['feed_post'];
+                    }
+                    platforms.push(plat);
                 });
                 return platforms;
             },
