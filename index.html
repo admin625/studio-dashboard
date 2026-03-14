@@ -31,6 +31,10 @@
         .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #f1f5f9; }
         .post-number { font-size: 18px; font-weight: 700; color: #667eea; }
         .content-type-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; background: #dbeafe; color: #1e40af; }
+        .format-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .format-badge.feed_post { background: #dcfce7; color: #166534; }
+        .format-badge.story { background: #fef3c7; color: #92400e; }
+        .format-badge.thread { background: #f3e8ff; color: #6b21a8; }
         .post-image { width: 100%; max-width: 600px; border-radius: 10px; margin: 20px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .image-source { display: inline-block; padding: 4px 10px; margin: 10px 0; border-radius: 15px; font-size: 12px; font-weight: 600; background: #f0fdf4; color: #166534; }
         .image-source.ai-generated { background: #fef3c7; color: #92400e; }
@@ -1279,6 +1283,7 @@
                         if (AppState.filteredPhotos.length && hasImage) swapH = this._renderSwapSection(platform, idx, post);
                         return '<div class="post-card"><div class="post-header"><div class="post-number">Post #' + (post.post_number || idx + 1) + '</div>' +
                             (post.content_type ? '<div class="content-type-badge">' + escapeAttr(post.content_type) + '</div>' : '') +
+                            (post.format ? '<div class="format-badge ' + escapeAttr(post.format) + '">' + escapeAttr(post.format.replace('_', ' ')) + '</div>' : '') +
                             '</div>' + imgH + metaH +
                             '<div class="caption-wrapper"><div class="caption" id="caption-' + platform + '-' + idx + '">' +
                             '<button class="caption-edit-btn" data-action="edit-caption" data-platform="' + platform + '" data-index="' + idx + '">Edit</button>' +
