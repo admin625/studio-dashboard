@@ -369,6 +369,32 @@
         .editor-color-tag .remove-color { background: none; border: none; color: #f85149; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
         .clr-picker { background: #1a1a2e !important; border-color: #2a2a4a !important; z-index: 10001 !important; }
         .clr-picker input { background: #0f0f1a !important; color: #e0e0f0 !important; border-color: #2a2a4a !important; }
+        /* Photo Source Settings */
+        .photo-source-row { margin-bottom: 16px; }
+        .photo-source-select { width: 100%; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; color: #1e293b; background: white; cursor: pointer; font-family: inherit; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 8.825L0.375 3.2l.85-.85L6 7.125 10.775 2.35l.85.85z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+        .photo-source-select:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15); }
+        .ai-photo-prompt-wrap { margin-top: 12px; transition: opacity 0.2s, max-height 0.3s; }
+        .ai-photo-prompt-wrap.hidden { display: none; }
+        .ai-photo-prompt-wrap label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+        .ai-photo-prompt-wrap textarea { width: 100%; min-height: 70px; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; color: #1e293b; transition: border-color 0.2s; box-sizing: border-box; }
+        .ai-photo-prompt-wrap textarea:focus { outline: none; border-color: #667eea; }
+        .ai-photo-prompt-wrap textarea::placeholder { color: #94a3b8; font-size: 13px; }
+        /* Modal photo direction (owner only) */
+        .modal-photo-direction { margin-bottom: 20px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
+        .modal-photo-direction label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+        .modal-photo-direction .section-hint { font-size: 11px; color: #94a3b8; font-weight: 400; }
+        .modal-photo-direction textarea { width: 100%; min-height: 60px; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; color: #1e293b; transition: border-color 0.2s; box-sizing: border-box; }
+        .modal-photo-direction textarea:focus { outline: none; border-color: #667eea; }
+        .modal-photo-direction textarea::placeholder { color: #94a3b8; font-size: 13px; }
+        .modal-photo-direction.hidden { display: none; }
+        /* Contrast fixes: toggles, dropdowns, arrows */
+        .toggle-slider { background: #94a3b8; }
+        .delivery-arrow { color: #475569; font-size: 20px; font-weight: 700; }
+        .generate-modal-card .collapsible-header .toggle-arrow { color: #475569; font-size: 14px; font-weight: 700; }
+        .generate-modal-card select { color: #1e293b; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 8.825L0.375 3.2l.85-.85L6 7.125 10.775 2.35l.85.85z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; appearance: none; -webkit-appearance: none; padding-right: 32px; }
+        .platform-row .plat-opts select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 8.825L0.375 3.2l.85-.85L6 7.125 10.775 2.35l.85.85z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; appearance: none; -webkit-appearance: none; padding-right: 22px; color: #1e293b; }
+        .studio-gallery-header .toggle-icon { color: #475569; font-weight: 700; }
+        .editor-action-btn.save.saved { background: linear-gradient(135deg, #059669 0%, #10b981 100%); opacity: 1; cursor: default; }
     </style>
 </head>
 <body>
@@ -463,15 +489,18 @@
         <!-- Studio Settings (owner only) -->
         <div class="studio-settings" id="studioSettingsSection" style="display: none;">
             <h3>Studio Settings</h3>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <div class="setting-title">Use AI-Generated Photos</div>
-                    <div class="setting-desc">Let AI create photos to match your content. Results may vary &mdash; you can always swap for your own photos.</div>
+            <div class="photo-source-row">
+                <div class="setting-title">Photo Source</div>
+                <div class="setting-desc" style="margin-bottom:10px;">Choose how photos are selected for your content.</div>
+                <select id="photoSourceSelect" class="photo-source-select">
+                    <option value="studio_only">Studio Photos Only</option>
+                    <option value="ai_assist">AI Assist (AI fills gaps)</option>
+                    <option value="ai_only">AI Only</option>
+                </select>
+                <div class="ai-photo-prompt-wrap hidden" id="settingsPhotoPromptWrap">
+                    <label>Photo Direction for AI</label>
+                    <textarea id="settingsPhotoPrompt" placeholder="e.g. outdoor yoga at sunrise, high energy HIIT class, diverse group in modern gym..."></textarea>
                 </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="aiPhotosToggle">
-                    <span class="toggle-slider"></span>
-                </label>
             </div>
         </div>
         <!-- Studio Photo Gallery -->
@@ -652,6 +681,12 @@
                 <textarea id="genPromotions" placeholder="e.g. 20% off first month, free trial class this weekend..." style="min-height:50px;"></textarea>
             </div>
 
+            <!-- Photo Direction (owner only, AI modes) -->
+            <div class="modal-photo-direction hidden" id="modalPhotoDirectionWrap">
+                <label>Photo Direction <span class="section-hint">(optional &mdash; guides AI image generation)</span></label>
+                <textarea id="modalPhotoPrompt" placeholder="e.g. outdoor yoga at sunrise, high energy HIIT class, diverse group in modern gym..."></textarea>
+            </div>
+
             <!-- ADVANCED (collapsible) -->
             <div class="collapsible-header" id="genAdvancedToggle">
                 <h3>Advanced Options</h3>
@@ -816,14 +851,16 @@
             contentData: null, deliveryId: null,
             studioPhotos: [], filteredPhotos: [],
             navGeneration: 0, currentRoute: null, authReady: false,
-            aiPhotosEnabled: false,
+            photoSource: 'studio_only',
+            aiPhotoPrompt: '',
             reset() {
                 this.user = null; this.email = null; this.role = null;
                 this.scopeType = null; this.resolvedStudioId = null; this.resolvedClientId = null;
                 this.contentData = null; this.deliveryId = null;
                 this.studioPhotos = []; this.filteredPhotos = [];
                 this.navGeneration++; this.currentRoute = null;
-                this.aiPhotosEnabled = false;
+                this.photoSource = 'studio_only';
+                this.aiPhotoPrompt = '';
             }
         };
 
@@ -903,14 +940,28 @@
                 const s = this._ac.signal;
                 document.getElementById('loginForm').addEventListener('submit', (e) => { e.preventDefault(); this._handleLogin(); }, { signal: s });
                 document.getElementById('signOutBtn').addEventListener('click', () => this.signOut(), { signal: s });
-                document.getElementById('aiPhotosToggle').addEventListener('change', async (e) => {
-                    const enabled = e.target.checked;
-                    AppState.aiPhotosEnabled = enabled;
+                document.getElementById('photoSourceSelect').addEventListener('change', async (e) => {
+                    const val = e.target.value;
+                    AppState.photoSource = val;
+                    const promptWrap = document.getElementById('settingsPhotoPromptWrap');
+                    promptWrap.classList.toggle('hidden', val === 'studio_only');
                     if (AppState.resolvedStudioId) {
                         try {
-                            await supabaseClient.rpc('update_studio_ai_photos', { p_studio_id: AppState.resolvedStudioId, p_enabled: enabled });
-                        } catch (err) { console.warn('[Settings] Failed to save AI photos setting:', err.message); }
+                            await supabaseClient.from('studio_accounts').update({ photo_source: val }).eq('id', AppState.resolvedStudioId);
+                        } catch (err) { console.warn('[Settings] Failed to save photo source:', err.message); }
                     }
+                }, { signal: s });
+                let _promptSaveTimer = null;
+                document.getElementById('settingsPhotoPrompt').addEventListener('input', (e) => {
+                    AppState.aiPhotoPrompt = e.target.value;
+                    clearTimeout(_promptSaveTimer);
+                    _promptSaveTimer = setTimeout(async () => {
+                        if (AppState.resolvedStudioId) {
+                            try {
+                                await supabaseClient.from('studio_accounts').update({ ai_photo_prompt: AppState.aiPhotoPrompt }).eq('id', AppState.resolvedStudioId);
+                            } catch (err) { console.warn('[Settings] Failed to save photo prompt:', err.message); }
+                        }
+                    }, 1000);
                 }, { signal: s });
                 supabaseClient.auth.onAuthStateChange(async (event, session) => {
                     console.log('[Auth] onAuthStateChange:', event, 'hasSession:', !!session, 'hasUser:', !!session?.user);
@@ -969,9 +1020,12 @@
                     if (ri.studioId) {
                         try {
                             const { data: studioSettings } = await supabaseClient.from('studio_accounts')
-                                .select('ai_photos_enabled').eq('id', ri.studioId).single();
-                            if (studioSettings) AppState.aiPhotosEnabled = !!studioSettings.ai_photos_enabled;
-                        } catch (e) { /* ignore - setting defaults to false */ }
+                                .select('photo_source, ai_photo_prompt').eq('id', ri.studioId).single();
+                            if (studioSettings) {
+                                AppState.photoSource = studioSettings.photo_source || 'studio_only';
+                                AppState.aiPhotoPrompt = studioSettings.ai_photo_prompt || '';
+                            }
+                        } catch (e) { /* ignore - settings default to studio_only */ }
                     }
                     AppState.authReady = true;
                     console.log('[Auth] SUCCESS — Scope:', AppState.scopeType, '| studioId:', AppState.resolvedStudioId, '| role:', AppState.role);
@@ -1086,7 +1140,9 @@
                 const settingsSection = document.getElementById('studioSettingsSection');
                 if (AppState.role === 'studio_owner') {
                     settingsSection.style.display = 'block';
-                    document.getElementById('aiPhotosToggle').checked = AppState.aiPhotosEnabled;
+                    document.getElementById('photoSourceSelect').value = AppState.photoSource;
+                    document.getElementById('settingsPhotoPrompt').value = AppState.aiPhotoPrompt;
+                    document.getElementById('settingsPhotoPromptWrap').classList.toggle('hidden', AppState.photoSource === 'studio_only');
                 } else {
                     settingsSection.style.display = 'none';
                 }
@@ -1154,7 +1210,7 @@
                         '<div class="delivery-card-left"><div class="delivery-date">' + dateStr + '</div>' +
                         '<div class="delivery-platforms">' + (pf.length ? pf.join('') : '<span style="color:#94a3b8;font-size:12px;">No content</span>') + '</div></div>' +
                         '<div class="delivery-card-right"><span class="delivery-post-count">' + total + ' post' + (total !== 1 ? 's' : '') + '</span>' +
-                        '<span class="delivery-arrow">&#8250;</span></div></div>';
+                        '<span class="delivery-arrow">&#10095;</span></div></div>';
                 });
                 html += '</div></div>';
                 container.innerHTML = html;
@@ -1296,7 +1352,9 @@
                     return '<div class="platform-content ' + (pi === 0 ? 'active' : '') + '" id="' + platform + '-content">' + postsHTML + '</div>';
                 }).join('');
 
-                const backBtn = '<button class="back-to-history" data-action="navigate-history">&#8249; All Deliveries</button>';
+                const backBtn = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:16px 20px 0;">' +
+                    '<button class="back-to-history" data-action="navigate-history" style="margin:0;">&#8249; All Deliveries</button>' +
+                    '<button class="btn-generate-content" data-action="open-generate-modal" style="margin:0;font-size:13px;padding:10px 20px;">+ Generate New Content</button></div>';
                 let videoHTML = '';
                 if (isReelsEnabled()) {
                     const vd = AppState.videoData;
@@ -1725,6 +1783,15 @@
                 document.getElementById('freestyleToggle').checked = false;
                 document.getElementById('freestylePrompt').value = '';
                 this._setFreestyle(false);
+                // Photo direction: owner only, visible for AI modes
+                const photoDir = document.getElementById('modalPhotoDirectionWrap');
+                if (AppState.role === 'studio_owner' && AppState.photoSource !== 'studio_only') {
+                    photoDir.classList.remove('hidden');
+                    document.getElementById('modalPhotoPrompt').value = AppState.aiPhotoPrompt || '';
+                } else {
+                    photoDir.classList.add('hidden');
+                    document.getElementById('modalPhotoPrompt').value = '';
+                }
                 document.getElementById('generateModal').classList.remove('hidden');
             },
             close() {
@@ -1831,6 +1898,7 @@
                     }
                 }
 
+                const modalPrompt = (document.getElementById('modalPhotoPrompt').value || '').trim();
                 const payload = {
                     email: AppState.email,
                     studio_id: AppState.resolvedStudioId,
@@ -1838,7 +1906,8 @@
                     user_role: AppState.role,
                     platforms: platforms,
                     client_type: 'fitness_studio',
-                    preferOwnPhotos: !AppState.aiPhotosEnabled
+                    photo_source: AppState.photoSource,
+                    ai_photo_prompt: modalPrompt || AppState.aiPhotoPrompt || ''
                 };
 
                 if (isFreestyle) {
@@ -1953,6 +2022,8 @@
                 document.getElementById('editorAutoContinue').classList.add('hidden');
                 document.getElementById('editorResetBtn').classList.add('hidden');
                 document.getElementById('editorSaveBtn').disabled = true;
+                document.getElementById('editorSaveBtn').textContent = 'Save to Post';
+                document.getElementById('editorSaveBtn').classList.remove('saved');
                 document.getElementById('editorError').classList.add('hidden');
                 document.getElementById('editorColorTag').classList.remove('visible');
                 this._updateBtn();
@@ -2022,7 +2093,10 @@
                         document.getElementById('editorGenerateBtn').classList.remove('loading');
                         document.getElementById('editorAutoContinue').classList.remove('hidden');
                         document.getElementById('editorResetBtn').classList.remove('hidden');
-                        document.getElementById('editorSaveBtn').disabled = true;
+                        var saveBtn = document.getElementById('editorSaveBtn');
+                        saveBtn.disabled = true;
+                        saveBtn.textContent = 'Saved';
+                        saveBtn.classList.add('saved');
                         this._editOrigPhotoUrl = currentUrl;
                         this._iteration++;
                         document.getElementById('editorIterationBadge').textContent = 'Iteration ' + this._iteration;
@@ -2106,6 +2180,8 @@
                 document.getElementById('editorAutoContinue').classList.add('hidden');
                 document.getElementById('editorResetBtn').classList.add('hidden');
                 document.getElementById('editorSaveBtn').disabled = true;
+                document.getElementById('editorSaveBtn').textContent = 'Save to Post';
+                document.getElementById('editorSaveBtn').classList.remove('saved');
                 document.getElementById('editorPrompt').value = '';
                 document.getElementById('editorError').classList.add('hidden');
                 this._selectedColor = null; document.getElementById('editorColorTag').classList.remove('visible');
