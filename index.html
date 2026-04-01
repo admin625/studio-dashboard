@@ -180,6 +180,29 @@
         .btn-retry-video { background: #dc2626; color: white; font-size: 13px; padding: 8px 16px; }
         .studio-settings { background: white; padding: 20px 24px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
         .studio-settings h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px; }
+        .brand-settings { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f1f5f9; }
+        .brand-settings h4 { font-size: 15px; font-weight: 700; color: #334155; margin: 0 0 14px; }
+        .brand-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 520px) { .brand-form-grid { grid-template-columns: 1fr; } }
+        .brand-field { display: flex; flex-direction: column; gap: 4px; }
+        .brand-field label { font-size: 12px; font-weight: 600; color: #475569; }
+        .brand-field input[type="text"], .brand-field textarea, .brand-field select { width: 100%; padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 13px; color: #1e293b; box-sizing: border-box; transition: border-color 0.2s; }
+        .brand-field input:focus, .brand-field textarea:focus, .brand-field select:focus { outline: none; border-color: #667eea; }
+        .brand-field textarea { resize: vertical; min-height: 60px; }
+        .brand-color-input { display: flex; align-items: center; gap: 8px; }
+        .brand-color-input input[type="text"] { flex: 1; }
+        .brand-color-preview { width: 32px; height: 32px; border-radius: 6px; border: 2px solid #e2e8f0; flex-shrink: 0; cursor: pointer; }
+        .brand-logo-preview { width: 80px; height: 80px; border-radius: 10px; object-fit: contain; border: 2px solid #e2e8f0; background: #f8fafc; margin-top: 6px; }
+        .brand-logo-upload { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+        .brand-logo-upload input[type="file"] { display: none; }
+        .brand-logo-upload-btn { padding: 6px 14px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; font-weight: 600; color: #475569; cursor: pointer; transition: all 0.2s; }
+        .brand-logo-upload-btn:hover { background: #e2e8f0; }
+        .brand-save-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+        .brand-save-btn { padding: 8px 20px; background: #059669; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .brand-save-btn:hover { background: #047857; }
+        .brand-save-btn:disabled { background: #a7f3d0; cursor: not-allowed; }
+        .brand-save-status { font-size: 12px; font-weight: 500; color: #059669; opacity: 0; transition: opacity 0.3s; }
+        .brand-save-status.visible { opacity: 1; }
         .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
         .setting-label { flex: 1; }
         .setting-label .setting-title { font-size: 14px; font-weight: 600; color: #334155; }
@@ -500,6 +523,57 @@
                 <div class="ai-photo-prompt-wrap hidden" id="settingsPhotoPromptWrap">
                     <label>Photo Direction for AI</label>
                     <textarea id="settingsPhotoPrompt" placeholder="e.g. outdoor yoga at sunrise, high energy HIIT class, diverse group in modern gym..."></textarea>
+                </div>
+            </div>
+            <div class="brand-settings">
+                <h4>Brand Settings</h4>
+                <div class="brand-form-grid">
+                    <div class="brand-field">
+                        <label>Primary Brand Color</label>
+                        <div class="brand-color-input">
+                            <input type="text" id="brandColorPrimary" data-coloris placeholder="#667eea" value="">
+                        </div>
+                    </div>
+                    <div class="brand-field">
+                        <label>Secondary Brand Color</label>
+                        <div class="brand-color-input">
+                            <input type="text" id="brandColorSecondary" data-coloris placeholder="#ffffff" value="">
+                        </div>
+                    </div>
+                    <div class="brand-field">
+                        <label>Brand Font</label>
+                        <select id="brandFont">
+                            <option value="">Default (System)</option>
+                            <option value="Montserrat">Montserrat</option>
+                            <option value="Inter">Inter</option>
+                            <option value="Poppins">Poppins</option>
+                            <option value="Playfair Display">Playfair Display</option>
+                            <option value="Raleway">Raleway</option>
+                            <option value="Oswald">Oswald</option>
+                            <option value="Lato">Lato</option>
+                            <option value="Roboto">Roboto</option>
+                            <option value="Open Sans">Open Sans</option>
+                            <option value="Bebas Neue">Bebas Neue</option>
+                        </select>
+                    </div>
+                    <div class="brand-field">
+                        <label>Studio Logo</label>
+                        <div class="brand-logo-upload">
+                            <img id="brandLogoPreview" class="brand-logo-preview" src="" alt="" style="display:none;">
+                            <div>
+                                <button type="button" class="brand-logo-upload-btn" id="brandLogoUploadBtn">Upload Logo</button>
+                                <input type="file" id="brandLogoFileInput" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="brand-field" style="grid-column: 1 / -1;">
+                        <label>Brand Voice</label>
+                        <textarea id="brandVoice" placeholder="e.g. High energy, motivational, lots of emojis, community-focused"></textarea>
+                    </div>
+                    <div class="brand-save-row">
+                        <button type="button" class="brand-save-btn" id="brandSaveBtn">Save Brand Settings</button>
+                        <span class="brand-save-status" id="brandSaveStatus">Saved!</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -853,6 +927,11 @@
             navGeneration: 0, currentRoute: null, authReady: false,
             photoSource: 'studio_only',
             aiPhotoPrompt: '',
+            brandColorPrimary: '',
+            brandColorSecondary: '',
+            brandFont: '',
+            brandVoice: '',
+            brandLogoUrl: '',
             reset() {
                 this.user = null; this.email = null; this.role = null;
                 this.scopeType = null; this.resolvedStudioId = null; this.resolvedClientId = null;
@@ -861,6 +940,8 @@
                 this.navGeneration++; this.currentRoute = null;
                 this.photoSource = 'studio_only';
                 this.aiPhotoPrompt = '';
+                this.brandColorPrimary = ''; this.brandColorSecondary = '';
+                this.brandFont = ''; this.brandVoice = ''; this.brandLogoUrl = '';
             }
         };
 
@@ -951,6 +1032,63 @@
                         } catch (err) { console.warn('[Settings] Failed to save photo source:', err.message); }
                     }
                 }, { signal: s });
+                // Brand settings: save button
+                document.getElementById('brandSaveBtn').addEventListener('click', async () => {
+                    if (!AppState.resolvedStudioId) return;
+                    var btn = document.getElementById('brandSaveBtn');
+                    var status = document.getElementById('brandSaveStatus');
+                    btn.disabled = true; btn.textContent = 'Saving\u2026';
+                    try {
+                        var updates = {
+                            brand_color: document.getElementById('brandColorPrimary').value || null,
+                            brand_color_secondary: document.getElementById('brandColorSecondary').value || null,
+                            brand_font: document.getElementById('brandFont').value || null,
+                            brand_voice: document.getElementById('brandVoice').value || null
+                        };
+                        await supabaseClient.from('studio_accounts').update(updates).eq('id', AppState.resolvedStudioId);
+                        AppState.brandColorPrimary = updates.brand_color || '';
+                        AppState.brandColorSecondary = updates.brand_color_secondary || '';
+                        AppState.brandFont = updates.brand_font || '';
+                        AppState.brandVoice = updates.brand_voice || '';
+                        status.textContent = 'Saved!'; status.classList.add('visible');
+                        setTimeout(function() { status.classList.remove('visible'); }, 2000);
+                    } catch (err) {
+                        status.textContent = 'Error: ' + err.message; status.classList.add('visible');
+                    }
+                    btn.disabled = false; btn.textContent = 'Save Brand Settings';
+                }, { signal: s });
+
+                // Brand logo upload
+                document.getElementById('brandLogoUploadBtn').addEventListener('click', function() {
+                    document.getElementById('brandLogoFileInput').click();
+                }, { signal: s });
+                document.getElementById('brandLogoFileInput').addEventListener('change', async (e) => {
+                    var file = e.target.files[0];
+                    if (!file || !AppState.resolvedStudioId) return;
+                    var uploadBtn = document.getElementById('brandLogoUploadBtn');
+                    uploadBtn.textContent = 'Uploading\u2026'; uploadBtn.disabled = true;
+                    try {
+                        var ext = file.name.split('.').pop();
+                        var path = 'logos/' + AppState.resolvedStudioId + '/logo.' + ext;
+                        var { error: upErr } = await supabaseClient.storage.from('studio-photos').upload(path, file, { upsert: true });
+                        if (upErr) throw upErr;
+                        var publicUrl = SUPABASE_URL + '/storage/v1/object/public/studio-photos/' + path;
+                        await supabaseClient.from('studio_accounts').update({ logo_url: publicUrl }).eq('id', AppState.resolvedStudioId);
+                        AppState.brandLogoUrl = publicUrl;
+                        var preview = document.getElementById('brandLogoPreview');
+                        preview.src = publicUrl; preview.style.display = 'block';
+                        var status = document.getElementById('brandSaveStatus');
+                        status.textContent = 'Logo uploaded!'; status.classList.add('visible');
+                        setTimeout(function() { status.classList.remove('visible'); }, 2000);
+                    } catch (err) {
+                        console.error('[Brand] Logo upload failed:', err);
+                        var status = document.getElementById('brandSaveStatus');
+                        status.textContent = 'Upload failed: ' + err.message; status.classList.add('visible');
+                    }
+                    uploadBtn.textContent = 'Upload Logo'; uploadBtn.disabled = false;
+                    e.target.value = '';
+                }, { signal: s });
+
                 let _promptSaveTimer = null;
                 document.getElementById('settingsPhotoPrompt').addEventListener('input', (e) => {
                     AppState.aiPhotoPrompt = e.target.value;
@@ -1020,10 +1158,15 @@
                     if (ri.studioId) {
                         try {
                             const { data: studioSettings } = await supabaseClient.from('studio_accounts')
-                                .select('photo_source, ai_photo_prompt').eq('id', ri.studioId).single();
+                                .select('photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url').eq('id', ri.studioId).single();
                             if (studioSettings) {
                                 AppState.photoSource = studioSettings.photo_source || 'studio_only';
                                 AppState.aiPhotoPrompt = studioSettings.ai_photo_prompt || '';
+                                AppState.brandColorPrimary = studioSettings.brand_color || '';
+                                AppState.brandColorSecondary = studioSettings.brand_color_secondary || '';
+                                AppState.brandFont = studioSettings.brand_font || '';
+                                AppState.brandVoice = studioSettings.brand_voice || '';
+                                AppState.brandLogoUrl = studioSettings.logo_url || '';
                             }
                         } catch (e) { /* ignore - settings default to studio_only */ }
                     }
@@ -1143,6 +1286,13 @@
                     document.getElementById('photoSourceSelect').value = AppState.photoSource;
                     document.getElementById('settingsPhotoPrompt').value = AppState.aiPhotoPrompt;
                     document.getElementById('settingsPhotoPromptWrap').classList.toggle('hidden', AppState.photoSource === 'studio_only');
+                    document.getElementById('brandColorPrimary').value = AppState.brandColorPrimary;
+                    document.getElementById('brandColorSecondary').value = AppState.brandColorSecondary;
+                    document.getElementById('brandFont').value = AppState.brandFont;
+                    document.getElementById('brandVoice').value = AppState.brandVoice;
+                    var logoPreview = document.getElementById('brandLogoPreview');
+                    if (AppState.brandLogoUrl) { logoPreview.src = AppState.brandLogoUrl; logoPreview.style.display = 'block'; }
+                    else { logoPreview.style.display = 'none'; }
                 } else {
                     settingsSection.style.display = 'none';
                 }
@@ -1188,7 +1338,7 @@
                 return fallback;
             },
             _renderCards(deliveries, container) {
-                const genBtn = '<button class="btn-generate-content" data-action="open-generate-modal">+ Generate New Content</button>';
+                const genBtn = '<button class="btn-generate-content" data-action="open-generate-modal">+ Generate New Content</button><p style="font-size:12px;color:#94a3b8;margin:-14px 0 16px;font-weight:400;">FCA creates content suggestions — you decide what to post, when, and where.</p>';
                 let html = genBtn + '<div id="genBannerSlot"></div><div class="delivery-history"><h2>&#128197; Content Deliveries</h2><div class="delivery-list">';
                 deliveries.forEach(d => {
                     let dateStr = 'Unknown date';
