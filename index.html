@@ -910,9 +910,7 @@
         // ================================================================
         // FEATURE FLAGS
         // ================================================================
-        const FEATURE_VIDEO_REELS = false;
-        const REELS_BETA_USERS = ['katie@thelocalkollective.com'];
-        function isReelsEnabled() { return FEATURE_VIDEO_REELS || REELS_BETA_USERS.indexOf(AppState.email) !== -1; }
+        function isReelsEnabled() { return AppState.role === 'studio_owner' && AppState.isBeta === true; }
         const FREESTYLE_OWNERS_ONLY = true;
 
         // ================================================================
@@ -1231,7 +1229,7 @@
                     if (ri.studioId) {
                         try {
                             const { data: studioSettings } = await supabaseClient.from('studio_accounts')
-                                .select('photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url').eq('id', ri.studioId).single();
+                                .select('photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, is_beta').eq('id', ri.studioId).single();
                             if (studioSettings) {
                                 AppState.photoSource = studioSettings.photo_source || 'studio_only';
                                 AppState.aiPhotoPrompt = studioSettings.ai_photo_prompt || '';
@@ -1240,6 +1238,7 @@
                                 AppState.brandFont = studioSettings.brand_font || '';
                                 AppState.brandVoice = studioSettings.brand_voice || '';
                                 AppState.brandLogoUrl = studioSettings.logo_url || '';
+                                AppState.isBeta = studioSettings.is_beta || false;
                             }
                         } catch (e) { /* ignore - settings default to studio_only */ }
                     }
