@@ -34,6 +34,21 @@
         .format-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
         .format-badge.feed_post { background: #dcfce7; color: #166534; }
         .format-badge.story { background: #fef3c7; color: #92400e; }
+
+        .format-badge.carousel { background: #fce7f3; color: #9d174d; }
+        .carousel-viewer { position: relative; background: #f8fafc; border-radius: 12px; overflow: hidden; margin: 8px 0; }
+        .carousel-viewer img { width: 100%; display: block; border-radius: 12px; }
+        .carousel-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+        .carousel-nav.prev { left: 8px; }
+        .carousel-nav.next { right: 8px; }
+        .carousel-nav:hover { background: rgba(0,0,0,0.7); }
+        .carousel-counter { text-align: center; font-size: 12px; color: #64748b; margin: 4px 0; font-weight: 600; }
+        .carousel-slide-text { padding: 8px 12px; }
+        .carousel-slide-text .slide-headline { font-weight: 700; font-size: 14px; color: #1e293b; }
+        .carousel-slide-text .slide-body { font-size: 13px; color: #475569; margin-top: 2px; }
+        .carousel-slide-text .slide-cta { margin-top: 6px; background: #6366f1; color: white; padding: 6px 14px; border-radius: 20px; display: inline-block; font-size: 12px; font-weight: 600; }
+        .carousel-download-all { display: block; text-align: center; margin-top: 8px; padding: 8px; background: #f1f5f9; border-radius: 8px; font-size: 12px; font-weight: 600; color: #334155; cursor: pointer; border: 1px solid #e2e8f0; }
+        .carousel-download-all:hover { background: #e2e8f0; }
         .format-badge.thread { background: #f3e8ff; color: #6b21a8; }
         .post-image { width: 100%; max-width: 600px; border-radius: 10px; margin: 20px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .image-source { display: inline-block; padding: 4px 10px; margin: 10px 0; border-radius: 15px; font-size: 12px; font-weight: 600; background: #f0fdf4; color: #166534; }
@@ -684,6 +699,7 @@
                         <label><input type="checkbox" value="feed_post" checked> Feed Post</label>
                         <label><input type="checkbox" value="story"> Story</label>
                         <label><input type="checkbox" value="thread"> Thread</label>
+                        <label><input type="checkbox" value="carousel"> Carousel</label>
                     </div>
                     <div class="platform-row" data-platform="facebook">
                         <label class="plat-toggle"><input type="checkbox"> Facebook</label>
@@ -1420,6 +1436,52 @@
         // ================================================================
 
         // Posting tip helper
+
+        // Carousel viewer
+        function renderCarouselViewer(post) {
+            if (!post || post.format !== 'carousel' || !post.carousel || !post.carousel.length) return '';
+            var slides = post.carousel;
+            var viewerId = 'carousel-' + Math.random().toString(36).substr(2, 8);
+            var slidesJson = escapeAttr(JSON.stringify(slides));
+            var h = '<div class="carousel-viewer" id="' + viewerId + '" data-slides="' + slidesJson + '" data-idx="0">';
+            h += '<img src="' + escapeAttr(slides[0].image_url || '') + '" alt="Slide 1">';
+            h += '<button class="carousel-nav prev" data-action="carousel-prev" data-viewer="' + viewerId + '">&lsaquo;</button>';
+            h += '<button class="carousel-nav next" data-action="carousel-next" data-viewer="' + viewerId + '">&rsaquo;</button>';
+            h += '</div>';
+            h += '<div class="carousel-counter" id="' + viewerId + '-counter">1 / ' + slides.length + '</div>';
+            h += '<div class="carousel-slide-text" id="' + viewerId + '-text">';
+            h += '<div class="slide-headline">' + escapeAttr(slides[0].headline || '') + '</div>';
+            h += '<div class="slide-body">' + escapeAttr(slides[0].body || '') + '</div>';
+            if (slides[0].cta) h += '<div class="slide-cta">' + escapeAttr(slides[0].cta) + '</div>';
+            h += '</div>';
+            h += '<div class="carousel-download-all" data-action="carousel-download" data-viewer="' + viewerId + '">Download All Slides</div>';
+            return h;
+        }
+        function navigateCarousel(viewerId, direction) {
+            var viewer = document.getElementById(viewerId);
+            if (!viewer) return;
+            var slides = JSON.parse(viewer.getAttribute('data-slides'));
+            var idx = parseInt(viewer.getAttribute('data-idx')) || 0;
+            idx = direction === 'next' ? Math.min(idx + 1, slides.length - 1) : Math.max(idx - 1, 0);
+            viewer.setAttribute('data-idx', idx);
+            viewer.querySelector('img').src = slides[idx].image_url || '';
+            document.getElementById(viewerId + '-counter').textContent = (idx + 1) + ' / ' + slides.length;
+            var textEl = document.getElementById(viewerId + '-text');
+            var s = slides[idx];
+            textEl.innerHTML = '<div class="slide-headline">' + escapeAttr(s.headline || '') + '</div><div class="slide-body">' + escapeAttr(s.body || '') + '</div>' + (s.cta ? '<div class="slide-cta">' + escapeAttr(s.cta) + '</div>' : '');
+        }
+        function downloadAllSlides(viewerId) {
+            var viewer = document.getElementById(viewerId);
+            if (!viewer) return;
+            var slides = JSON.parse(viewer.getAttribute('data-slides'));
+            slides.forEach(function(s, i) {
+                if (s.image_url) {
+                    var a = document.createElement('a'); a.href = s.image_url; a.download = 'slide-' + (i+1) + '.jpg';
+                    a.target = '_blank'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                }
+            });
+        }
+
         function renderPostingTip(post) {
             if (!post || !post.postingTip) return '';
             var labels = {'yoga_pilates':'Yoga/Pilates','hiit_crossfit':'HIIT/CrossFit','dance_barre':'Dance/Barre','martial_arts':'Martial Arts','general_fitness':'General Fitness'};
@@ -1609,7 +1671,7 @@
                             (post.caption || '') + '</div>' +
                             (post.hashtags ? '<div class="hashtags" id="hashtags-' + platform + '-' + idx + '">' +
                             '<button class="caption-edit-btn" data-action="edit-hashtags" data-platform="' + platform + '" data-index="' + idx + '" style="top:4px;">Edit</button>' +
-                            post.hashtags + '</div>' : '') + renderPostingTip(post) + '</div>' +
+                            post.hashtags + '</div>' : '') + renderCarouselViewer(post) + renderPostingTip(post) + '</div>' +
                             actH + swapH + '</div>';
                     }).join('');
                     return '<div class="platform-content ' + (pi === 0 ? 'active' : '') + '" id="' + platform + '-content">' + postsHTML + '</div>';
@@ -1958,7 +2020,31 @@
                 this._pendingFiles = []; btn.disabled = false; btn.textContent = 'Upload';
                 if (successCount > 0) {
                     const { data } = await supabaseClient.from('studio_photos').select('*').eq('studio_id', studioId).eq('is_active', true);
-                    if (data) { AppState.studioPhotos = data; AppState.filteredPhotos = filterPhotosForUser(data); Gallery.render(false); DeliveryDetail._renderDashboard(); }
+                    if (data) { AppState.studioPhotos = data; AppState.filteredPhotos = filterPhotosForUser(data); Gallery.render(false); DeliveryDetail._renderDashboard();
+
+                    // If carousel format was selected, also fire carousel generation
+                    if (window._lastCarouselRequested) {
+                        window._lastCarouselRequested = false;
+                        try {
+                            const carouselRes = await fetch('/.netlify/functions/proxy-webhook?target=fca-carousel', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    studio_id: AppState.resolvedStudioId,
+                                    email: AppState.email,
+                                    instructor_name: document.getElementById('genInstructorName')?.value || '',
+                                    studio_type: AppState.studioType || 'general_fitness',
+                                    topic: null
+                                })
+                            });
+                            const carouselData = await carouselRes.json();
+                            if (carouselData.success && carouselData.carousel) {
+                                console.log('[Carousel] Generated', carouselData.carousel.length, 'slides');
+                                // Store for display — it will show in the next delivery detail render
+                            }
+                        } catch (ce) { console.warn('[Carousel] Generation failed:', ce.message); }
+                    }
+ }
                 }
             },
             _showSummary(type, msg) {
@@ -2076,6 +2162,12 @@
                             if (fc.checked) formats.push(fc.value);
                         });
                         plat.formats = formats.length ? formats : ['feed_post'];
+
+                    // Track if carousel was requested
+                    var carouselChecked = false;
+                    igFormatEls.forEach(function(cb) { if (cb.value === 'carousel' && cb.checked) carouselChecked = true; });
+                    window._lastCarouselRequested = carouselChecked;
+
                     }
                     platforms.push(plat);
                 });
@@ -2496,6 +2588,10 @@
                 case 'navigate-history': Router.navigate('#/deliveries'); break;
                 case 'sign-out': Auth.signOut(); break;
                 case 'switch-tab': DeliveryDetail.switchTab(target.dataset.platform, target); break;
+                
+                case 'carousel-prev': navigateCarousel(target.dataset.viewer, 'prev'); break;
+                case 'carousel-next': navigateCarousel(target.dataset.viewer, 'next'); break;
+                case 'carousel-download': downloadAllSlides(target.dataset.viewer); break;
                 case 'copy-caption': DeliveryDetail.copyCaption(target.dataset.platform, parseInt(target.dataset.index), target); break;
                 case 'edit-photo': PhotoEditor.open(target.dataset.platform, parseInt(target.dataset.index), target.dataset.url, target.dataset.photoId); break;
                 case 'toggle-swap-gallery': DeliveryDetail.toggleSwapGallery(target.dataset.platform, parseInt(target.dataset.index), target); break;
