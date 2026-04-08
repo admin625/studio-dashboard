@@ -182,6 +182,18 @@
         .studio-settings h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px; }
         .brand-settings { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f1f5f9; }
         .brand-settings h4 { font-size: 15px; font-weight: 700; color: #334155; margin: 0 0 14px; }
+        /* Instructor Profiles */
+        .instructor-profiles { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f1f5f9; }
+        .instructor-profiles h4 { font-size: 15px; font-weight: 700; color: #334155; margin: 0 0 14px; }
+        .instructor-card { background: #f8fafc; border-radius: 10px; padding: 14px; margin-bottom: 10px; border: 1px solid #e2e8f0; }
+        .instructor-card .instr-name { font-weight: 600; color: #1e293b; font-size: 14px; margin-bottom: 8px; }
+        .instructor-card textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 13px; resize: vertical; min-height: 60px; box-sizing: border-box; font-family: inherit; }
+        .instructor-card input[type=text] { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 13px; box-sizing: border-box; margin-top: 6px; }
+        .instructor-card label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 4px; margin-top: 8px; }
+        .instructor-card label:first-of-type { margin-top: 0; }
+        .instr-save-status { font-size: 12px; color: #10b981; opacity: 0; transition: opacity 0.3s; margin-left: 8px; }
+        .instr-save-status.visible { opacity: 1; }
+
         .brand-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         @media (max-width: 520px) { .brand-form-grid { grid-template-columns: 1fr; } }
         .brand-field { display: flex; flex-direction: column; gap: 4px; }
@@ -577,6 +589,12 @@
                 </div>
             </div>
         </div>
+
+            <div class="instructor-profiles" id="instructorProfilesSection">
+                <h4>Instructor Profiles</h4>
+                <p style="font-size:13px;color:#64748b;margin:0 0 12px;">Add bios and specialties to personalize content for each instructor.</p>
+                <div id="instructorProfilesList"></div>
+            </div>
         <!-- Studio Photo Gallery -->
         <div class="studio-gallery-section" id="studioGallerySection" style="display: none;">
             <div class="studio-gallery-header" id="galleryHeader">
@@ -1089,6 +1107,61 @@
                     e.target.value = '';
                 }, { signal: s });
 
+
+                // Instructor profiles: load and wire
+                async function loadInstructorProfiles() {
+                    if (!AppState.resolvedStudioId || AppState.role !== 'studio_owner') return;
+                    var container = document.getElementById('instructorProfilesList');
+                    if (!container) return;
+                    try {
+                        var { data: instructors } = await supabaseClient.from('studio_instructors')
+                            .select('id, instructor_name, client_id, status')
+                            .eq('studio_id', AppState.resolvedStudioId).eq('status', 'active');
+                        if (!instructors || instructors.length === 0) {
+                            container.innerHTML = '<p style="color:#94a3b8;font-size:13px;">No active instructors found.</p>';
+                            return;
+                        }
+                        var clientIds = instructors.map(function(i) { return i.client_id; }).filter(Boolean);
+                        var clientMap = {};
+                        if (clientIds.length > 0) {
+                            var { data: clients } = await supabaseClient.from('clients')
+                                .select('id, bio, specialties').in('id', clientIds);
+                            if (clients) clients.forEach(function(c) { clientMap[c.id] = c; });
+                        }
+                        container.innerHTML = '';
+                        instructors.forEach(function(inst) {
+                            var client = inst.client_id ? (clientMap[inst.client_id] || {}) : {};
+                            var card = document.createElement('div');
+                            card.className = 'instructor-card';
+                            card.innerHTML = '<div class="instr-name">' + escapeAttr(inst.instructor_name || 'Instructor') + '<span class="instr-save-status" id="instrStatus-' + inst.id + '">Saved!</span></div>' +
+                                '<label>Bio</label>' +
+                                '<textarea maxlength="300" placeholder="Describe this instructor&#39;s style, personality, and approach..." data-client-id="' + (inst.client_id || '') + '" data-field="bio">' + escapeAttr(client.bio || '') + '</textarea>' +
+                                '<label>Specialties</label>' +
+                                '<input type="text" placeholder="e.g. yoga, meditation, breathwork" data-client-id="' + (inst.client_id || '') + '" data-field="specialties" value="' + escapeAttr(client.specialties || '') + '">';
+                            container.appendChild(card);
+                        });
+                        container.querySelectorAll('textarea, input[type=text]').forEach(function(el) {
+                            var timer = null;
+                            el.addEventListener('input', function() {
+                                var cid = el.getAttribute('data-client-id');
+                                var field = el.getAttribute('data-field');
+                                if (!cid) return;
+                                clearTimeout(timer);
+                                timer = setTimeout(async function() {
+                                    try {
+                                        var upd = {};
+                                        upd[field] = el.value || null;
+                                        await supabaseClient.from('clients').update(upd).eq('id', cid);
+                                        var card = el.closest('.instructor-card');
+                                        var statusEl = card.querySelector('.instr-save-status');
+                                        if (statusEl) { statusEl.classList.add('visible'); setTimeout(function() { statusEl.classList.remove('visible'); }, 2000); }
+                                    } catch (err) { console.warn('[Instructor] Save failed:', err.message); }
+                                }, 1000);
+                            });
+                        });
+                    } catch (err) { console.error('[Instructor] Load failed:', err); }
+                }
+
                 let _promptSaveTimer = null;
                 document.getElementById('settingsPhotoPrompt').addEventListener('input', (e) => {
                     AppState.aiPhotoPrompt = e.target.value;
@@ -1293,6 +1366,7 @@
                     var logoPreview = document.getElementById('brandLogoPreview');
                     if (AppState.brandLogoUrl) { logoPreview.src = AppState.brandLogoUrl; logoPreview.style.display = 'block'; }
                     else { logoPreview.style.display = 'none'; }
+                    loadInstructorProfiles();
                 } else {
                     settingsSection.style.display = 'none';
                 }
