@@ -182,6 +182,15 @@
         .studio-settings h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px; }
         .brand-settings { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f1f5f9; }
         .brand-settings h4 { font-size: 15px; font-weight: 700; color: #334155; margin: 0 0 14px; }
+
+        /* Studio Type */
+        .studio-type-field { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #f1f5f9; }
+        .studio-type-field label { font-weight: 600; color: #334155; font-size: 14px; display: block; margin-bottom: 6px; }
+        .studio-type-field select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; }
+        /* Posting Tips */
+        .posting-tip { background: #f0f9ff; border-radius: 8px; padding: 8px 12px; margin-top: 8px; border: 1px solid #e0f2fe; }
+        .posting-tip-text { font-size: 12px; color: #0369a1; font-weight: 500; }
+        .posting-tip-disclaimer { font-size: 11px; color: #94a3b8; margin-top: 2px; }
         /* Instructor Profiles */
         .instructor-profiles { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f1f5f9; }
         .instructor-profiles h4 { font-size: 15px; font-weight: 700; color: #334155; margin: 0 0 14px; }
@@ -524,6 +533,18 @@
         <!-- Studio Settings (owner only) -->
         <div class="studio-settings" id="studioSettingsSection" style="display: none;">
             <h3>Studio Settings</h3>
+
+            <div class="studio-type-field">
+                <label>Studio Type <span style="font-weight:400;color:#94a3b8;font-size:12px;">(affects content recommendations)</span></label>
+                <select id="studioTypeSelect">
+                    <option value="">Select your studio type...</option>
+                    <option value="yoga_pilates">Yoga / Pilates</option>
+                    <option value="hiit_crossfit">HIIT / CrossFit</option>
+                    <option value="dance_barre">Dance / Barre</option>
+                    <option value="martial_arts">Martial Arts</option>
+                    <option value="general_fitness">General Fitness</option>
+                </select>
+            </div>
             <div class="photo-source-row">
                 <div class="setting-title">Photo Source</div>
                 <div class="setting-desc" style="margin-bottom:10px;">Choose how photos are selected for your content.</div>
@@ -1048,6 +1069,14 @@
                         } catch (err) { console.warn('[Settings] Failed to save photo source:', err.message); }
                     }
                 }, { signal: s });
+                // Studio type save
+                document.getElementById('studioTypeSelect').addEventListener('change', async (e) => {
+                    if (!AppState.resolvedStudioId) return;
+                    AppState.studioType = e.target.value;
+                    try {
+                        await supabaseClient.from('studio_accounts').update({ studio_type: e.target.value || null }).eq('id', AppState.resolvedStudioId);
+                    } catch (err) { console.warn('[Settings] Failed to save studio type:', err.message); }
+                }, { signal: s });
                 // Brand settings: save button
                 document.getElementById('brandSaveBtn').addEventListener('click', async () => {
                     if (!AppState.resolvedStudioId) return;
@@ -1229,7 +1258,7 @@
                     if (ri.studioId) {
                         try {
                             const { data: studioSettings } = await supabaseClient.from('studio_accounts')
-                                .select('photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, is_beta').eq('id', ri.studioId).single();
+                                .select('photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, is_beta, studio_type').eq('id', ri.studioId).single();
                             if (studioSettings) {
                                 AppState.photoSource = studioSettings.photo_source || 'studio_only';
                                 AppState.aiPhotoPrompt = studioSettings.ai_photo_prompt || '';
@@ -1239,6 +1268,7 @@
                                 AppState.brandVoice = studioSettings.brand_voice || '';
                                 AppState.brandLogoUrl = studioSettings.logo_url || '';
                                 AppState.isBeta = studioSettings.is_beta || false;
+                                AppState.studioType = studioSettings.studio_type || '';
                             }
                         } catch (e) { /* ignore - settings default to studio_only */ }
                     }
@@ -1361,6 +1391,7 @@
                     document.getElementById('brandColorPrimary').value = AppState.brandColorPrimary;
                     document.getElementById('brandColorSecondary').value = AppState.brandColorSecondary;
                     document.getElementById('brandFont').value = AppState.brandFont;
+                    document.getElementById('studioTypeSelect').value = AppState.studioType;
                     document.getElementById('brandVoice').value = AppState.brandVoice;
                     var logoPreview = document.getElementById('brandLogoPreview');
                     if (AppState.brandLogoUrl) { logoPreview.src = AppState.brandLogoUrl; logoPreview.style.display = 'block'; }
@@ -1387,6 +1418,15 @@
         // ================================================================
         // DELIVERY LIST MODULE
         // ================================================================
+
+        // Posting tip helper
+        function renderPostingTip(post) {
+            if (!post || !post.postingTip) return '';
+            var labels = {'yoga_pilates':'Yoga/Pilates','hiit_crossfit':'HIIT/CrossFit','dance_barre':'Dance/Barre','martial_arts':'Martial Arts','general_fitness':'General Fitness'};
+            var studioLabel = labels[post.studioType] || 'fitness';
+            return '<div class="posting-tip"><div class="posting-tip-text">' + escapeAttr(post.postingTip) + '</div><div class="posting-tip-disclaimer">Based on typical ' + escapeAttr(studioLabel) + ' audiences \u2014 your results may vary</div></div>';
+        }
+
         const DeliveryList = {
             _knownIds: new Set(),
             _highlightIds: new Set(),
@@ -1569,7 +1609,7 @@
                             (post.caption || '') + '</div>' +
                             (post.hashtags ? '<div class="hashtags" id="hashtags-' + platform + '-' + idx + '">' +
                             '<button class="caption-edit-btn" data-action="edit-hashtags" data-platform="' + platform + '" data-index="' + idx + '" style="top:4px;">Edit</button>' +
-                            post.hashtags + '</div>' : '') + '</div>' +
+                            post.hashtags + '</div>' : '') + renderPostingTip(post) + '</div>' +
                             actH + swapH + '</div>';
                     }).join('');
                     return '<div class="platform-content ' + (pi === 0 ? 'active' : '') + '" id="' + platform + '-content">' + postsHTML + '</div>';
