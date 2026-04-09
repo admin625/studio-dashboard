@@ -58,7 +58,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
   const [error, setError] = useState('')
 
   const addSlot = () => {
-    if (imageSlots.length >= 5) return
+    if (imageSlots.length >= 3) return
     setImageSlots(s => [...s, { id: Date.now(), platforms: ['all'], direction: '' }])
   }
 
@@ -181,7 +181,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
     })
 
     onClose()
-    if (onSubmitted) onSubmitted()
+    if (onSubmitted) onSubmitted(activePlatforms.map(p => p.name))
     setSubmitting(false)
   }
 
@@ -346,13 +346,14 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
                   </div>
                 ))}
               </div>
-              {imageSlots.length < 5 && (
+              {imageSlots.length < 3 && (
                 <button onClick={addSlot}
                   className="w-full mt-2 py-2.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-white transition-all flex items-center justify-center gap-2"
                   style={{ border: '1.5px dashed rgba(255,255,255,0.08)' }}>
                   <Plus size={14} /> Add Image
                 </button>
               )}
+              <p className="text-[10px] text-slate-600 mt-2 text-center">Each AI image adds ~1 minute to generation time</p>
             </div>
           )}
 
@@ -362,16 +363,21 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 flex items-center justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button onClick={onClose} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all hover:-translate-y-0.5 disabled:opacity-60"
-            style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
-          >
-            {submitting ? <><Loader2 size={16} className="animate-spin" /> Submitting...</> : <><Sparkles size={16} /> Generate Content</>}
-          </button>
+        <div className="px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex items-center justify-between">
+            <button onClick={onClose} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
+              style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
+            >
+              {submitting ? <><Loader2 size={16} className="animate-spin" /> Creating...</> : <><Sparkles size={16} /> Create Content</>}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-600 text-center mt-3">
+            FCA generates premium content — great things take a moment. Ready within 20 minutes.
+          </p>
         </div>
       </div>
     </div>

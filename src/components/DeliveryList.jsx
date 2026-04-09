@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
-import { Loader2, Calendar, ChevronRight, Inbox } from 'lucide-react'
+import { Loader2, Calendar, ChevronRight, Inbox, Sparkles } from 'lucide-react'
 
 export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
   const { resolvedStudioId, brandColorPrimary } = useApp()
@@ -71,14 +71,14 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
     return (
       <div className="text-center py-20">
         <Inbox size={48} className="mx-auto mb-4" style={{ color: 'rgba(255,255,255,0.1)' }} />
-        <p className="text-white text-lg font-semibold mb-1">No deliveries yet</p>
-        <p className="text-slate-500 text-sm mb-6">Your content deliveries will appear here once generated.</p>
+        <p className="text-white text-lg font-semibold mb-1">No content yet</p>
+        <p className="text-slate-500 text-sm mb-6">Hit Create Content to generate your first post.</p>
         <button
           onClick={onOpenGenerate}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all hover:-translate-y-0.5"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5"
           style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
         >
-          + Generate Your First Content
+          <Sparkles size={16} /> Create Content
         </button>
       </div>
     )

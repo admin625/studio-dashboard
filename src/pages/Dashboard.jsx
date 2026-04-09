@@ -1,50 +1,64 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
+import { supabase } from '../lib/supabase'
 import Layout from '../components/Layout'
 import DeliveryList from '../components/DeliveryList'
 import GenerateModal from '../components/GenerateModal'
 import PhotoGallery from '../components/PhotoGallery'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Sparkles, X } from 'lucide-react'
 
-const POLL_INTERVAL = 30000
-const POLL_TIMEOUT = 300000
+const POLL_INTERVAL = 15000
 
 export default function Dashboard() {
   const app = useApp()
   const primary = app.brandColorPrimary || '#667eea'
 
   const [genOpen, setGenOpen] = useState(false)
-  const [banner, setBanner] = useState(null) // null | { type, msg }
+  const [showBanner, setShowBanner] = useState(false)
   const [pollTrigger, setPollTrigger] = useState(0)
+  const [pendingPlatforms, setPendingPlatforms] = useState(null)
+  const [pendingTime, setPendingTime] = useState(null)
   const pollRef = useRef(null)
-  const pollStartRef = useRef(0)
+  const knownIdsRef = useRef(new Set())
 
-  const startPolling = () => {
-    stopPolling()
-    pollStartRef.current = Date.now()
-    setBanner({ type: 'progress', msg: 'Your content is being crafted — expect it in 3–5 minutes...' })
+  // Capture known delivery IDs on mount
+  useEffect(() => {
+    if (!app.resolvedStudioId) return
+    supabase.rpc('get_delivery_summaries', { p_studio_id: app.resolvedStudioId })
+      .then(({ data }) => {
+        if (data) knownIdsRef.current = new Set(data.map(d => d.id))
+      })
+  }, [app.resolvedStudioId])
 
-    pollRef.current = setInterval(() => {
-      const elapsed = Date.now() - pollStartRef.current
-      if (elapsed >= POLL_TIMEOUT) {
-        stopPolling()
-        setBanner({ type: 'timeout', msg: 'Taking longer than usual — you will receive an email when ready.' })
-        return
-      }
-      // Trigger a re-fetch of deliveries
-      setPollTrigger(t => t + 1)
+  const startPolling = useCallback(() => {
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data } = await supabase.rpc('get_delivery_summaries', { p_studio_id: app.resolvedStudioId })
+        if (!data) return
+        const newIds = data.filter(d => !knownIdsRef.current.has(d.id))
+        if (newIds.length > 0) {
+          // New delivery found — stop polling, update list
+          clearInterval(pollRef.current)
+          pollRef.current = null
+          newIds.forEach(d => knownIdsRef.current.add(d.id))
+          setPendingPlatforms(null)
+          setPendingTime(null)
+          setShowBanner(false)
+          setPollTrigger(t => t + 1)
+        }
+      } catch (e) { /* silent */ }
     }, POLL_INTERVAL)
-  }
-
-  const stopPolling = () => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-  }
+  }, [app.resolvedStudioId])
 
   useEffect(() => {
-    return () => stopPolling()
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [])
 
-  const handleGenSubmitted = () => {
+  const handleGenSubmitted = (platforms) => {
+    setShowBanner(true)
+    setPendingPlatforms(platforms || ['instagram'])
+    setPendingTime(new Date())
     startPolling()
   }
 
@@ -55,49 +69,79 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <div className="w-6 h-px" style={{ background: primary }} />
-            <span className="text-[10px] font-semibold tracking-[0.2em] uppercase" style={{ color: primary }}>
-              Content
-            </span>
+            <span className="text-[10px] font-semibold tracking-[0.2em] uppercase" style={{ color: primary }}>Content</span>
           </div>
-          <h1
-            className="text-white"
-            style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              fontSize: 'clamp(1.8rem, 4vw, 2.6rem)',
-              letterSpacing: '0.02em',
-            }}
-          >
+          <h1 className="text-white" style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(1.8rem, 4vw, 2.6rem)', letterSpacing: '0.02em' }}>
             Your Deliveries
           </h1>
         </div>
         <button
           onClick={() => setGenOpen(true)}
-          className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all hover:-translate-y-0.5"
-          style={{
-            background: primary,
-            color: isLight(primary) ? '#0A0B0D' : '#fff',
-            boxShadow: `0 4px 20px ${primary}40`,
-          }}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5"
+          style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff', boxShadow: `0 4px 20px ${primary}40` }}
         >
           <Plus size={16} />
-          Generate
+          <span className="hidden sm:inline">Create Content</span>
+          <span className="sm:hidden">Create</span>
         </button>
       </div>
 
-      {/* Progress banner */}
-      {banner && (
+      {/* Async generation banner */}
+      {showBanner && (
         <div
-          className="flex items-center gap-3 px-4 py-3 rounded-xl mb-4"
-          style={{
-            background: banner.type === 'progress' ? `${primary}15` :
-              banner.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(234,179,8,0.15)',
-            border: `1px solid ${banner.type === 'progress' ? primary + '40' :
-              banner.type === 'success' ? '#10b98140' : '#eab30840'}`,
-          }}
+          className="flex items-center gap-3 px-5 py-4 rounded-xl mb-5 relative overflow-hidden"
+          style={{ background: `${primary}12`, border: `1px solid ${primary}30` }}
         >
-          {banner.type === 'progress' && <Loader2 size={14} className="animate-spin" style={{ color: primary }} />}
-          <span className="text-sm text-slate-300 flex-1">{banner.msg}</span>
-          <button onClick={() => { setBanner(null); stopPolling() }} className="text-slate-500 hover:text-white text-xs">×</button>
+          {/* Animated pulse bar */}
+          <div className="absolute inset-0 opacity-20" style={{
+            background: `linear-gradient(90deg, transparent, ${primary}40, transparent)`,
+            animation: 'pulse-slide 2.5s ease-in-out infinite',
+          }} />
+          <div className="relative z-10 flex items-center gap-3 flex-1">
+            <Sparkles size={18} style={{ color: primary }} className="flex-shrink-0" />
+            <div>
+              <p className="text-sm text-white font-semibold">Your content is being created</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Ready within 20 minutes. We'll email you as soon as it's done.
+              </p>
+            </div>
+          </div>
+          <button onClick={() => setShowBanner(false)} className="relative z-10 text-slate-500 hover:text-white transition-colors"><X size={16} /></button>
+        </div>
+      )}
+
+      {/* Pending delivery card */}
+      {pendingPlatforms && (
+        <div
+          className="rounded-xl mb-3 overflow-hidden"
+          style={{ border: `1px solid ${primary}25` }}
+        >
+          <div className="relative px-5 py-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            {/* Animated gradient shimmer */}
+            <div className="absolute inset-0" style={{
+              background: `linear-gradient(90deg, transparent, ${primary}08, transparent)`,
+              animation: 'pulse-slide 3s ease-in-out infinite',
+            }} />
+            <div className="relative z-10 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles size={12} style={{ color: primary }} className="animate-pulse" />
+                  <span className="text-xs text-slate-400">
+                    {pendingTime ? new Date(pendingTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Now'}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-300 font-medium">Generating your content...</p>
+                <div className="flex gap-1.5 mt-1.5">
+                  {pendingPlatforms.map(p => (
+                    <span key={p} className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style={{ background: `${primary}20`, color: primary }}>
+                      {p === 'twitter' ? 'X' : p.substring(0, 2).toUpperCase()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: `${primary}40`, borderTopColor: 'transparent' }} />
+            </div>
+          </div>
         </div>
       )}
 
@@ -109,6 +153,13 @@ export default function Dashboard() {
 
       {/* Generate modal */}
       <GenerateModal open={genOpen} onClose={() => setGenOpen(false)} onSubmitted={handleGenSubmitted} />
+
+      <style>{`
+        @keyframes pulse-slide {
+          0%, 100% { transform: translateX(-100%); }
+          50% { transform: translateX(100%); }
+        }
+      `}</style>
     </Layout>
   )
 }
