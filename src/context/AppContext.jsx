@@ -19,7 +19,9 @@ const INITIAL_STATE = {
   brandVoice: '',
   brandLogoUrl: '',
   studioType: '',
+  studioName: '',
   isBeta: false,
+  lastContentTypes: [],
   // Photos
   studioPhotos: [],
   filteredPhotos: [],
