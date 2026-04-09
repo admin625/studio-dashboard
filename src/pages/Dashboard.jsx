@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
 import DeliveryList from '../components/DeliveryList'
 import GenerateModal from '../components/GenerateModal'
+import PhotoGallery from '../components/PhotoGallery'
 import { Plus, Loader2 } from 'lucide-react'
 
 const POLL_INTERVAL = 30000
@@ -102,6 +103,9 @@ export default function Dashboard() {
 
       {/* Delivery list */}
       <DeliveryList onOpenGenerate={() => setGenOpen(true)} pollTrigger={pollTrigger} />
+
+      {/* Photo gallery + upload */}
+      <PhotoGallery />
 
       {/* Generate modal */}
       <GenerateModal open={genOpen} onClose={() => setGenOpen(false)} onSubmitted={handleGenSubmitted} />
