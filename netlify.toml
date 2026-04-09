@@ -1,13 +1,14 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  environment = { NODE_VERSION = "18" }
+
+[build.environment]
+  NODE_VERSION = "20"
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# SPA fallback — all routes serve index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
