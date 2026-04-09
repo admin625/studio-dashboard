@@ -1,13 +1,26 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
 
 export default function Login() {
   const { login } = useAuth()
+  const { user, authReady } = useApp()
+  const navigate = useNavigate()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (authReady && user) {
+      console.log('[FCA] Login: user authenticated, redirecting to /deliveries')
+      navigate('/deliveries', { replace: true })
+    }
+  }, [authReady, user, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -16,17 +29,22 @@ export default function Login() {
     setLoading(true)
     try {
       await login(email, password)
+      // AuthProvider will set user + authReady via onAuthStateChange
+      // The useEffect above will redirect once user is set
+      console.log('[FCA] Login: signInWithPassword succeeded, waiting for auth state...')
     } catch (err) {
       setError(err.message || 'Login failed')
-    } finally {
       setLoading(false)
     }
+    // Don't setLoading(false) on success — keep spinner until redirect
   }
+
+  // If already authenticated, show nothing (redirect is happening)
+  if (authReady && user) return null
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#0A0B0D' }}>
       <div className="w-full max-w-sm">
-        {/* Hero mark */}
         <div className="text-center mb-10">
           <div
             className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-6"
@@ -48,7 +66,6 @@ export default function Login() {
           <p className="text-slate-500 text-sm">Sign in to your dashboard</p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold tracking-wider uppercase text-slate-500 mb-2">
@@ -104,7 +121,7 @@ export default function Login() {
             }}
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
-            {loading ? 'Signing in…' : 'Sign In'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
