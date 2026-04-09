@@ -432,6 +432,22 @@
         .photo-source-row { margin-bottom: 16px; }
         .photo-source-select { width: 100%; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; color: #1e293b; background: white; cursor: pointer; font-family: inherit; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 8.825L0.375 3.2l.85-.85L6 7.125 10.775 2.35l.85.85z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
         .photo-source-select:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15); }
+
+        /* Photo Direction Examples */
+        .photo-direction-helper { font-size: 12px; color: #64748b; margin-bottom: 8px; line-height: 1.5; }
+        .photo-examples-toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; font-size: 12px; font-weight: 600; color: #6366f1; cursor: pointer; padding: 6px 0; margin-top: 6px; }
+        .photo-examples-toggle:hover { color: #4338ca; }
+        .photo-examples-toggle .toggle-icon { transition: transform 0.2s; font-size: 10px; }
+        .photo-examples-toggle.open .toggle-icon { transform: rotate(90deg); }
+        .photo-examples-body { display: none; margin-top: 8px; }
+        .photo-examples-body.open { display: block; }
+        .photo-example-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+        .photo-example-card .example-label { font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 4px; }
+        .photo-example-card .example-text { font-size: 11px; color: #64748b; font-style: italic; line-height: 1.5; cursor: pointer; }
+        .photo-example-card .example-text:hover { color: #4338ca; }
+        .photo-examples-note { font-size: 11px; color: #94a3b8; margin-top: 8px; font-style: italic; }
+        .photo-prompt-saved { font-size: 12px; color: #10b981; font-weight: 500; opacity: 0; transition: opacity 0.3s; margin-left: 8px; }
+        .photo-prompt-saved.visible { opacity: 1; }
         .ai-photo-prompt-wrap { margin-top: 12px; transition: opacity 0.2s, max-height 0.3s; }
         .ai-photo-prompt-wrap.hidden { display: none; }
         .ai-photo-prompt-wrap label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
@@ -440,6 +456,14 @@
         .ai-photo-prompt-wrap textarea::placeholder { color: #94a3b8; font-size: 13px; }
         /* Modal photo direction (owner only) */
 
+
+        /* Session Vibe Override */
+        .session-vibe { margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%); border: 1.5px solid #c7d2fe; border-radius: 12px; }
+        .session-vibe label { display: block; font-size: 14px; font-weight: 700; color: #3730a3; margin-bottom: 4px; }
+        .session-vibe .vibe-helper { font-size: 12px; color: #6366f1; margin-bottom: 8px; font-weight: 400; }
+        .session-vibe textarea { width: 100%; min-height: 55px; padding: 10px 14px; border: 1.5px solid #c7d2fe; border-radius: 8px; font-size: 13px; font-family: inherit; resize: vertical; color: #1e293b; background: white; box-sizing: border-box; }
+        .session-vibe textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+        .session-vibe textarea::placeholder { color: #a5b4fc; font-size: 12px; }
         /* Multi-slot AI Image Builder */
         .image-slot-builder { margin-bottom: 20px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
         .image-slot-builder > label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px; }
@@ -596,8 +620,17 @@
                     <option value="ai_only">AI Only</option>
                 </select>
                 <div class="ai-photo-prompt-wrap hidden" id="settingsPhotoPromptWrap">
-                    <label>Photo Direction for AI</label>
-                    <textarea id="settingsPhotoPrompt" placeholder="e.g. outdoor yoga at sunrise, high energy HIIT class, diverse group in modern gym..."></textarea>
+                    <label>Photo Direction for AI <span class="photo-prompt-saved" id="photoPromptSaved">Saved!</span></label>
+                    <p class="photo-direction-helper">Describe the look and feel you want for your studio's AI-generated images. Think lighting, mood, setting, and people.</p>
+                    <textarea id="settingsPhotoPrompt" placeholder="e.g. Bright natural light, diverse women in their 30s-40s, mid-workout intensity, clean white studio background, empowering and energetic mood"></textarea>
+                    <button type="button" class="photo-examples-toggle" id="photoExamplesToggle" data-action="toggle-photo-examples">See examples by studio type <span class="toggle-icon">&#9654;</span></button>
+                    <div class="photo-examples-body" id="photoExamplesBody">
+                        <div class="photo-example-card"><div class="example-label">&#129496; Yoga / Mindfulness</div><div class="example-text" data-action="use-photo-example">Soft natural light, peaceful expressions, diverse practitioners, wood floors and plants, calm and grounded mood, earth tones</div></div>
+                        <div class="photo-example-card"><div class="example-label">&#128170; HIIT / CrossFit</div><div class="example-text" data-action="use-photo-example">High contrast lighting, athletes mid-rep, sweaty and intense, dark industrial background, bold and motivational, high energy</div></div>
+                        <div class="photo-example-card"><div class="example-label">&#129648; Barre / Dance</div><div class="example-text" data-action="use-photo-example">Elegant studio setting, ballet barres and mirrors, graceful movement, pastel tones, feminine and refined mood, aspirational</div></div>
+                        <div class="photo-example-card"><div class="example-label">&#129354; Martial Arts</div><div class="example-text" data-action="use-photo-example">Action shots, focused expressions, traditional gi or athletic gear, clean dojo background, disciplined and powerful mood</div></div>
+                        <p class="photo-examples-note">This is your default style. You can override it anytime in settings or per session when generating content.</p>
+                    </div>
                 </div>
             </div>
             <div class="brand-settings">
@@ -709,6 +742,13 @@
                 </label>
                 <span class="ft-label">Freestyle Mode</span>
                 <span class="ft-helper">Describe what you want in your own words</span>
+            </div>
+
+            <!-- Session Vibe Override -->
+            <div class="session-vibe" id="sessionVibeWrap">
+                <label>This session's vibe</label>
+                <p class="vibe-helper">Adjust for this batch of content. Changes here won't affect your saved brand settings.</p>
+                <textarea id="sessionVibeInput" placeholder="e.g. Valentine's week — warm, fun, couples energy, soft pinks and reds"></textarea>
             </div>
 
             <!-- PLATFORMS with post count & image toggle per platform -->
@@ -1241,6 +1281,8 @@
                         if (AppState.resolvedStudioId) {
                             try {
                                 await supabaseClient.from('studio_accounts').update({ ai_photo_prompt: AppState.aiPhotoPrompt }).eq('id', AppState.resolvedStudioId);
+                                var pps = document.getElementById('photoPromptSaved');
+                                if (pps) { pps.classList.add('visible'); setTimeout(function() { pps.classList.remove('visible'); }, 2000); }
                             } catch (err) { console.warn('[Settings] Failed to save photo prompt:', err.message); }
                         }
                     }, 1000);
@@ -1591,12 +1633,16 @@
             },
             getPayload() {
                 var self = this;
+                var sessionVibe = (document.getElementById('sessionVibeInput') || {}).value || '';
                 return this.slots.filter(function(s) { return s.direction.trim(); }).map(function(s) {
                     var dirs = s.platforms.map(function(p) {
                         var mod = self.PLATFORM_MODIFIERS[p] || '';
-                        var full = s.direction.trim();
-                        if (mod) full += '. Style: ' + mod;
-                        return { platform: p, direction: full, direction_raw: s.direction.trim() };
+                        var parts = [];
+                        if (sessionVibe.trim()) parts.push(sessionVibe.trim());
+                        parts.push(s.direction.trim());
+                        if (mod) parts.push('Style: ' + mod);
+                        var full = parts.join('. ');
+                        return { platform: p, direction: full, direction_raw: s.direction.trim(), session_vibe: sessionVibe.trim() };
                     });
                     return dirs;
                 }).flat();
@@ -2256,6 +2302,10 @@
                 document.getElementById('freestyleToggle').checked = false;
                 document.getElementById('freestylePrompt').value = '';
                 this._setFreestyle(false);
+                // Session vibe: pre-populate with saved direction
+                var vibeInput = document.getElementById('sessionVibeInput');
+                if (vibeInput) vibeInput.value = AppState.aiPhotoPrompt || AppState.brandVoice || '';
+
                 // AI Image Builder: owner only, visible for AI modes
                 const photoDir = document.getElementById('modalPhotoDirectionWrap');
                 if (AppState.role === 'studio_owner' && AppState.photoSource !== 'studio_only') {
@@ -2392,6 +2442,7 @@
                     client_type: 'fitness_studio',
                     photo_source: AppState.photoSource,
                     ai_photo_prompt: modalPrompt || AppState.aiPhotoPrompt || '',
+                    session_vibe: (document.getElementById('sessionVibeInput') || {}).value || '',
                     image_slots: imageSlots
                 };
 
@@ -2720,6 +2771,18 @@
                 case 'switch-tab': DeliveryDetail.switchTab(target.dataset.platform, target); break;
                 
                 
+                
+                case 'toggle-photo-examples':
+                    var exBody = document.getElementById('photoExamplesBody');
+                    var exBtn = document.getElementById('photoExamplesToggle');
+                    exBody.classList.toggle('open');
+                    exBtn.classList.toggle('open');
+                    break;
+                case 'use-photo-example':
+                    var exText = target.textContent;
+                    var promptEl = document.getElementById('settingsPhotoPrompt');
+                    if (promptEl) { promptEl.value = exText; promptEl.dispatchEvent(new Event('input')); }
+                    break;
                 case 'add-image-slot': ImageSlotBuilder.addSlot(); break;
                 case 'remove-image-slot': ImageSlotBuilder.removeSlot(parseInt(target.dataset.slot)); break;
                 case 'toggle-platform-chip': ImageSlotBuilder.togglePlatform(parseInt(target.dataset.slot), target.dataset.platform); break;
