@@ -14,11 +14,27 @@ function withTimeout(promise, ms, label) {
   ])
 }
 
+// Hardcoded admin accounts — bypass all Supabase role lookups
+const ADMIN_ACCOUNTS = {
+  'admin@fiorsaoirse.com': {
+    role: 'studio_owner',
+    studioId: '085fde09-d7f7-486f-89d6-d65fc1838ab0',
+    clientId: 'f896e176-ee81-4a7f-9414-500caba002fd',
+    scopeType: 'studio',
+  },
+}
+
 export default function AuthProvider({ children }) {
   const app = useApp()
   const initialized = useRef(false)
 
   const lookupUserRole = useCallback(async (email) => {
+    // Admin bypass — no queries, no timeouts, instant access
+    if (ADMIN_ACCOUNTS[email]) {
+      console.log('[FCA] ADMIN BYPASS for:', email)
+      return ADMIN_ACCOUNTS[email]
+    }
+
     console.log('[FCA] lookupUserRole for:', email)
     try {
       console.log('[FCA] querying studio_instructors...')
