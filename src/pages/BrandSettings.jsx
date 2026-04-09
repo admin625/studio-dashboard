@@ -10,7 +10,7 @@ import { useApp } from '../context/AppContext'
 import { useBrandSettings } from '../hooks/useBrandSettings'
 import Layout from '../components/Layout'
 import {
-  Leaf, Zap, Disc3, Shield, BarChart3,
+  Leaf, Zap, Disc3, Shield, BarChart3, Pencil,
   Palette, Type, MessageSquare, ImagePlus,
   Camera, Upload, Check, ChevronRight,
   ArrowRight, RotateCcw, Sparkles, Loader2,
@@ -37,7 +37,9 @@ const STUDIO_TYPES = [
   { value: 'dance_barre', label: 'DANCE /\nBARRE', sub: 'Grace & strength', Icon: Disc3 },
   { value: 'martial_arts', label: 'MARTIAL\nARTS', sub: 'Discipline first', Icon: Shield },
   { value: 'general_fitness', label: 'GENERAL\nFITNESS', sub: 'All-around power', Icon: BarChart3 },
+  { value: 'custom', label: 'SOMETHING\nELSE', sub: 'Tell us your style', Icon: Pencil },
 ]
+const KNOWN_TYPES = STUDIO_TYPES.filter(t => t.value !== 'custom').map(t => t.value)
 
 const FONTS = [
   { value: '', label: 'Default (System)' },
@@ -157,7 +159,9 @@ export default function BrandSettings() {
   const [showVoice, setShowVoice] = useState(false)
   const [showPhoto, setShowPhoto] = useState(false)
   const [saveState, setSaveState] = useState('idle')
+  const [customType, setCustomType] = useState('')
   const promptTimer = useRef(null)
+  const customTimer = useRef(null)
   const fileRef = useRef(null)
 
   // Sync from AppContext when it changes (e.g., after initial load)
@@ -169,7 +173,14 @@ export default function BrandSettings() {
     if (app.brandLogoUrl) setLogoUrl(app.brandLogoUrl)
     if (app.photoSource) setPhotoSrc(app.photoSource)
     if (app.aiPhotoPrompt) setPrompt(app.aiPhotoPrompt)
-    if (app.studioType) setStudioTyp(app.studioType)
+    if (app.studioType) {
+      if (KNOWN_TYPES.includes(app.studioType)) {
+        setStudioTyp(app.studioType)
+      } else {
+        setStudioTyp('custom')
+        setCustomType(app.studioType)
+      }
+    }
   }, [app.brandColorPrimary, app.brandColorSecondary, app.brandFont, app.brandVoice, app.brandLogoUrl, app.photoSource, app.aiPhotoPrompt, app.studioType]) // eslint-disable-line
 
   // Font loader
@@ -184,7 +195,8 @@ export default function BrandSettings() {
   }, [font])
 
   // Progress
-  const filled = [studioTyp, primary !== '#667eea' && primary, font, voice.trim().length > 8, logoUrl].filter(Boolean).length
+  const typeComplete = studioTyp && (studioTyp !== 'custom' || customType.trim())
+  const filled = [typeComplete, primary !== '#667eea' && primary, font, voice.trim().length > 8, logoUrl].filter(Boolean).length
   const pct = Math.round((filled / 5) * 100)
 
   // Handlers
@@ -202,7 +214,25 @@ export default function BrandSettings() {
 
   const handleStudioType = async (val) => {
     setStudioTyp(val)
-    try { await saveStudioType(val) } catch (e) { console.warn(e) }
+    if (val === 'custom') {
+      // Don't save yet — wait for custom input
+      if (customType) {
+        try { await saveStudioType(customType) } catch (e) { console.warn(e) }
+      }
+    } else {
+      setCustomType('')
+      try { await saveStudioType(val) } catch (e) { console.warn(e) }
+    }
+  }
+
+  const handleCustomType = (val) => {
+    setCustomType(val)
+    clearTimeout(customTimer.current)
+    customTimer.current = setTimeout(async () => {
+      if (val.trim()) {
+        try { await saveStudioType(val.trim()) } catch (e) { console.warn(e) }
+      }
+    }, 800)
   }
 
   const handlePhotoSrc = async (val) => {
@@ -278,7 +308,7 @@ export default function BrandSettings() {
           <p className="text-[#4A4E5A] text-sm leading-relaxed mb-8 max-w-lg">
             Your studio type shapes every piece of content FCA generates.
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-white/[0.04]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-white/[0.04]">
             {STUDIO_TYPES.map(t => {
               const sel = studioTyp === t.value
               return (
@@ -293,6 +323,29 @@ export default function BrandSettings() {
               )
             })}
           </div>
+          {studioTyp === 'custom' && (
+            <div className="mt-4" style={{ animation: 'fade-up 0.25s ease both' }}>
+              <p className="text-[10px] font-semibold tracking-[0.18em] uppercase mb-2" style={{ color: primary }}>
+                Describe your studio type
+              </p>
+              <input
+                type="text"
+                value={customType}
+                onChange={e => handleCustomType(e.target.value)}
+                placeholder="e.g. Boxing, Cycling, Rowing, Functional Training..."
+                autoFocus
+                className="w-full px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
+                style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderBottom: `2px solid ${primary}40`, borderRadius: 0 }}
+                onFocus={e => (e.target.style.borderBottomColor = primary)}
+                onBlur={e => (e.target.style.borderBottomColor = `${primary}40`)}
+              />
+              {customType.trim() && (
+                <p className="text-xs mt-2" style={{ color: primary }}>
+                  <Check size={11} className="inline mr-1" />Saved as "{customType.trim()}"
+                </p>
+              )}
+            </div>
+          )}
         </Section>
 
         <Divider brandColor={primary} />
