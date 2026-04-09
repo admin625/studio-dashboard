@@ -7,6 +7,9 @@
     <link rel="icon" type="image/png" href="assets/logo.png">
     <link rel="apple-touch-icon" href="assets/logo.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.94.1/dist/umd/supabase.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css"/>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -193,43 +196,77 @@
         .video-error p { color: #991b1b; font-size: 14px; margin: 0 0 12px; }
         .video-error .error-detail { font-size: 12px; color: #b91c1c; background: #fee2e2; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-family: monospace; }
         .btn-retry-video { background: #dc2626; color: white; font-size: 13px; padding: 8px 16px; }
-        .studio-settings { background: white; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); overflow: hidden; }
+        .studio-settings { background: transparent; border-radius: 0; margin-bottom: 24px; box-shadow: none; overflow: visible; font-family: 'DM Sans', -apple-system, sans-serif; }
         .studio-settings h3 { display: none; }
-        /* Brand Hero Header */
-        .brand-hero { padding: 28px 28px 22px; position: relative; overflow: hidden; }
-        .brand-hero::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, var(--brand-primary, #667eea) 0%, var(--brand-primary-dark, #764ba2) 100%); opacity: 0.08; }
-        .brand-hero-title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0 0 4px; position: relative; }
-        .brand-hero-sub { font-size: 13px; color: #64748b; margin: 0; position: relative; line-height: 1.5; }
-        .brand-progress { display: flex; align-items: center; gap: 10px; margin-top: 14px; position: relative; }
-        .brand-progress-bar { flex: 1; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
-        .brand-progress-fill { height: 100%; background: linear-gradient(90deg, #10b981, #059669); border-radius: 3px; transition: width 0.5s ease; }
-        .brand-progress-label { font-size: 11px; font-weight: 600; color: #10b981; white-space: nowrap; }
-        /* Brand Card Sections */
-        .brand-cards { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 16px; }
-        .brand-card { background: #fafbfc; border: 1px solid #e8ecf1; border-radius: 14px; padding: 20px; transition: box-shadow 0.2s, transform 0.15s; }
-        .brand-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); transform: translateY(-1px); }
-        .brand-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-        .brand-card-icon { font-size: 20px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .brand-card-title { font-size: 14px; font-weight: 700; color: #1e293b; }
+        /* ── Dark Hero ── */
+        .brand-hero { background: #0A0B0D; border-radius: 16px; padding: 32px; position: relative; overflow: hidden; margin-bottom: 16px; }
+        .brand-hero-slash { position: absolute; top: 0; right: 0; width: 260px; height: 100%; opacity: 0.2; pointer-events: none; }
+        .brand-hero-dots { position: absolute; inset: 0; opacity: 0.04; background-image: radial-gradient(circle, #fff 1px, transparent 1px); background-size: 24px 24px; }
+        .brand-hero-eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .brand-hero-eyebrow-line { height: 1px; width: 24px; }
+        .brand-hero-eyebrow-text { font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; }
+        .brand-hero-title { font-family: 'Bebas Neue', sans-serif; color: white; font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: 0.03em; line-height: 1.05; margin: 0 0 8px; }
+        .brand-hero-sub { font-size: 13px; color: #94a3b8; margin: 0 0 16px; line-height: 1.6; max-width: 420px; }
+        .brand-progress { display: flex; align-items: center; gap: 16px; }
+        .brand-progress-pct { font-family: 'Bebas Neue', sans-serif; font-size: 48px; font-weight: 900; line-height: 1; color: white; transition: color 0.5s; }
+        .brand-progress-bar-wrap { flex: 1; max-width: 280px; }
+        .brand-progress-meta { display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-bottom: 6px; }
+        .brand-progress-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+        .brand-progress-fill { height: 100%; border-radius: 3px; transition: width 0.7s ease; }
+        .brand-progress-hint { font-size: 11px; color: #475569; margin-top: 6px; }
+        .brand-progress-label { display: none; }
+        /* ── Cards ── */
+        .brand-cards { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+        .brand-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04); transition: box-shadow 0.2s, transform 0.15s; }
+        .brand-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06); transform: translateY(-1px); }
+        .brand-card-accent { height: 3px; width: 100%; }
+        .brand-card-body { padding: 24px 28px 28px; }
+        .brand-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+        .brand-card-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .brand-card-label { font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #94a3b8; margin-bottom: 2px; }
+        .brand-card-title { font-family: 'Bebas Neue', sans-serif; font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: 0.02em; }
+        .brand-card-ghost { font-family: 'Bebas Neue', sans-serif; font-size: 64px; font-weight: 900; line-height: 1; color: rgba(0,0,0,0.03); user-select: none; }
+        .brand-card-desc { font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 16px; }
         .brand-settings { margin: 0; padding: 0; border: none; }
         .brand-settings h4 { display: none; }
-        /* Color Palette Preview */
-        .color-palette-preview { display: flex; gap: 0; border-radius: 8px; overflow: hidden; margin-top: 12px; height: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        .color-palette-swatch { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; transition: all 0.3s; }
-        /* Font Preview */
-        .font-preview { margin-top: 8px; padding: 12px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 15px; color: #334155; transition: font-family 0.3s; }
-        /* Voice Examples (same pattern as photo examples) */
-        .voice-examples-toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; font-size: 12px; font-weight: 600; color: #6366f1; cursor: pointer; padding: 6px 0; margin-top: 6px; }
-        .voice-examples-toggle:hover { color: #4338ca; }
-        .voice-examples-toggle .toggle-icon { transition: transform 0.2s; font-size: 10px; }
-        .voice-examples-toggle.open .toggle-icon { transform: rotate(90deg); }
-        .voice-examples-body { display: none; margin-top: 8px; }
-        .voice-examples-body.open { display: block; }
-        /* Save Button upgrade */
-        .brand-save-row { padding: 0 24px 24px; display: flex; align-items: center; gap: 12px; }
-        .brand-save-btn { padding: 10px 28px; background: linear-gradient(135deg, #059669, #10b981); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(5,150,105,0.3); }
-        .brand-save-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5,150,105,0.4); }
-        .brand-save-btn:disabled { background: #a7f3d0; cursor: not-allowed; transform: none; box-shadow: none; }
+        /* ── Color Palette ── */
+        .color-palette-preview { display: flex; border-radius: 12px; overflow: hidden; margin-top: 16px; height: 56px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+        .color-palette-swatch { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; letter-spacing: 1px; transition: all 0.3s; }
+        /* ── Font Preview ── */
+        .font-preview-wrap { background: #0A0B0D; border-radius: 12px; padding: 16px 20px; margin-top: 12px; }
+        .font-preview-label { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; opacity: 0.6; }
+        .font-preview { color: white; font-size: 1.1rem; line-height: 1.3; transition: font-family 0.5s; background: transparent; border: none; padding: 0; margin: 0; }
+        .font-preview-sub { font-size: 13px; color: rgba(255,255,255,0.35); margin-top: 4px; transition: font-family 0.5s; }
+        /* ── Voice / Photo Examples ── */
+        .examples-toggle { display: flex; align-items: center; gap: 8px; background: none; border: none; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; padding: 8px 0; margin-top: 8px; transition: color 0.15s; }
+        .examples-toggle:hover { opacity: 0.8; }
+        .examples-toggle .toggle-icon { transition: transform 0.2s; display: flex; }
+        .examples-toggle.open .toggle-icon { transform: rotate(90deg); }
+        .examples-body { display: none; margin-top: 8px; }
+        .examples-body.open { display: grid; gap: 8px; }
+        .example-card { text-align: left; padding: 14px 16px; border-radius: 12px; border: 2px solid #f1f5f9; background: #fafbfc; cursor: pointer; transition: all 0.15s; }
+        .example-card:hover { border-color: #c7d2fe; background: #f5f3ff; }
+        .example-card-label { font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px; }
+        .example-card-text { font-size: 12px; color: #64748b; line-height: 1.5; font-style: italic; }
+        .examples-note { font-size: 11px; color: #94a3b8; font-style: italic; margin-top: 4px; padding: 0 4px; }
+        /* ── Photo Source Buttons ── */
+        .photo-src-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+        .photo-src-btn { padding: 12px; border-radius: 12px; border: 2px solid #e2e8f0; background: #fafbfc; text-align: center; cursor: pointer; transition: all 0.15s; }
+        .photo-src-btn:hover { transform: translateY(-1px); }
+        .photo-src-btn.active { border-color: var(--brand-primary, #667eea); background: color-mix(in srgb, var(--brand-primary, #667eea) 8%, white); }
+        .photo-src-btn-icon { display: flex; justify-content: center; margin-bottom: 6px; }
+        .photo-src-btn-label { font-size: 12px; font-weight: 700; color: #334155; }
+        .photo-src-btn-desc { font-size: 11px; color: #94a3b8; }
+        /* ── Save Row ── */
+        .brand-save-row { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
+        .brand-save-btn { padding: 14px 32px; border-radius: 12px; border: none; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; color: white; }
+        .brand-save-btn:hover { transform: translateY(-1px); }
+        .brand-save-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .brand-save-status { font-size: 13px; font-weight: 600; color: #10b981; opacity: 0; transition: opacity 0.3s; }
+        .brand-save-status.visible { opacity: 1; }
+        /* keep old aliases working */
+        .voice-examples-toggle, .voice-examples-body { display: none; }
+        .photo-examples-toggle, .photo-examples-body { display: none; }
 
         /* Studio Type */
         .studio-type-field { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #f1f5f9; }
@@ -643,130 +680,217 @@
         <div class="studio-settings" id="studioSettingsSection" style="display: none;">
             <h3>Studio Settings</h3>
 
-            <!-- Brand Hero -->
+            <!-- ═══ DARK HERO ═══ -->
             <div class="brand-hero" id="brandHero">
-                <h2 class="brand-hero-title">Your Studio's Brand</h2>
-                <p class="brand-hero-sub">This is how FCA understands your studio. The stronger your brand setup, the better your content.</p>
-                <div class="brand-progress">
-                    <div class="brand-progress-bar"><div class="brand-progress-fill" id="brandProgressFill" style="width:0%"></div></div>
-                    <span class="brand-progress-label" id="brandProgressLabel">0/5 complete</span>
+                <div class="brand-hero-slash" id="brandHeroSlash"></div>
+                <div class="brand-hero-dots"></div>
+                <div style="position:relative;z-index:1;">
+                    <div class="brand-hero-eyebrow">
+                        <div class="brand-hero-eyebrow-line" id="heroEyebrowLine"></div>
+                        <span class="brand-hero-eyebrow-text" id="heroEyebrowText">Brand Identity</span>
+                    </div>
+                    <h2 class="brand-hero-title">Your Studio's DNA.<br><span id="heroAccent">Make It Unmistakable.</span></h2>
+                    <p class="brand-hero-sub">Every field you complete trains FCA to sound, look, and feel like <em>your</em> studio &mdash; not a generic gym down the street.</p>
+                    <div class="brand-progress">
+                        <span class="brand-progress-pct" id="brandProgressPct">0%</span>
+                        <div class="brand-progress-bar-wrap">
+                            <div class="brand-progress-meta"><span>Brand Setup</span><span id="brandProgressLabel">0/5 complete</span></div>
+                            <div class="brand-progress-bar"><div class="brand-progress-fill" id="brandProgressFill" style="width:0%"></div></div>
+                            <p class="brand-progress-hint" id="brandProgressHint">5 fields left &mdash; the more you fill in, the better your content.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Studio Type (moved into card) -->
             <div class="brand-cards">
 
+            <!-- ═══ 01 Studio Type ═══ -->
             <div class="brand-card">
-                <div class="brand-card-header"><div class="brand-card-icon">&#127757;</div><div class="brand-card-title">Studio Type</div></div>
-                <div class="studio-type-field" style="margin:0;padding:0;border:0;">
-                    <select id="studioTypeSelect" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:500;">
-                        <option value="">Select your studio type...</option>
-                        <option value="yoga_pilates">Yoga / Pilates</option>
-                        <option value="hiit_crossfit">HIIT / CrossFit</option>
-                        <option value="dance_barre">Dance / Barre</option>
-                        <option value="martial_arts">Martial Arts</option>
-                        <option value="general_fitness">General Fitness</option>
-                    </select>
+                <div class="brand-card-accent" id="cardAccent1"></div>
+                <div class="brand-card-body">
+                    <div class="brand-card-header">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div class="brand-card-icon" id="cardIcon1"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></svg></div>
+                            <div><p class="brand-card-label">Section 1</p><h3 class="brand-card-title">Studio Type</h3></div>
+                        </div>
+                        <span class="brand-card-ghost">01</span>
+                    </div>
+                    <p class="brand-card-desc">FCA uses your studio type to calibrate language, hashtags, and content themes that fit your world.</p>
+                    <div class="studio-type-field" style="margin:0;padding:0;border:0;">
+                        <select id="studioTypeSelect" style="width:100%;padding:12px 14px;border:2px solid #f1f5f9;border-radius:12px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer;background:#fafbfc;appearance:none;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 8.825L0.375 3.2l.85-.85L6 7.125 10.775 2.35l.85.85z'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;">
+                            <option value="">Select your studio type&hellip;</option>
+                            <option value="yoga_pilates">Yoga / Pilates</option>
+                            <option value="hiit_crossfit">HIIT / CrossFit</option>
+                            <option value="dance_barre">Dance / Barre</option>
+                            <option value="martial_arts">Martial Arts</option>
+                            <option value="general_fitness">General Fitness</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <!-- Brand Colors Card -->
+            <!-- ═══ 02 Brand Colors ═══ -->
             <div class="brand-card">
-                <div class="brand-card-header"><div class="brand-card-icon">&#127912;</div><div class="brand-card-title">Brand Colors</div></div>
-                <div class="brand-settings">
-                <div class="brand-form-grid">
-                    <div class="brand-field">
-                        <label>Primary</label>
-                        <div class="brand-color-input">
-                            <input type="text" id="brandColorPrimary" data-coloris placeholder="#667eea" value="">
+                <div class="brand-card-accent" id="cardAccent2"></div>
+                <div class="brand-card-body">
+                    <div class="brand-card-header">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div class="brand-card-icon" id="cardIcon2"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></div>
+                            <div><p class="brand-card-label">Section 2</p><h3 class="brand-card-title">Brand Colors</h3></div>
+                        </div>
+                        <span class="brand-card-ghost">02</span>
+                    </div>
+                    <p class="brand-card-desc">These go on every generated image. Make them yours.</p>
+                    <div class="brand-settings">
+                    <div class="brand-form-grid">
+                        <div class="brand-field">
+                            <label>Primary</label>
+                            <div class="brand-color-input">
+                                <input type="text" id="brandColorPrimary" data-coloris placeholder="#667eea" value="">
+                            </div>
+                        </div>
+                        <div class="brand-field">
+                            <label>Secondary</label>
+                            <div class="native-color-wrap">
+                                <input type="color" id="brandColorSecondaryPicker" value="#ffffff">
+                                <input type="text" id="brandColorSecondary" placeholder="#ffffff" value="" maxlength="7" style="flex:1;">
+                            </div>
                         </div>
                     </div>
+                    <div class="color-palette-preview" id="colorPalettePreview">
+                        <div class="color-palette-swatch" id="palettePrimary" style="background:#667eea;color:white;">PRIMARY</div>
+                        <div class="color-palette-swatch" id="paletteSecondary" style="background:#ffffff;color:#334155;outline:1px solid #e2e8f0;">SECONDARY</div>
+                    </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ 03 Brand Font ═══ -->
+            <div class="brand-card">
+                <div class="brand-card-accent" id="cardAccent3"></div>
+                <div class="brand-card-body">
+                    <div class="brand-card-header">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div class="brand-card-icon" id="cardIcon3"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg></div>
+                            <div><p class="brand-card-label">Section 3</p><h3 class="brand-card-title">Brand Font</h3></div>
+                        </div>
+                        <span class="brand-card-ghost">03</span>
+                    </div>
+                    <p class="brand-card-desc">Sets the typographic mood for AI-generated graphics and visual content.</p>
                     <div class="brand-field">
-                        <label>Secondary</label>
-                        <div class="native-color-wrap">
-                            <input type="color" id="brandColorSecondaryPicker" value="#ffffff">
-                            <input type="text" id="brandColorSecondary" placeholder="#ffffff" value="" maxlength="7" style="flex:1;">
+                        <select id="brandFont" style="width:100%;padding:12px 14px;border:2px solid #f1f5f9;border-radius:12px;font-size:14px;font-family:inherit;cursor:pointer;background:#fafbfc;appearance:none;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 8.825L0.375 3.2l.85-.85L6 7.125 10.775 2.35l.85.85z'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;">
+                            <option value="">Default (System)</option>
+                            <option value="Montserrat">Montserrat</option>
+                            <option value="Inter">Inter</option>
+                            <option value="Poppins">Poppins</option>
+                            <option value="Playfair Display">Playfair Display</option>
+                            <option value="Raleway">Raleway</option>
+                            <option value="Oswald">Oswald</option>
+                            <option value="Lato">Lato</option>
+                            <option value="Roboto">Roboto</option>
+                            <option value="Open Sans">Open Sans</option>
+                            <option value="Bebas Neue">Bebas Neue</option>
+                        </select>
+                    </div>
+                    <div class="font-preview-wrap">
+                        <p class="font-preview-label" id="fontPreviewLabel" style="color:#667eea;">Preview</p>
+                        <p class="font-preview" id="fontPreview">Train Hard. Live Strong.</p>
+                        <p class="font-preview-sub" id="fontPreviewSub">The quick brown fox jumps over the lazy dog</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ 04 Brand Voice ═══ -->
+            <div class="brand-card">
+                <div class="brand-card-accent" id="cardAccent4"></div>
+                <div class="brand-card-body">
+                    <div class="brand-card-header">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div class="brand-card-icon" id="cardIcon4"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+                            <div><p class="brand-card-label">Section 4</p><h3 class="brand-card-title">Brand Voice</h3></div>
+                        </div>
+                        <span class="brand-card-ghost">04</span>
+                    </div>
+                    <p class="brand-card-desc">How does your studio talk? The energy, the personality, the words you use. This is what FCA sounds like when it writes for you.</p>
+                    <div class="brand-field">
+                        <textarea id="brandVoice" placeholder="e.g. Energetic and real &mdash; we're not a fancy studio, we're a community. We speak like a coach who actually cares." style="min-height:80px;border-radius:12px;padding:14px;font-size:14px;border:2px solid #f1f5f9;background:#fafbfc;"></textarea>
+                    </div>
+                    <button type="button" class="examples-toggle" id="voiceExamplesToggle" data-action="toggle-voice-examples" style="color:#667eea;">
+                        <span class="toggle-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span> See examples by studio type
+                    </button>
+                    <div class="examples-body" id="voiceExamplesBody">
+                        <div class="example-card" data-action="use-voice-example" data-text="Warm, grounding, and inclusive. We speak like a trusted friend &mdash; calm, encouraging, never preachy. We celebrate small wins and meet people where they are."><p class="example-card-label">&#129496; Yoga / Mindfulness</p><p class="example-card-text">Warm, grounding, and inclusive. We speak like a trusted friend &mdash; calm, encouraging, never preachy. We celebrate small wins and meet people where they are.</p></div>
+                        <div class="example-card" data-action="use-voice-example" data-text="Bold, direct, and motivating. We don't sugarcoat &mdash; we push. High energy, community-driven, a little gritty. We celebrate hard work and results."><p class="example-card-label">&#128170; HIIT / CrossFit</p><p class="example-card-text">Bold, direct, and motivating. We don't sugarcoat &mdash; we push. High energy, community-driven, a little gritty. We celebrate hard work and results.</p></div>
+                        <div class="example-card" data-action="use-voice-example" data-text="Elegant, aspirational, and empowering. We speak with grace and confidence. Our community is strong, refined, and supports each other."><p class="example-card-label">&#129648; Barre / Dance</p><p class="example-card-text">Elegant, aspirational, and empowering. We speak with grace and confidence. Our community is strong, refined, and supports each other.</p></div>
+                        <div class="example-card" data-action="use-voice-example" data-text="Disciplined, respectful, and empowering. We speak with authority but warmth. We build confidence and character, not just technique."><p class="example-card-label">&#129354; Martial Arts</p><p class="example-card-text">Disciplined, respectful, and empowering. We speak with authority but warmth. We build confidence and character, not just technique.</p></div>
+                        <p class="examples-note">This is your default voice. Override it per session when generating content.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ 05 Studio Logo ═══ -->
+            <div class="brand-card">
+                <div class="brand-card-accent" id="cardAccent5"></div>
+                <div class="brand-card-body">
+                    <div class="brand-card-header">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div class="brand-card-icon" id="cardIcon5"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+                            <div><p class="brand-card-label">Section 5</p><h3 class="brand-card-title">Studio Logo</h3></div>
+                        </div>
+                        <span class="brand-card-ghost">05</span>
+                    </div>
+                    <p class="brand-card-desc">Your logo appears as context when FCA creates branded images. Use a clean PNG or SVG.</p>
+                    <div class="brand-logo-upload" style="align-items:center;">
+                        <div style="width:72px;height:72px;border-radius:14px;border:2px dashed #e2e8f0;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;background:#fafbfc;">
+                            <img id="brandLogoPreview" class="brand-logo-preview" src="" alt="" style="display:none;width:100%;height:100%;object-fit:contain;padding:4px;">
+                            <span id="logoPlaceholder" style="font-size:24px;">&#127991;&#65039;</span>
+                        </div>
+                        <div style="flex:1;">
+                            <button type="button" class="brand-logo-upload-btn" id="brandLogoUploadBtn" style="border-radius:10px;padding:8px 16px;">Upload Logo</button>
+                            <input type="file" id="brandLogoFileInput" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+                            <p style="font-size:11px;color:#94a3b8;margin-top:4px;">PNG, SVG, or JPG</p>
                         </div>
                     </div>
                 </div>
-                <div class="color-palette-preview" id="colorPalettePreview">
-                    <div class="color-palette-swatch" id="palettePrimary" style="background:#667eea;color:white;">Primary</div>
-                    <div class="color-palette-swatch" id="paletteSecondary" style="background:#ffffff;color:#334155;border:1px solid #e2e8f0;">Secondary</div>
-                </div>
-                </div>
             </div>
 
-            <!-- Brand Font Card -->
+            <!-- ═══ 06 Photo Direction ═══ -->
             <div class="brand-card">
-                <div class="brand-card-header"><div class="brand-card-icon">&#9997;&#65039;</div><div class="brand-card-title">Brand Font</div></div>
-                <div class="brand-field">
-                    <select id="brandFont" style="padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:14px;">
-                        <option value="">Default (System)</option>
-                        <option value="Montserrat">Montserrat</option>
-                        <option value="Inter">Inter</option>
-                        <option value="Poppins">Poppins</option>
-                        <option value="Playfair Display">Playfair Display</option>
-                        <option value="Raleway">Raleway</option>
-                        <option value="Oswald">Oswald</option>
-                        <option value="Lato">Lato</option>
-                        <option value="Roboto">Roboto</option>
-                        <option value="Open Sans">Open Sans</option>
-                        <option value="Bebas Neue">Bebas Neue</option>
-                    </select>
-                    <div class="font-preview" id="fontPreview">The quick brown fox jumps over the lazy dog</div>
-                </div>
-            </div>
-
-            <!-- Brand Voice Card -->
-            <div class="brand-card">
-                <div class="brand-card-header"><div class="brand-card-icon">&#128483;&#65039;</div><div class="brand-card-title">Brand Voice</div></div>
-                <div class="brand-field">
-                    <p style="font-size:12px;color:#64748b;margin:0 0 8px;line-height:1.5;">Describe how your studio sounds. Think about the words you use, the energy you bring, and how you make people feel.</p>
-                    <textarea id="brandVoice" placeholder="e.g. Energetic and real &#x2014; we're not a fancy studio, we're a community. We speak like a coach who actually cares." style="min-height:70px;"></textarea>
-                    <button type="button" class="voice-examples-toggle" id="voiceExamplesToggle" data-action="toggle-voice-examples">See examples by studio type <span class="toggle-icon">&#9654;</span></button>
-                    <div class="voice-examples-body" id="voiceExamplesBody">
-                        <div class="photo-example-card"><div class="example-label">&#129496; Yoga / Mindfulness</div><div class="example-text" data-action="use-voice-example">Warm, grounding, and inclusive. We speak like a trusted friend &#x2014; calm, encouraging, never preachy. We celebrate small wins and meet people where they are.</div></div>
-                        <div class="photo-example-card"><div class="example-label">&#128170; HIIT / CrossFit</div><div class="example-text" data-action="use-voice-example">Bold, direct, and motivating. We don't sugarcoat &#x2014; we push. High energy, community-driven, a little gritty. We celebrate hard work and results.</div></div>
-                        <div class="photo-example-card"><div class="example-label">&#129648; Barre / Dance</div><div class="example-text" data-action="use-voice-example">Elegant, aspirational, and empowering. We speak with grace and confidence. Our community is strong, refined, and supports each other.</div></div>
-                        <div class="photo-example-card"><div class="example-label">&#129354; Martial Arts</div><div class="example-text" data-action="use-voice-example">Disciplined, respectful, and empowering. We speak with authority but warmth. We build confidence and character, not just technique.</div></div>
-                        <p class="photo-examples-note">This is your default voice. You can override it per session when generating content.</p>
+                <div class="brand-card-accent" id="cardAccent6"></div>
+                <div class="brand-card-body">
+                    <div class="brand-card-header">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <div class="brand-card-icon" id="cardIcon6"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
+                            <div><p class="brand-card-label">Section 6</p><h3 class="brand-card-title">Photo Direction</h3></div>
+                        </div>
+                        <span class="brand-card-ghost">06</span>
                     </div>
-                </div>
-            </div>
-
-            <!-- Studio Logo Card -->
-            <div class="brand-card">
-                <div class="brand-card-header"><div class="brand-card-icon">&#128247;</div><div class="brand-card-title">Studio Logo</div></div>
-                <div class="brand-logo-upload">
-                    <img id="brandLogoPreview" class="brand-logo-preview" src="" alt="" style="display:none;">
-                    <div>
-                        <button type="button" class="brand-logo-upload-btn" id="brandLogoUploadBtn">Upload Logo</button>
-                        <input type="file" id="brandLogoFileInput" accept="image/png,image/jpeg,image/svg+xml,image/webp">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Photo Direction Card -->
-            <div class="brand-card">
-                <div class="brand-card-header"><div class="brand-card-icon">&#128248;</div><div class="brand-card-title">Photo Direction</div></div>
-                <div class="photo-source-row" style="margin:0;">
-                    <div style="font-size:12px;color:#64748b;margin-bottom:10px;">Choose how photos are selected for your content.</div>
-                    <select id="photoSourceSelect" class="photo-source-select" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:10px;">
-                        <option value="studio_only">Studio Photos Only</option>
-                        <option value="ai_assist">AI Assist (AI fills gaps)</option>
-                        <option value="ai_only">AI Only</option>
-                    </select>
-                    <div class="ai-photo-prompt-wrap hidden" id="settingsPhotoPromptWrap">
-                        <label style="font-size:13px;font-weight:600;color:#475569;">AI Photo Style <span class="photo-prompt-saved" id="photoPromptSaved">Saved!</span></label>
-                        <p class="photo-direction-helper">Describe the look and feel you want for your studio's AI-generated images.</p>
-                        <textarea id="settingsPhotoPrompt" placeholder="e.g. Bright natural light, diverse women in their 30s-40s, mid-workout intensity, clean white studio background, empowering and energetic mood"></textarea>
-                        <button type="button" class="photo-examples-toggle" id="photoExamplesToggle" data-action="toggle-photo-examples">See examples by studio type <span class="toggle-icon">&#9654;</span></button>
-                        <div class="photo-examples-body" id="photoExamplesBody">
-                            <div class="photo-example-card"><div class="example-label">&#129496; Yoga / Mindfulness</div><div class="example-text" data-action="use-photo-example">Soft natural light, peaceful expressions, diverse practitioners, wood floors and plants, calm and grounded mood, earth tones</div></div>
-                            <div class="photo-example-card"><div class="example-label">&#128170; HIIT / CrossFit</div><div class="example-text" data-action="use-photo-example">High contrast lighting, athletes mid-rep, sweaty and intense, dark industrial background, bold and motivational, high energy</div></div>
-                            <div class="photo-example-card"><div class="example-label">&#129648; Barre / Dance</div><div class="example-text" data-action="use-photo-example">Elegant studio setting, ballet barres and mirrors, graceful movement, pastel tones, feminine and refined mood, aspirational</div></div>
-                            <div class="photo-example-card"><div class="example-label">&#129354; Martial Arts</div><div class="example-text" data-action="use-photo-example">Action shots, focused expressions, traditional gi or athletic gear, clean dojo background, disciplined and powerful mood</div></div>
-                            <p class="photo-examples-note">This is your default style. You can override it per session when generating content.</p>
+                    <p class="brand-card-desc">Tell FCA where your images come from &mdash; your own studio shots, AI assistance, or a blend of both.</p>
+                    <div class="photo-source-row" style="margin:0;">
+                        <div class="photo-src-grid" id="photoSrcGrid">
+                            <div class="photo-src-btn" data-action="set-photo-src" data-val="studio_only"><div class="photo-src-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div><p class="photo-src-btn-label">Studio Only</p><p class="photo-src-btn-desc">Your photos</p></div>
+                            <div class="photo-src-btn" data-action="set-photo-src" data-val="ai_assist"><div class="photo-src-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg></div><p class="photo-src-btn-label">AI Assist</p><p class="photo-src-btn-desc">Fills the gaps</p></div>
+                            <div class="photo-src-btn" data-action="set-photo-src" data-val="ai_only"><div class="photo-src-btn-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></div><p class="photo-src-btn-label">AI Only</p><p class="photo-src-btn-desc">Fully generated</p></div>
+                        </div>
+                        <select id="photoSourceSelect" class="photo-source-select" style="display:none;">
+                            <option value="studio_only">Studio Photos Only</option>
+                            <option value="ai_assist">AI Assist (AI fills gaps)</option>
+                            <option value="ai_only">AI Only</option>
+                        </select>
+                        <div class="ai-photo-prompt-wrap hidden" id="settingsPhotoPromptWrap">
+                            <label style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#64748b;">AI Photo Style <span class="photo-prompt-saved" id="photoPromptSaved" style="color:#10b981;opacity:0;transition:opacity 0.3s;text-transform:none;letter-spacing:0;">Saved!</span></label>
+                            <p class="photo-direction-helper" style="margin:6px 0 8px;">Describe the look and feel &mdash; lighting, mood, people, setting.</p>
+                            <textarea id="settingsPhotoPrompt" placeholder="e.g. Bright natural light, diverse women in their 30s-40s, mid-workout intensity, clean white studio background, empowering and energetic mood" style="border-radius:12px;padding:14px;font-size:14px;border:2px solid #f1f5f9;background:#fafbfc;min-height:72px;"></textarea>
+                            <button type="button" class="examples-toggle" id="photoExamplesToggle" data-action="toggle-photo-examples" style="color:#667eea;">
+                                <span class="toggle-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span> See examples by studio type
+                            </button>
+                            <div class="examples-body" id="photoExamplesBody">
+                                <div class="example-card" data-action="use-photo-example" data-text="Soft natural light, peaceful expressions, diverse practitioners, wood floors and plants, calm and grounded mood, earth tones"><p class="example-card-label">&#129496; Yoga / Mindfulness</p><p class="example-card-text">Soft natural light, peaceful expressions, diverse practitioners, wood floors and plants, calm and grounded mood, earth tones</p></div>
+                                <div class="example-card" data-action="use-photo-example" data-text="High contrast lighting, athletes mid-rep, sweaty and intense, dark industrial background, bold and motivational, high energy"><p class="example-card-label">&#128170; HIIT / CrossFit</p><p class="example-card-text">High contrast lighting, athletes mid-rep, sweaty and intense, dark industrial background, bold and motivational, high energy</p></div>
+                                <div class="example-card" data-action="use-photo-example" data-text="Elegant studio setting, ballet barres and mirrors, graceful movement, pastel tones, feminine and refined mood, aspirational"><p class="example-card-label">&#129648; Barre / Dance</p><p class="example-card-text">Elegant studio setting, ballet barres and mirrors, graceful movement, pastel tones, feminine and refined mood, aspirational</p></div>
+                                <div class="example-card" data-action="use-photo-example" data-text="Action shots, focused expressions, traditional gi or athletic gear, clean dojo background, disciplined and powerful mood"><p class="example-card-label">&#129354; Martial Arts</p><p class="example-card-text">Action shots, focused expressions, traditional gi or athletic gear, clean dojo background, disciplined and powerful mood</p></div>
+                                <p class="examples-note">This is your default style. Override it per session when generating content.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -775,7 +899,7 @@
             </div><!-- /brand-cards -->
 
             <div class="brand-save-row">
-                <button type="button" class="brand-save-btn" id="brandSaveBtn">Save Brand Settings</button>
+                <button type="button" class="brand-save-btn" id="brandSaveBtn" style="background:#1a1a1a;">Save Brand Settings</button>
                 <span class="brand-save-status" id="brandSaveStatus">Saved!</span>
             </div>
         </div>
@@ -1261,15 +1385,25 @@
                 function updateBrandProgress() {
                     var filled = 0;
                     if (document.getElementById('studioTypeSelect').value) filled++;
-                    if (document.getElementById('brandColorPrimary').value) filled++;
+                    if (document.getElementById('brandColorPrimary').value && document.getElementById('brandColorPrimary').value !== '#1a1a1a') filled++;
                     if (document.getElementById('brandFont').value) filled++;
                     if (document.getElementById('brandVoice').value.trim()) filled++;
                     if (AppState.brandLogoUrl) filled++;
                     var pct = Math.round((filled / 5) * 100);
                     var fill = document.getElementById('brandProgressFill');
                     var label = document.getElementById('brandProgressLabel');
+                    var pctEl = document.getElementById('brandProgressPct');
+                    var hint = document.getElementById('brandProgressHint');
                     if (fill) fill.style.width = pct + '%';
                     if (label) label.textContent = filled + '/5 complete';
+                    if (pctEl) pctEl.textContent = pct + '%';
+                    if (hint) {
+                        if (pct >= 100) hint.innerHTML = '<span style="color:' + (document.getElementById('brandColorPrimary').value || '#667eea') + '">&#10003; Brand fully configured &mdash; FCA knows your studio.</span>';
+                        else hint.textContent = (5 - filled) + ' field' + (5 - filled !== 1 ? 's' : '') + ' left \u2014 the more you fill in, the better your content.';
+                    }
+                    // Sync photo source buttons
+                    var curSrc = document.getElementById('photoSourceSelect')?.value || 'studio_only';
+                    document.querySelectorAll('.photo-src-btn').forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-val') === curSrc); });
                 }
 
                 // Color palette live preview
@@ -1278,11 +1412,38 @@
                     var sc = document.getElementById('brandColorSecondary').value || '#ffffff';
                     var pp = document.getElementById('palettePrimary');
                     var ps = document.getElementById('paletteSecondary');
-                    if (pp) { pp.style.background = pc; pp.textContent = pc; pp.style.color = isLight(pc) ? '#1e293b' : 'white'; }
-                    if (ps) { ps.style.background = sc; ps.textContent = sc; ps.style.color = isLight(sc) ? '#1e293b' : 'white'; ps.style.border = isLight(sc) ? '1px solid #e2e8f0' : 'none'; }
-                    // Update hero gradient
-                    var hero = document.getElementById('brandHero');
-                    if (hero) hero.style.setProperty('--brand-primary', pc);
+                    if (pp) { pp.style.background = pc; pp.textContent = 'PRIMARY'; pp.style.color = isLight(pc) ? '#0f172a' : 'white'; }
+                    if (ps) { ps.style.background = sc; ps.textContent = 'SECONDARY'; ps.style.color = isLight(sc) ? '#0f172a' : 'white'; ps.style.outline = isLight(sc) ? '1px solid #e2e8f0' : 'none'; }
+                    // Dark hero accent color
+                    var slash = document.getElementById('brandHeroSlash');
+                    if (slash) slash.style.background = 'linear-gradient(135deg, transparent 40%, ' + pc + ')';
+                    var eyeLine = document.getElementById('heroEyebrowLine');
+                    if (eyeLine) eyeLine.style.background = pc;
+                    var eyeText = document.getElementById('heroEyebrowText');
+                    if (eyeText) eyeText.style.color = pc;
+                    var heroAccent = document.getElementById('heroAccent');
+                    if (heroAccent) heroAccent.style.color = pc;
+                    // Card accent bars + icons
+                    for (var ci = 1; ci <= 6; ci++) {
+                        var acc = document.getElementById('cardAccent' + ci);
+                        if (acc) acc.style.background = pc;
+                        var ico = document.getElementById('cardIcon' + ci);
+                        if (ico) { ico.style.background = pc + '18'; ico.style.color = pc; }
+                    }
+                    // Save button + font preview label
+                    var saveBtn = document.getElementById('brandSaveBtn');
+                    if (saveBtn) { saveBtn.style.background = pc; saveBtn.style.color = isLight(pc) ? '#0f172a' : 'white'; saveBtn.style.boxShadow = '0 4px 20px ' + pc + '40'; }
+                    var fpLabel = document.getElementById('fontPreviewLabel');
+                    if (fpLabel) fpLabel.style.color = pc;
+                    // Progress bar fill
+                    var fill = document.getElementById('brandProgressFill');
+                    if (fill) fill.style.background = pc;
+                    var pctEl = document.getElementById('brandProgressPct');
+                    if (pctEl) pctEl.style.color = (document.getElementById('brandProgressFill')?.style.width === '100%') ? pc : 'white';
+                    // Photo source buttons
+                    document.querySelectorAll('.photo-src-btn').forEach(function(b) { b.style.setProperty('--brand-primary', pc); });
+                    // Examples toggle color
+                    document.querySelectorAll('.examples-toggle').forEach(function(t) { t.style.color = pc; });
                 }
                 function isLight(hex) {
                     hex = hex.replace('#','');
@@ -1293,9 +1454,12 @@
 
                 // Font live preview
                 function updateFontPreview() {
-                    var font = document.getElementById('brandFont').value || 'inherit';
+                    var font = document.getElementById('brandFont').value || '';
+                    var ff = font ? "'" + font + "', sans-serif" : 'inherit';
                     var preview = document.getElementById('fontPreview');
-                    if (preview) preview.style.fontFamily = font === '' ? 'inherit' : font + ', sans-serif';
+                    var sub = document.getElementById('fontPreviewSub');
+                    if (preview) { preview.style.fontFamily = ff; preview.style.fontSize = (font === 'Bebas Neue' || font === 'Oswald') ? '2rem' : '1.1rem'; }
+                    if (sub) sub.style.fontFamily = ff;
                 }
 
                 // Wire live previews
@@ -1647,8 +1811,9 @@
                     document.getElementById('studioTypeSelect').value = AppState.studioType;
                     document.getElementById('brandVoice').value = AppState.brandVoice;
                     var logoPreview = document.getElementById('brandLogoPreview');
-                    if (AppState.brandLogoUrl) { logoPreview.src = AppState.brandLogoUrl; logoPreview.style.display = 'block'; }
-                    else { logoPreview.style.display = 'none'; }
+                    var logoPlaceholder = document.getElementById('logoPlaceholder');
+                    if (AppState.brandLogoUrl) { logoPreview.src = AppState.brandLogoUrl; logoPreview.style.display = 'block'; if (logoPlaceholder) logoPlaceholder.style.display = 'none'; }
+                    else { logoPreview.style.display = 'none'; if (logoPlaceholder) logoPlaceholder.style.display = 'block'; }
                     loadInstructorProfiles();
                     updateColorPreview(); updateFontPreview(); updateBrandProgress();
                 } else {
@@ -2948,9 +3113,17 @@
                     vBtn.classList.toggle('open');
                     break;
                 case 'use-voice-example':
-                    var vText = target.textContent;
+                    var vText = (target.closest('.example-card') || target).getAttribute('data-text') || target.querySelector('.example-card-text')?.textContent || target.textContent;
                     var voiceEl = document.getElementById('brandVoice');
                     if (voiceEl) { voiceEl.value = vText; updateBrandProgress(); }
+                    break;
+                case 'set-photo-src':
+                    var srcVal = target.closest('[data-val]')?.getAttribute('data-val');
+                    if (srcVal) {
+                        var psel = document.getElementById('photoSourceSelect');
+                        psel.value = srcVal; psel.dispatchEvent(new Event('change', { bubbles: true }));
+                        document.querySelectorAll('.photo-src-btn').forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-val') === srcVal); });
+                    }
                     break;
                 case 'toggle-photo-examples':
                     var exBody = document.getElementById('photoExamplesBody');
@@ -2959,7 +3132,7 @@
                     exBtn.classList.toggle('open');
                     break;
                 case 'use-photo-example':
-                    var exText = target.textContent;
+                    var exText = (target.closest('.example-card') || target).getAttribute('data-text') || target.querySelector('.example-card-text')?.textContent || target.textContent;
                     var promptEl = document.getElementById('settingsPhotoPrompt');
                     if (promptEl) { promptEl.value = exText; promptEl.dispatchEvent(new Event('input')); }
                     break;
