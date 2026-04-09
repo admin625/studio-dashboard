@@ -439,6 +439,33 @@
         .ai-photo-prompt-wrap textarea:focus { outline: none; border-color: #667eea; }
         .ai-photo-prompt-wrap textarea::placeholder { color: #94a3b8; font-size: 13px; }
         /* Modal photo direction (owner only) */
+
+        /* Multi-slot AI Image Builder */
+        .image-slot-builder { margin-bottom: 20px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
+        .image-slot-builder > label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px; }
+        .image-slot-builder .section-hint { font-size: 11px; color: #94a3b8; font-weight: 400; }
+        .image-slot { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 8px; position: relative; }
+        .image-slot .slot-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .image-slot .slot-label { font-size: 12px; font-weight: 600; color: #334155; }
+        .image-slot .slot-remove { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; }
+        .image-slot .slot-remove:hover { background: #fee2e2; color: #dc2626; }
+        .platform-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .platform-chip { padding: 4px 10px; border-radius: 16px; font-size: 11px; font-weight: 600; border: 1.5px solid #e2e8f0; background: white; color: #64748b; cursor: pointer; transition: all 0.15s; }
+        .platform-chip.selected { border-color: #6366f1; background: #eef2ff; color: #4338ca; }
+        .platform-chip:hover { border-color: #a5b4fc; }
+        .image-slot textarea { width: 100%; min-height: 50px; padding: 8px 10px; border: 1.5px solid #e2e8f0; border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; color: #1e293b; box-sizing: border-box; }
+        .image-slot textarea:focus { outline: none; border-color: #667eea; }
+        .image-slot textarea::placeholder { color: #94a3b8; font-size: 12px; }
+        .add-image-slot-btn { display: flex; align-items: center; gap: 6px; background: none; border: 1.5px dashed #cbd5e1; border-radius: 8px; padding: 8px 14px; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; justify-content: center; transition: all 0.15s; }
+        .add-image-slot-btn:hover { border-color: #6366f1; color: #4338ca; background: #f5f3ff; }
+        .add-image-slot-btn.hidden { display: none; }
+        .platform-label-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; margin-bottom: 4px; }
+        .platform-label-badge.instagram { background: #fce7f3; color: #9d174d; }
+        .platform-label-badge.facebook { background: #dbeafe; color: #1e40af; }
+        .platform-label-badge.linkedin { background: #e0e7ff; color: #3730a3; }
+        .platform-label-badge.tiktok { background: #f0fdf4; color: #166534; }
+        .platform-label-badge.all { background: #f1f5f9; color: #475569; }
+        .image-direction-used { font-size: 11px; color: #94a3b8; font-style: italic; margin-top: 4px; }
         .modal-photo-direction { margin-bottom: 20px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
         .modal-photo-direction label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
         .modal-photo-direction .section-hint { font-size: 11px; color: #94a3b8; font-weight: 400; }
@@ -810,10 +837,11 @@
                 <textarea id="genPromotions" placeholder="e.g. 20% off first month, free trial class this weekend..." style="min-height:50px;"></textarea>
             </div>
 
-            <!-- Photo Direction (owner only, AI modes) -->
-            <div class="modal-photo-direction hidden" id="modalPhotoDirectionWrap">
-                <label>Photo Direction <span class="section-hint">(optional &mdash; guides AI image generation)</span></label>
-                <textarea id="modalPhotoPrompt" placeholder="e.g. outdoor yoga at sunrise, high energy HIIT class, diverse group in modern gym..."></textarea>
+            <!-- AI Image Builder (owner only, AI modes) -->
+            <div class="image-slot-builder hidden" id="modalPhotoDirectionWrap">
+                <label>AI Image Direction <span class="section-hint">(optional &mdash; one slot per image, tag platforms for style optimization)</span></label>
+                <div id="imageSlotContainer"></div>
+                <button type="button" class="add-image-slot-btn" id="addImageSlotBtn" data-action="add-image-slot">+ Add Image</button>
             </div>
 
             <!-- ADVANCED (collapsible) -->
@@ -1489,6 +1517,96 @@
             return '<div class="posting-tip"><div class="posting-tip-text">' + escapeAttr(post.postingTip) + '</div><div class="posting-tip-disclaimer">Based on typical ' + escapeAttr(studioLabel) + ' audiences \u2014 your results may vary</div></div>';
         }
 
+
+        // ================================================================
+        // IMAGE SLOT BUILDER
+        // ================================================================
+        const ImageSlotBuilder = {
+            MAX_SLOTS: 5,
+            PLATFORM_MODIFIERS: {
+                instagram: 'vertical 4:5 format, lifestyle aesthetic, vibrant colors, minimal text, editorial feel',
+                facebook: 'horizontal 16:9 format, friendly and approachable, promotional clarity, warm tones',
+                linkedin: 'professional tone, clean background, achievement-focused, polished lighting',
+                tiktok: 'high energy, bold contrast, action-forward, dynamic composition, vertical format',
+                all: ''
+            },
+            PLATFORM_LABELS: { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', all: 'All Platforms' },
+            slots: [],
+            init() {
+                this.slots = [];
+                this.addSlot();
+                this.render();
+            },
+            addSlot() {
+                if (this.slots.length >= this.MAX_SLOTS) return;
+                this.slots.push({ id: Date.now() + Math.random(), platforms: ['all'], direction: '' });
+                this.render();
+            },
+            removeSlot(idx) {
+                if (this.slots.length <= 1) return;
+                this.slots.splice(idx, 1);
+                this.render();
+            },
+            togglePlatform(slotIdx, platform) {
+                var s = this.slots[slotIdx];
+                if (!s) return;
+                if (platform === 'all') {
+                    s.platforms = ['all'];
+                } else {
+                    s.platforms = s.platforms.filter(function(p) { return p !== 'all'; });
+                    var i = s.platforms.indexOf(platform);
+                    if (i >= 0) s.platforms.splice(i, 1);
+                    else s.platforms.push(platform);
+                    if (s.platforms.length === 0) s.platforms = ['all'];
+                }
+                this.render();
+            },
+            render() {
+                var c = document.getElementById('imageSlotContainer');
+                if (!c) return;
+                var self = this;
+                c.innerHTML = this.slots.map(function(slot, idx) {
+                    var chips = ['instagram', 'facebook', 'linkedin', 'tiktok', 'all'].map(function(p) {
+                        var sel = slot.platforms.indexOf(p) >= 0 ? ' selected' : '';
+                        return '<span class="platform-chip' + sel + '" data-action="toggle-platform-chip" data-slot="' + idx + '" data-platform="' + p + '">' + self.PLATFORM_LABELS[p] + '</span>';
+                    }).join('');
+                    return '<div class="image-slot" data-slot-idx="' + idx + '">' +
+                        '<div class="slot-header"><span class="slot-label">Image ' + (idx + 1) + '</span>' +
+                        (self.slots.length > 1 ? '<button class="slot-remove" data-action="remove-image-slot" data-slot="' + idx + '" title="Remove">&times;</button>' : '') +
+                        '</div>' +
+                        '<div class="platform-chips">' + chips + '</div>' +
+                        '<textarea data-slot-direction="' + idx + '" placeholder="Describe this image...">' + escapeAttr(slot.direction) + '</textarea>' +
+                        '</div>';
+                }).join('');
+                // Show/hide add button
+                var addBtn = document.getElementById('addImageSlotBtn');
+                if (addBtn) addBtn.classList.toggle('hidden', this.slots.length >= this.MAX_SLOTS);
+                // Bind direction inputs
+                c.querySelectorAll('textarea[data-slot-direction]').forEach(function(ta) {
+                    ta.addEventListener('input', function() {
+                        var si = parseInt(ta.getAttribute('data-slot-direction'));
+                        if (self.slots[si]) self.slots[si].direction = ta.value;
+                    });
+                });
+            },
+            getPayload() {
+                var self = this;
+                return this.slots.filter(function(s) { return s.direction.trim(); }).map(function(s) {
+                    var dirs = s.platforms.map(function(p) {
+                        var mod = self.PLATFORM_MODIFIERS[p] || '';
+                        var full = s.direction.trim();
+                        if (mod) full += '. Style: ' + mod;
+                        return { platform: p, direction: full, direction_raw: s.direction.trim() };
+                    });
+                    return dirs;
+                }).flat();
+            },
+            getLegacyPrompt() {
+                // Backward compat: return single string for existing ai_photo_prompt field
+                return this.slots.map(function(s) { return s.direction; }).filter(Boolean).join('; ');
+            }
+        };
+
         const DeliveryList = {
             _knownIds: new Set(),
             _highlightIds: new Set(),
@@ -1646,8 +1764,14 @@
                         const isAI = post.needs_ai_image || (!post.matched_photo_id && post.photo_url);
                         let imgH = '';
                         if (hasImage && post.photo_url) {
-                            imgH = '<img src="' + escapeAttr(post.photo_url) + '" class="post-image" alt="Post image">' +
+                            var platBadge = '';
+                            if (post.image_platform) {
+                                var pbClass = post.image_platform === 'all' ? 'all' : post.image_platform;
+                                platBadge = '<span class="platform-label-badge ' + escapeAttr(pbClass) + '">' + escapeAttr(({'instagram':'Instagram','facebook':'Facebook','linkedin':'LinkedIn','tiktok':'TikTok','all':'All Platforms'}[post.image_platform] || '')) + '</span>';
+                            }
+                            imgH = platBadge + '<img src="' + escapeAttr(post.photo_url) + '" class="post-image" alt="Post image">' +
                                 '<span class="image-source ' + (isAI ? 'ai-generated' : '') + '">' + (isAI ? 'AI Generated' : 'Studio Photo') + '</span>';
+                            if (post.image_direction) imgH += '<div class="image-direction-used">' + escapeAttr(post.image_direction) + '</div>';
                         }
                         let metaH = '<div class="meta-info">';
                         if (post.optimal_posting_time) metaH += '<div class="meta-row"><span class="meta-icon">Clock</span><span class="meta-label">Best Time:</span><span class="meta-value">' + escapeAttr(post.optimal_posting_time) + '</span></div>';
@@ -2132,14 +2256,18 @@
                 document.getElementById('freestyleToggle').checked = false;
                 document.getElementById('freestylePrompt').value = '';
                 this._setFreestyle(false);
-                // Photo direction: owner only, visible for AI modes
+                // AI Image Builder: owner only, visible for AI modes
                 const photoDir = document.getElementById('modalPhotoDirectionWrap');
                 if (AppState.role === 'studio_owner' && AppState.photoSource !== 'studio_only') {
                     photoDir.classList.remove('hidden');
-                    document.getElementById('modalPhotoPrompt').value = AppState.aiPhotoPrompt || '';
+                    ImageSlotBuilder.init();
+                    // Pre-fill first slot with saved direction if exists
+                    if (AppState.aiPhotoPrompt && ImageSlotBuilder.slots[0]) {
+                        ImageSlotBuilder.slots[0].direction = AppState.aiPhotoPrompt;
+                        ImageSlotBuilder.render();
+                    }
                 } else {
                     photoDir.classList.add('hidden');
-                    document.getElementById('modalPhotoPrompt').value = '';
                 }
                 document.getElementById('generateModal').classList.remove('hidden');
             },
@@ -2253,7 +2381,8 @@
                     }
                 }
 
-                const modalPrompt = (document.getElementById('modalPhotoPrompt').value || '').trim();
+                const modalPrompt = ImageSlotBuilder.getLegacyPrompt();
+                const imageSlots = ImageSlotBuilder.getPayload();
                 const payload = {
                     email: AppState.email,
                     studio_id: AppState.resolvedStudioId,
@@ -2262,7 +2391,8 @@
                     platforms: platforms,
                     client_type: 'fitness_studio',
                     photo_source: AppState.photoSource,
-                    ai_photo_prompt: modalPrompt || AppState.aiPhotoPrompt || ''
+                    ai_photo_prompt: modalPrompt || AppState.aiPhotoPrompt || '',
+                    image_slots: imageSlots
                 };
 
                 if (isFreestyle) {
@@ -2589,6 +2719,10 @@
                 case 'sign-out': Auth.signOut(); break;
                 case 'switch-tab': DeliveryDetail.switchTab(target.dataset.platform, target); break;
                 
+                
+                case 'add-image-slot': ImageSlotBuilder.addSlot(); break;
+                case 'remove-image-slot': ImageSlotBuilder.removeSlot(parseInt(target.dataset.slot)); break;
+                case 'toggle-platform-chip': ImageSlotBuilder.togglePlatform(parseInt(target.dataset.slot), target.dataset.platform); break;
                 case 'carousel-prev': navigateCarousel(target.dataset.viewer, 'prev'); break;
                 case 'carousel-next': navigateCarousel(target.dataset.viewer, 'next'); break;
                 case 'carousel-download': downloadAllSlides(target.dataset.viewer); break;
