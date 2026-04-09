@@ -2,6 +2,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import BrandSettings from './pages/BrandSettings'
 import DeliveryView from './pages/DeliveryView'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -23,7 +24,7 @@ export default function App() {
             path="/brand"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <BrandSettings />
               </ProtectedRoute>
             }
           />
