@@ -30,7 +30,7 @@ export default function Layout({ children }) {
         className="sticky top-0 z-50"
         style={{ background: '#0A0B0D' }}
       >
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-6 flex items-center justify-between" style={{ height: 52 }}>
           {/* Left: Logo + nav */}
           <div className="flex items-center gap-6">
             {/* Owl logo + FCA wordmark */}
