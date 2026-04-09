@@ -1179,6 +1179,11 @@
                         AppState.brandColorSecondary = updates.brand_color_secondary || '';
                         AppState.brandFont = updates.brand_font || '';
                         AppState.brandVoice = updates.brand_voice || '';
+                        // Sync Coloris swatch previews
+                        var _bcp = document.getElementById('brandColorPrimary');
+                        var _bcs = document.getElementById('brandColorSecondary');
+                        var _wp = _bcp && _bcp.closest('.clr-field'); if (_wp) _wp.style.color = _bcp.value || '';
+                        var _ws = _bcs && _bcs.closest('.clr-field'); if (_ws) _ws.style.color = _bcs.value || '';
                         status.textContent = 'Saved!'; status.classList.add('visible');
                         setTimeout(function() { status.classList.remove('visible'); }, 2000);
                     } catch (err) {
@@ -1474,8 +1479,13 @@
                     document.getElementById('photoSourceSelect').value = AppState.photoSource;
                     document.getElementById('settingsPhotoPrompt').value = AppState.aiPhotoPrompt;
                     document.getElementById('settingsPhotoPromptWrap').classList.toggle('hidden', AppState.photoSource === 'studio_only');
-                    document.getElementById('brandColorPrimary').value = AppState.brandColorPrimary;
-                    document.getElementById('brandColorSecondary').value = AppState.brandColorSecondary;
+                    var bcp = document.getElementById('brandColorPrimary');
+                    var bcs = document.getElementById('brandColorSecondary');
+                    bcp.value = AppState.brandColorPrimary;
+                    bcs.value = AppState.brandColorSecondary;
+                    // Trigger Coloris to update visual swatch after programmatic value set
+                    bcp.dispatchEvent(new Event('input', { bubbles: true }));
+                    bcs.dispatchEvent(new Event('input', { bubbles: true }));
                     document.getElementById('brandFont').value = AppState.brandFont;
                     document.getElementById('studioTypeSelect').value = AppState.studioType;
                     document.getElementById('brandVoice').value = AppState.brandVoice;
@@ -2995,7 +3005,14 @@
                 '#667eea', '#764ba2', '#f59e0b', '#10b981',
                 '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899',
                 '#000000', '#ffffff', '#ff6900', '#0693e3'
-            ]
+            ],
+            onChange: function(color, input) {
+                // Ensure the clr-field wrapper updates its background color preview
+                var wrapper = input.closest('.clr-field');
+                if (wrapper) wrapper.style.color = color;
+                // Force-set the input value (Coloris sometimes loses sync on the secondary input)
+                input.value = color;
+            }
         });
     </script>
 </body>
