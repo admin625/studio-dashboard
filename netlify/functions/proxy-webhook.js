@@ -1,6 +1,7 @@
 const TARGETS = {
   'photo-editor': 'N8N_PHOTO_EDITOR_URL',
   'video-reel': 'N8N_VIDEO_REEL_URL',
+  'fca-carousel': 'N8N_CAROUSEL_URL',
 };
 
 exports.handler = async (event) => {
