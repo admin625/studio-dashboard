@@ -14,13 +14,26 @@ function withTimeout(promise, ms, label) {
   ])
 }
 
-// Hardcoded admin accounts — bypass all Supabase role lookups
+// Hardcoded admin accounts — bypass all Supabase role AND studio lookups
 const ADMIN_ACCOUNTS = {
   'admin@fiorsaoirse.com': {
     role: 'studio_owner',
     studioId: '085fde09-d7f7-486f-89d6-d65fc1838ab0',
     clientId: 'f896e176-ee81-4a7f-9414-500caba002fd',
     scopeType: 'studio',
+    studioData: {
+      studio_name: 'Mac Test Studio v2',
+      photo_source: 'ai_assist',
+      ai_photo_prompt: '',
+      brand_color: '#667eea',
+      brand_color_secondary: '',
+      brand_font: '',
+      brand_voice: '',
+      logo_url: '',
+      is_beta: true,
+      studio_type: '',
+      last_content_types: [],
+    },
   },
 }
 
@@ -75,7 +88,25 @@ export default function AuthProvider({ children }) {
         authReady: true,
       }
 
-      if (ri?.studioId) {
+      // Admin accounts have studioData baked in — skip the Supabase query entirely
+      const adminData = ADMIN_ACCOUNTS[user.email]
+      if (adminData?.studioData) {
+        console.log('[FCA] ADMIN BYPASS: using hardcoded studio data')
+        const s = adminData.studioData
+        Object.assign(updates, {
+          studioName: s.studio_name || '',
+          photoSource: s.photo_source || 'studio_only',
+          aiPhotoPrompt: s.ai_photo_prompt || '',
+          brandColorPrimary: s.brand_color || '',
+          brandColorSecondary: s.brand_color_secondary || '',
+          brandFont: s.brand_font || '',
+          brandVoice: s.brand_voice || '',
+          brandLogoUrl: s.logo_url || '',
+          isBeta: s.is_beta || false,
+          studioType: s.studio_type || '',
+          lastContentTypes: s.last_content_types || [],
+        })
+      } else if (ri?.studioId) {
         console.log('[FCA] loading studio_accounts for:', ri.studioId)
         try {
           const { data: s, error: e3 } = await withTimeout(
