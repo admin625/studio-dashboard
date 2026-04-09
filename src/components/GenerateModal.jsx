@@ -36,8 +36,8 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
     instagram: { on: true, count: 3, images: true, formats: ['feed_post'] },
     facebook: { on: false, count: 3, images: true },
     twitter: { on: false, count: 3, images: false },
-    linkedin: { on: false, count: 3, images: true },
-    tiktok: { on: false, count: 3, images: true },
+    linkedin: { on: false, count: 3, images: false },
+    tiktok: { on: false, count: 3, images: false },
   })
   const [freestyle, setFreestyle] = useState(false)
   const [freestylePrompt, setFreestylePrompt] = useState('')
@@ -266,13 +266,31 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
                         <span className="text-sm text-slate-300 font-medium capitalize">{name === 'twitter' ? 'X (Twitter)' : name}</span>
                       </label>
                       {cfg.on && (
-                        <select
-                          value={cfg.count}
-                          onChange={e => setPlatforms(p => ({ ...p, [name]: { ...p[name], count: parseInt(e.target.value) } }))}
-                          className="px-2 py-1 rounded text-xs text-white bg-white/5 border border-white/10"
-                        >
-                          {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} posts</option>)}
-                        </select>
+                        <div className="flex items-center gap-3">
+                          {/* Image toggle */}
+                          <button
+                            type="button"
+                            onClick={() => setPlatforms(p => ({ ...p, [name]: { ...p[name], images: !p[name].images } }))}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider transition-all"
+                            style={{
+                              background: cfg.images ? `${primary}20` : 'rgba(255,255,255,0.04)',
+                              color: cfg.images ? primary : '#64748b',
+                              border: `1px solid ${cfg.images ? primary + '40' : 'rgba(255,255,255,0.08)'}`,
+                            }}
+                            title={cfg.images ? 'Images ON — click to disable' : 'Images OFF — click to enable'}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                            {cfg.images ? 'IMG' : 'NO IMG'}
+                          </button>
+                          {/* Post count */}
+                          <select
+                            value={cfg.count}
+                            onChange={e => setPlatforms(p => ({ ...p, [name]: { ...p[name], count: parseInt(e.target.value) } }))}
+                            className="px-2 py-1 rounded text-xs text-white bg-white/5 border border-white/10"
+                          >
+                            {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} posts</option>)}
+                          </select>
+                        </div>
                       )}
                     </div>
                   ))}
