@@ -225,6 +225,12 @@
         .brand-field input[type="text"], .brand-field textarea, .brand-field select { width: 100%; padding: 8px 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 13px; color: #1e293b; box-sizing: border-box; transition: border-color 0.2s; }
         .brand-field input:focus, .brand-field textarea:focus, .brand-field select:focus { outline: none; border-color: #667eea; }
         .brand-field textarea { resize: vertical; min-height: 60px; }
+
+        .native-color-wrap { display: flex; align-items: center; gap: 8px; }
+        .native-color-wrap input[type="color"] { width: 40px; height: 36px; border: 2px solid #e2e8f0; border-radius: 8px; padding: 2px; cursor: pointer; background: white; }
+        .native-color-wrap input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+        .native-color-wrap input[type="color"]::-webkit-color-swatch { border-radius: 4px; border: none; }
+        .native-color-wrap input[type="text"] { flex: 1; }
         .brand-color-input { display: flex; align-items: center; gap: 8px; }
         .brand-color-input input[type="text"] { flex: 1; }
         .brand-color-preview { width: 32px; height: 32px; border-radius: 6px; border: 2px solid #e2e8f0; flex-shrink: 0; cursor: pointer; }
@@ -385,6 +391,10 @@
         .login-card label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
         .login-card input { width: 100%; padding: 12px 16px; border: 2px solid #e2e8f0; border-radius: 10px; font-size: 16px; font-family: inherit; transition: border-color 0.2s; }
         .login-card input:focus { outline: none; border-color: #667eea; }
+
+        .login-btn.loading { opacity: 0.8; cursor: wait; }
+        .login-btn .spinner-inline { display: none; margin-right: 6px; }
+        .login-btn.loading .spinner-inline { display: inline-block; }
         .login-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 10px; color: white; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.3s; margin-top: 8px; }
         .login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4); }
         .login-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
@@ -523,7 +533,7 @@
                     <label>Password</label>
                     <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
                 </div>
-                <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
+                <button type="submit" class="login-btn" id="loginBtn"><span class="spinner-inline"></span><span class="btn-label">Sign In</span></button>
                 <p class="login-error" id="loginError"></p>
             </form>
             <a class="forgot-link" id="forgotPasswordLink">Forgot password?</a>
@@ -644,8 +654,9 @@
                     </div>
                     <div class="brand-field">
                         <label>Secondary Brand Color</label>
-                        <div class="brand-color-input">
-                            <input type="text" id="brandColorSecondary" data-coloris placeholder="#ffffff" value="">
+                        <div class="native-color-wrap">
+                            <input type="color" id="brandColorSecondaryPicker" value="#ffffff">
+                            <input type="text" id="brandColorSecondary" placeholder="#ffffff" value="" maxlength="7" style="flex:1;">
                         </div>
                     </div>
                     <div class="brand-field">
@@ -1182,8 +1193,9 @@
                         // Sync Coloris swatch previews
                         var _bcp = document.getElementById('brandColorPrimary');
                         var _bcs = document.getElementById('brandColorSecondary');
+                        var _bcsPicker = document.getElementById('brandColorSecondaryPicker');
                         var _wp = _bcp && _bcp.closest('.clr-field'); if (_wp) _wp.style.color = _bcp.value || '';
-                        var _ws = _bcs && _bcs.closest('.clr-field'); if (_ws) _ws.style.color = _bcs.value || '';
+                        if (_bcsPicker && _bcs.value) _bcsPicker.value = _bcs.value;
                         status.textContent = 'Saved!'; status.classList.add('visible');
                         setTimeout(function() { status.classList.remove('visible'); }, 2000);
                     } catch (err) {
@@ -1192,6 +1204,17 @@
                     btn.disabled = false; btn.textContent = 'Save Brand Settings';
                 }, { signal: s });
 
+
+                // Secondary color: native picker <-> text input sync
+                document.getElementById('brandColorSecondaryPicker').addEventListener('input', function(e) {
+                    document.getElementById('brandColorSecondary').value = e.target.value;
+                }, { signal: s });
+                document.getElementById('brandColorSecondary').addEventListener('input', function(e) {
+                    var val = e.target.value;
+                    if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+                        document.getElementById('brandColorSecondaryPicker').value = val;
+                    }
+                }, { signal: s });
                 // Brand logo upload
                 document.getElementById('brandLogoUploadBtn').addEventListener('click', function() {
                     document.getElementById('brandLogoFileInput').click();
@@ -1376,22 +1399,22 @@
                 const password = document.getElementById('loginPassword').value;
                 const btn = document.getElementById('loginBtn');
                 const errEl = document.getElementById('loginError');
-                errEl.classList.remove('visible'); btn.disabled = true; btn.textContent = 'Signing in\u2026'; btn.classList.add('loading');
+                errEl.classList.remove('visible'); btn.disabled = true; btn.querySelector('.btn-label').textContent = 'Signing in\u2026'; btn.classList.add('loading');
                 console.log('[Auth] _handleLogin() called for:', email);
                 try {
                     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-                    if (error) { console.error('[Auth] signIn error:', error.message); errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading'); return; }
+                    if (error) { console.error('[Auth] signIn error:', error.message); errEl.textContent = error.message; errEl.classList.add('visible'); btn.disabled = false; btn.querySelector('.btn-label').textContent = 'Sign In'; btn.classList.remove('loading'); return; }
                     console.log('[Auth] signInWithPassword SUCCESS, user:', data?.user?.email);
                     // Belt-and-suspenders: call _initWithUser directly instead of relying solely on onAuthStateChange
                     if (data?.user) {
                         console.log('[Auth] Calling _initWithUser directly from _handleLogin');
                         await this._initWithUser(data.user);
                     }
-                    btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading');
+                    btn.disabled = false; btn.querySelector('.btn-label').textContent = 'Sign In'; btn.classList.remove('loading');
                 } catch (err) {
                     console.error('[Auth] _handleLogin exception:', err);
                     errEl.textContent = 'Login failed: ' + (err.message || 'Unknown error');
-                    errEl.classList.add('visible'); btn.disabled = false; btn.textContent = 'Sign In'; btn.classList.remove('loading');
+                    errEl.classList.add('visible'); btn.disabled = false; btn.querySelector('.btn-label').textContent = 'Sign In'; btn.classList.remove('loading');
                 }
             },
             async signOut() {
@@ -1481,11 +1504,12 @@
                     document.getElementById('settingsPhotoPromptWrap').classList.toggle('hidden', AppState.photoSource === 'studio_only');
                     var bcp = document.getElementById('brandColorPrimary');
                     var bcs = document.getElementById('brandColorSecondary');
+                    var bcsPicker = document.getElementById('brandColorSecondaryPicker');
                     bcp.value = AppState.brandColorPrimary;
                     bcs.value = AppState.brandColorSecondary;
-                    // Trigger Coloris to update visual swatch after programmatic value set
+                    if (bcsPicker && AppState.brandColorSecondary) bcsPicker.value = AppState.brandColorSecondary;
+                    // Trigger Coloris to update visual swatch for primary
                     bcp.dispatchEvent(new Event('input', { bubbles: true }));
-                    bcs.dispatchEvent(new Event('input', { bubbles: true }));
                     document.getElementById('brandFont').value = AppState.brandFont;
                     document.getElementById('studioTypeSelect').value = AppState.studioType;
                     document.getElementById('brandVoice').value = AppState.brandVoice;
