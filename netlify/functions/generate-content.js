@@ -31,22 +31,25 @@ exports.handler = async (event) => {
 
   console.log('[generate-content] Forwarding to:', webhookUrl);
   console.log('[generate-content] Payload keys:', Object.keys(body).join(', '));
-  console.log('[generate-content] Platforms:', JSON.stringify(body.platforms));
 
+  // Fire-and-forget: send the webhook request but don't wait for n8n to finish.
+  // n8n takes 30-60+ seconds (Claude LLM call). The React app polls for results.
+  // We return 202 Accepted immediately after the request is dispatched.
   try {
-    const res = await fetch(webhookUrl, {
+    fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    }).then(res => {
+      console.log('[generate-content] Upstream responded:', res.status);
+    }).catch(err => {
+      console.error('[generate-content] Upstream error (async):', err.message);
     });
-    const text = await res.text();
-    console.log('[generate-content] Upstream status:', res.status, 'body length:', text.length);
-    let data;
-    try { data = JSON.parse(text); } catch { data = text; }
-    return respond(res.status, data);
+
+    return respond(202, { success: true, message: 'Content generation started. Check deliveries for results.' });
   } catch (err) {
-    console.error('[generate-content] Upstream fetch failed:', err.message);
-    return respond(502, { error: 'Upstream request failed', detail: err.message });
+    console.error('[generate-content] Failed to dispatch:', err.message);
+    return respond(502, { error: 'Failed to dispatch request', detail: err.message });
   }
 };
 
