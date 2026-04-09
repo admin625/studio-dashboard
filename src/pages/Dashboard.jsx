@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabase'
 import Layout from '../components/Layout'
 import DeliveryList from '../components/DeliveryList'
 import GenerateModal from '../components/GenerateModal'
-import PhotoGallery from '../components/PhotoGallery'
 import { Plus, Sparkles, X } from 'lucide-react'
 
 const POLL_INTERVAL = 15000
@@ -147,9 +146,6 @@ export default function Dashboard() {
 
       {/* Delivery list */}
       <DeliveryList onOpenGenerate={() => setGenOpen(true)} pollTrigger={pollTrigger} />
-
-      {/* Photo gallery + upload */}
-      <PhotoGallery />
 
       {/* Generate modal */}
       <GenerateModal open={genOpen} onClose={() => setGenOpen(false)} onSubmitted={handleGenSubmitted} />

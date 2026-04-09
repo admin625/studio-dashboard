@@ -5,6 +5,7 @@ import AuthProvider from './components/AuthProvider'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import BrandSettings from './pages/BrandSettings'
+import Photos from './pages/Photos'
 import DeliveryView from './pages/DeliveryView'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -21,6 +22,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/photos"
+                element={
+                  <ProtectedRoute>
+                    <Photos />
                   </ProtectedRoute>
                 }
               />
