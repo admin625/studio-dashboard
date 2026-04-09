@@ -30,26 +30,37 @@ exports.handler = async (event) => {
   }
 
   console.log('[generate-content] Forwarding to:', webhookUrl);
-  console.log('[generate-content] Payload keys:', Object.keys(body).join(', '));
 
-  // Fire-and-forget: send the webhook request but don't wait for n8n to finish.
-  // n8n takes 30-60+ seconds (Claude LLM call). The React app polls for results.
-  // We return 202 Accepted immediately after the request is dispatched.
+  // Send request to n8n with a 25s timeout (Netlify Pro max is 26s).
+  // n8n webhook is responseMode=lastNode, so it holds the connection open
+  // until the full pipeline completes (~35-60s with Claude). If it takes
+  // longer than 25s, we return 202 Accepted — n8n keeps processing and
+  // saves results to content_deliveries. The React app polls for results.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+
   try {
-    fetch(webhookUrl, {
+    const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    }).then(res => {
-      console.log('[generate-content] Upstream responded:', res.status);
-    }).catch(err => {
-      console.error('[generate-content] Upstream error (async):', err.message);
+      signal: controller.signal,
     });
-
-    return respond(202, { success: true, message: 'Content generation started. Check deliveries for results.' });
+    clearTimeout(timeout);
+    const text = await res.text();
+    console.log('[generate-content] Upstream status:', res.status, 'body length:', text.length);
+    let data;
+    try { data = JSON.parse(text); } catch { data = text; }
+    return respond(res.status, data);
   } catch (err) {
-    console.error('[generate-content] Failed to dispatch:', err.message);
-    return respond(502, { error: 'Failed to dispatch request', detail: err.message });
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') {
+      // Timeout — n8n is still processing, will save results when done
+      console.log('[generate-content] Timeout after 25s — n8n still processing');
+      return respond(202, { success: true, message: 'Content generation in progress. Results will appear in your deliveries.' });
+    }
+    console.error('[generate-content] Upstream fetch failed:', err.message);
+    return respond(502, { error: 'Upstream request failed', detail: err.message });
   }
 };
 
