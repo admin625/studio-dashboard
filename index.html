@@ -193,10 +193,43 @@
         .video-error p { color: #991b1b; font-size: 14px; margin: 0 0 12px; }
         .video-error .error-detail { font-size: 12px; color: #b91c1c; background: #fee2e2; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-family: monospace; }
         .btn-retry-video { background: #dc2626; color: white; font-size: 13px; padding: 8px 16px; }
-        .studio-settings { background: white; padding: 20px 24px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-        .studio-settings h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 16px; }
-        .brand-settings { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f1f5f9; }
-        .brand-settings h4 { font-size: 15px; font-weight: 700; color: #334155; margin: 0 0 14px; }
+        .studio-settings { background: white; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); overflow: hidden; }
+        .studio-settings h3 { display: none; }
+        /* Brand Hero Header */
+        .brand-hero { padding: 28px 28px 22px; position: relative; overflow: hidden; }
+        .brand-hero::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, var(--brand-primary, #667eea) 0%, var(--brand-primary-dark, #764ba2) 100%); opacity: 0.08; }
+        .brand-hero-title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0 0 4px; position: relative; }
+        .brand-hero-sub { font-size: 13px; color: #64748b; margin: 0; position: relative; line-height: 1.5; }
+        .brand-progress { display: flex; align-items: center; gap: 10px; margin-top: 14px; position: relative; }
+        .brand-progress-bar { flex: 1; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+        .brand-progress-fill { height: 100%; background: linear-gradient(90deg, #10b981, #059669); border-radius: 3px; transition: width 0.5s ease; }
+        .brand-progress-label { font-size: 11px; font-weight: 600; color: #10b981; white-space: nowrap; }
+        /* Brand Card Sections */
+        .brand-cards { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 16px; }
+        .brand-card { background: #fafbfc; border: 1px solid #e8ecf1; border-radius: 14px; padding: 20px; transition: box-shadow 0.2s, transform 0.15s; }
+        .brand-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); transform: translateY(-1px); }
+        .brand-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+        .brand-card-icon { font-size: 20px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .brand-card-title { font-size: 14px; font-weight: 700; color: #1e293b; }
+        .brand-settings { margin: 0; padding: 0; border: none; }
+        .brand-settings h4 { display: none; }
+        /* Color Palette Preview */
+        .color-palette-preview { display: flex; gap: 0; border-radius: 8px; overflow: hidden; margin-top: 12px; height: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .color-palette-swatch { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; transition: all 0.3s; }
+        /* Font Preview */
+        .font-preview { margin-top: 8px; padding: 12px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 15px; color: #334155; transition: font-family 0.3s; }
+        /* Voice Examples (same pattern as photo examples) */
+        .voice-examples-toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; font-size: 12px; font-weight: 600; color: #6366f1; cursor: pointer; padding: 6px 0; margin-top: 6px; }
+        .voice-examples-toggle:hover { color: #4338ca; }
+        .voice-examples-toggle .toggle-icon { transition: transform 0.2s; font-size: 10px; }
+        .voice-examples-toggle.open .toggle-icon { transform: rotate(90deg); }
+        .voice-examples-body { display: none; margin-top: 8px; }
+        .voice-examples-body.open { display: block; }
+        /* Save Button upgrade */
+        .brand-save-row { padding: 0 24px 24px; display: flex; align-items: center; gap: 12px; }
+        .brand-save-btn { padding: 10px 28px; background: linear-gradient(135deg, #059669, #10b981); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(5,150,105,0.3); }
+        .brand-save-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5,150,105,0.4); }
+        .brand-save-btn:disabled { background: #a7f3d0; cursor: not-allowed; transform: none; box-shadow: none; }
 
         /* Studio Type */
         .studio-type-field { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #f1f5f9; }
@@ -610,90 +643,140 @@
         <div class="studio-settings" id="studioSettingsSection" style="display: none;">
             <h3>Studio Settings</h3>
 
-            <div class="studio-type-field">
-                <label>Studio Type <span style="font-weight:400;color:#94a3b8;font-size:12px;">(affects content recommendations)</span></label>
-                <select id="studioTypeSelect">
-                    <option value="">Select your studio type...</option>
-                    <option value="yoga_pilates">Yoga / Pilates</option>
-                    <option value="hiit_crossfit">HIIT / CrossFit</option>
-                    <option value="dance_barre">Dance / Barre</option>
-                    <option value="martial_arts">Martial Arts</option>
-                    <option value="general_fitness">General Fitness</option>
-                </select>
-            </div>
-            <div class="photo-source-row">
-                <div class="setting-title">Photo Source</div>
-                <div class="setting-desc" style="margin-bottom:10px;">Choose how photos are selected for your content.</div>
-                <select id="photoSourceSelect" class="photo-source-select">
-                    <option value="studio_only">Studio Photos Only</option>
-                    <option value="ai_assist">AI Assist (AI fills gaps)</option>
-                    <option value="ai_only">AI Only</option>
-                </select>
-                <div class="ai-photo-prompt-wrap hidden" id="settingsPhotoPromptWrap">
-                    <label>Photo Direction for AI <span class="photo-prompt-saved" id="photoPromptSaved">Saved!</span></label>
-                    <p class="photo-direction-helper">Describe the look and feel you want for your studio's AI-generated images. Think lighting, mood, setting, and people.</p>
-                    <textarea id="settingsPhotoPrompt" placeholder="e.g. Bright natural light, diverse women in their 30s-40s, mid-workout intensity, clean white studio background, empowering and energetic mood"></textarea>
-                    <button type="button" class="photo-examples-toggle" id="photoExamplesToggle" data-action="toggle-photo-examples">See examples by studio type <span class="toggle-icon">&#9654;</span></button>
-                    <div class="photo-examples-body" id="photoExamplesBody">
-                        <div class="photo-example-card"><div class="example-label">&#129496; Yoga / Mindfulness</div><div class="example-text" data-action="use-photo-example">Soft natural light, peaceful expressions, diverse practitioners, wood floors and plants, calm and grounded mood, earth tones</div></div>
-                        <div class="photo-example-card"><div class="example-label">&#128170; HIIT / CrossFit</div><div class="example-text" data-action="use-photo-example">High contrast lighting, athletes mid-rep, sweaty and intense, dark industrial background, bold and motivational, high energy</div></div>
-                        <div class="photo-example-card"><div class="example-label">&#129648; Barre / Dance</div><div class="example-text" data-action="use-photo-example">Elegant studio setting, ballet barres and mirrors, graceful movement, pastel tones, feminine and refined mood, aspirational</div></div>
-                        <div class="photo-example-card"><div class="example-label">&#129354; Martial Arts</div><div class="example-text" data-action="use-photo-example">Action shots, focused expressions, traditional gi or athletic gear, clean dojo background, disciplined and powerful mood</div></div>
-                        <p class="photo-examples-note">This is your default style. You can override it anytime in settings or per session when generating content.</p>
-                    </div>
+            <!-- Brand Hero -->
+            <div class="brand-hero" id="brandHero">
+                <h2 class="brand-hero-title">Your Studio's Brand</h2>
+                <p class="brand-hero-sub">This is how FCA understands your studio. The stronger your brand setup, the better your content.</p>
+                <div class="brand-progress">
+                    <div class="brand-progress-bar"><div class="brand-progress-fill" id="brandProgressFill" style="width:0%"></div></div>
+                    <span class="brand-progress-label" id="brandProgressLabel">0/5 complete</span>
                 </div>
             </div>
-            <div class="brand-settings">
-                <h4>Brand Settings</h4>
+
+            <!-- Studio Type (moved into card) -->
+            <div class="brand-cards">
+
+            <div class="brand-card">
+                <div class="brand-card-header"><div class="brand-card-icon">&#127757;</div><div class="brand-card-title">Studio Type</div></div>
+                <div class="studio-type-field" style="margin:0;padding:0;border:0;">
+                    <select id="studioTypeSelect" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:500;">
+                        <option value="">Select your studio type...</option>
+                        <option value="yoga_pilates">Yoga / Pilates</option>
+                        <option value="hiit_crossfit">HIIT / CrossFit</option>
+                        <option value="dance_barre">Dance / Barre</option>
+                        <option value="martial_arts">Martial Arts</option>
+                        <option value="general_fitness">General Fitness</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Brand Colors Card -->
+            <div class="brand-card">
+                <div class="brand-card-header"><div class="brand-card-icon">&#127912;</div><div class="brand-card-title">Brand Colors</div></div>
+                <div class="brand-settings">
                 <div class="brand-form-grid">
                     <div class="brand-field">
-                        <label>Primary Brand Color</label>
+                        <label>Primary</label>
                         <div class="brand-color-input">
                             <input type="text" id="brandColorPrimary" data-coloris placeholder="#667eea" value="">
                         </div>
                     </div>
                     <div class="brand-field">
-                        <label>Secondary Brand Color</label>
+                        <label>Secondary</label>
                         <div class="native-color-wrap">
                             <input type="color" id="brandColorSecondaryPicker" value="#ffffff">
                             <input type="text" id="brandColorSecondary" placeholder="#ffffff" value="" maxlength="7" style="flex:1;">
                         </div>
                     </div>
-                    <div class="brand-field">
-                        <label>Brand Font</label>
-                        <select id="brandFont">
-                            <option value="">Default (System)</option>
-                            <option value="Montserrat">Montserrat</option>
-                            <option value="Inter">Inter</option>
-                            <option value="Poppins">Poppins</option>
-                            <option value="Playfair Display">Playfair Display</option>
-                            <option value="Raleway">Raleway</option>
-                            <option value="Oswald">Oswald</option>
-                            <option value="Lato">Lato</option>
-                            <option value="Roboto">Roboto</option>
-                            <option value="Open Sans">Open Sans</option>
-                            <option value="Bebas Neue">Bebas Neue</option>
-                        </select>
-                    </div>
-                    <div class="brand-field">
-                        <label>Studio Logo</label>
-                        <div class="brand-logo-upload">
-                            <img id="brandLogoPreview" class="brand-logo-preview" src="" alt="" style="display:none;">
-                            <div>
-                                <button type="button" class="brand-logo-upload-btn" id="brandLogoUploadBtn">Upload Logo</button>
-                                <input type="file" id="brandLogoFileInput" accept="image/png,image/jpeg,image/svg+xml,image/webp">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="brand-field" style="grid-column: 1 / -1;">
-                        <label>Brand Voice</label>
-                        <textarea id="brandVoice" placeholder="e.g. High energy, motivational, lots of emojis, community-focused"></textarea>
-                    </div>
-                    <div class="brand-save-row">
-                        <button type="button" class="brand-save-btn" id="brandSaveBtn">Save Brand Settings</button>
-                        <span class="brand-save-status" id="brandSaveStatus">Saved!</span>
+                </div>
+                <div class="color-palette-preview" id="colorPalettePreview">
+                    <div class="color-palette-swatch" id="palettePrimary" style="background:#667eea;color:white;">Primary</div>
+                    <div class="color-palette-swatch" id="paletteSecondary" style="background:#ffffff;color:#334155;border:1px solid #e2e8f0;">Secondary</div>
+                </div>
+                </div>
+            </div>
+
+            <!-- Brand Font Card -->
+            <div class="brand-card">
+                <div class="brand-card-header"><div class="brand-card-icon">&#9997;&#65039;</div><div class="brand-card-title">Brand Font</div></div>
+                <div class="brand-field">
+                    <select id="brandFont" style="padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:14px;">
+                        <option value="">Default (System)</option>
+                        <option value="Montserrat">Montserrat</option>
+                        <option value="Inter">Inter</option>
+                        <option value="Poppins">Poppins</option>
+                        <option value="Playfair Display">Playfair Display</option>
+                        <option value="Raleway">Raleway</option>
+                        <option value="Oswald">Oswald</option>
+                        <option value="Lato">Lato</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Open Sans">Open Sans</option>
+                        <option value="Bebas Neue">Bebas Neue</option>
+                    </select>
+                    <div class="font-preview" id="fontPreview">The quick brown fox jumps over the lazy dog</div>
+                </div>
+            </div>
+
+            <!-- Brand Voice Card -->
+            <div class="brand-card">
+                <div class="brand-card-header"><div class="brand-card-icon">&#128483;&#65039;</div><div class="brand-card-title">Brand Voice</div></div>
+                <div class="brand-field">
+                    <p style="font-size:12px;color:#64748b;margin:0 0 8px;line-height:1.5;">Describe how your studio sounds. Think about the words you use, the energy you bring, and how you make people feel.</p>
+                    <textarea id="brandVoice" placeholder="e.g. Energetic and real &#x2014; we're not a fancy studio, we're a community. We speak like a coach who actually cares." style="min-height:70px;"></textarea>
+                    <button type="button" class="voice-examples-toggle" id="voiceExamplesToggle" data-action="toggle-voice-examples">See examples by studio type <span class="toggle-icon">&#9654;</span></button>
+                    <div class="voice-examples-body" id="voiceExamplesBody">
+                        <div class="photo-example-card"><div class="example-label">&#129496; Yoga / Mindfulness</div><div class="example-text" data-action="use-voice-example">Warm, grounding, and inclusive. We speak like a trusted friend &#x2014; calm, encouraging, never preachy. We celebrate small wins and meet people where they are.</div></div>
+                        <div class="photo-example-card"><div class="example-label">&#128170; HIIT / CrossFit</div><div class="example-text" data-action="use-voice-example">Bold, direct, and motivating. We don't sugarcoat &#x2014; we push. High energy, community-driven, a little gritty. We celebrate hard work and results.</div></div>
+                        <div class="photo-example-card"><div class="example-label">&#129648; Barre / Dance</div><div class="example-text" data-action="use-voice-example">Elegant, aspirational, and empowering. We speak with grace and confidence. Our community is strong, refined, and supports each other.</div></div>
+                        <div class="photo-example-card"><div class="example-label">&#129354; Martial Arts</div><div class="example-text" data-action="use-voice-example">Disciplined, respectful, and empowering. We speak with authority but warmth. We build confidence and character, not just technique.</div></div>
+                        <p class="photo-examples-note">This is your default voice. You can override it per session when generating content.</p>
                     </div>
                 </div>
+            </div>
+
+            <!-- Studio Logo Card -->
+            <div class="brand-card">
+                <div class="brand-card-header"><div class="brand-card-icon">&#128247;</div><div class="brand-card-title">Studio Logo</div></div>
+                <div class="brand-logo-upload">
+                    <img id="brandLogoPreview" class="brand-logo-preview" src="" alt="" style="display:none;">
+                    <div>
+                        <button type="button" class="brand-logo-upload-btn" id="brandLogoUploadBtn">Upload Logo</button>
+                        <input type="file" id="brandLogoFileInput" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Photo Direction Card -->
+            <div class="brand-card">
+                <div class="brand-card-header"><div class="brand-card-icon">&#128248;</div><div class="brand-card-title">Photo Direction</div></div>
+                <div class="photo-source-row" style="margin:0;">
+                    <div style="font-size:12px;color:#64748b;margin-bottom:10px;">Choose how photos are selected for your content.</div>
+                    <select id="photoSourceSelect" class="photo-source-select" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:14px;margin-bottom:10px;">
+                        <option value="studio_only">Studio Photos Only</option>
+                        <option value="ai_assist">AI Assist (AI fills gaps)</option>
+                        <option value="ai_only">AI Only</option>
+                    </select>
+                    <div class="ai-photo-prompt-wrap hidden" id="settingsPhotoPromptWrap">
+                        <label style="font-size:13px;font-weight:600;color:#475569;">AI Photo Style <span class="photo-prompt-saved" id="photoPromptSaved">Saved!</span></label>
+                        <p class="photo-direction-helper">Describe the look and feel you want for your studio's AI-generated images.</p>
+                        <textarea id="settingsPhotoPrompt" placeholder="e.g. Bright natural light, diverse women in their 30s-40s, mid-workout intensity, clean white studio background, empowering and energetic mood"></textarea>
+                        <button type="button" class="photo-examples-toggle" id="photoExamplesToggle" data-action="toggle-photo-examples">See examples by studio type <span class="toggle-icon">&#9654;</span></button>
+                        <div class="photo-examples-body" id="photoExamplesBody">
+                            <div class="photo-example-card"><div class="example-label">&#129496; Yoga / Mindfulness</div><div class="example-text" data-action="use-photo-example">Soft natural light, peaceful expressions, diverse practitioners, wood floors and plants, calm and grounded mood, earth tones</div></div>
+                            <div class="photo-example-card"><div class="example-label">&#128170; HIIT / CrossFit</div><div class="example-text" data-action="use-photo-example">High contrast lighting, athletes mid-rep, sweaty and intense, dark industrial background, bold and motivational, high energy</div></div>
+                            <div class="photo-example-card"><div class="example-label">&#129648; Barre / Dance</div><div class="example-text" data-action="use-photo-example">Elegant studio setting, ballet barres and mirrors, graceful movement, pastel tones, feminine and refined mood, aspirational</div></div>
+                            <div class="photo-example-card"><div class="example-label">&#129354; Martial Arts</div><div class="example-text" data-action="use-photo-example">Action shots, focused expressions, traditional gi or athletic gear, clean dojo background, disciplined and powerful mood</div></div>
+                            <p class="photo-examples-note">This is your default style. You can override it per session when generating content.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            </div><!-- /brand-cards -->
+
+            <div class="brand-save-row">
+                <button type="button" class="brand-save-btn" id="brandSaveBtn">Save Brand Settings</button>
+                <span class="brand-save-status" id="brandSaveStatus">Saved!</span>
             </div>
         </div>
 
@@ -1173,6 +1256,55 @@
                     } catch (err) { console.warn('[Settings] Failed to save studio type:', err.message); }
                 }, { signal: s });
                 // Brand settings: save button
+
+                // Brand progress indicator
+                function updateBrandProgress() {
+                    var filled = 0;
+                    if (document.getElementById('studioTypeSelect').value) filled++;
+                    if (document.getElementById('brandColorPrimary').value) filled++;
+                    if (document.getElementById('brandFont').value) filled++;
+                    if (document.getElementById('brandVoice').value.trim()) filled++;
+                    if (AppState.brandLogoUrl) filled++;
+                    var pct = Math.round((filled / 5) * 100);
+                    var fill = document.getElementById('brandProgressFill');
+                    var label = document.getElementById('brandProgressLabel');
+                    if (fill) fill.style.width = pct + '%';
+                    if (label) label.textContent = filled + '/5 complete';
+                }
+
+                // Color palette live preview
+                function updateColorPreview() {
+                    var pc = document.getElementById('brandColorPrimary').value || '#667eea';
+                    var sc = document.getElementById('brandColorSecondary').value || '#ffffff';
+                    var pp = document.getElementById('palettePrimary');
+                    var ps = document.getElementById('paletteSecondary');
+                    if (pp) { pp.style.background = pc; pp.textContent = pc; pp.style.color = isLight(pc) ? '#1e293b' : 'white'; }
+                    if (ps) { ps.style.background = sc; ps.textContent = sc; ps.style.color = isLight(sc) ? '#1e293b' : 'white'; ps.style.border = isLight(sc) ? '1px solid #e2e8f0' : 'none'; }
+                    // Update hero gradient
+                    var hero = document.getElementById('brandHero');
+                    if (hero) hero.style.setProperty('--brand-primary', pc);
+                }
+                function isLight(hex) {
+                    hex = hex.replace('#','');
+                    if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+                    var r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+                    return (r*299 + g*587 + b*114) / 1000 > 155;
+                }
+
+                // Font live preview
+                function updateFontPreview() {
+                    var font = document.getElementById('brandFont').value || 'inherit';
+                    var preview = document.getElementById('fontPreview');
+                    if (preview) preview.style.fontFamily = font === '' ? 'inherit' : font + ', sans-serif';
+                }
+
+                // Wire live previews
+                document.getElementById('brandColorPrimary').addEventListener('input', function() { updateColorPreview(); updateBrandProgress(); }, { signal: s });
+                document.getElementById('brandColorSecondary').addEventListener('input', function() { updateColorPreview(); updateBrandProgress(); }, { signal: s });
+                document.getElementById('brandFont').addEventListener('change', function() { updateFontPreview(); updateBrandProgress(); }, { signal: s });
+                document.getElementById('brandVoice').addEventListener('input', function() { updateBrandProgress(); }, { signal: s });
+                document.getElementById('studioTypeSelect').addEventListener('change', function() { updateBrandProgress(); }, { signal: s });
+
                 document.getElementById('brandSaveBtn').addEventListener('click', async () => {
                     if (!AppState.resolvedStudioId) return;
                     var btn = document.getElementById('brandSaveBtn');
@@ -1197,6 +1329,7 @@
                         var _wp = _bcp && _bcp.closest('.clr-field'); if (_wp) _wp.style.color = _bcp.value || '';
                         if (_bcsPicker && _bcs.value) _bcsPicker.value = _bcs.value;
                         status.textContent = 'Saved!'; status.classList.add('visible');
+                        updateColorPreview(); updateFontPreview(); updateBrandProgress();
                         setTimeout(function() { status.classList.remove('visible'); }, 2000);
                     } catch (err) {
                         status.textContent = 'Error: ' + err.message; status.classList.add('visible');
@@ -1517,6 +1650,7 @@
                     if (AppState.brandLogoUrl) { logoPreview.src = AppState.brandLogoUrl; logoPreview.style.display = 'block'; }
                     else { logoPreview.style.display = 'none'; }
                     loadInstructorProfiles();
+                    updateColorPreview(); updateFontPreview(); updateBrandProgress();
                 } else {
                     settingsSection.style.display = 'none';
                 }
@@ -2806,6 +2940,18 @@
                 
                 
                 
+                
+                case 'toggle-voice-examples':
+                    var vBody = document.getElementById('voiceExamplesBody');
+                    var vBtn = document.getElementById('voiceExamplesToggle');
+                    vBody.classList.toggle('open');
+                    vBtn.classList.toggle('open');
+                    break;
+                case 'use-voice-example':
+                    var vText = target.textContent;
+                    var voiceEl = document.getElementById('brandVoice');
+                    if (voiceEl) { voiceEl.value = vText; updateBrandProgress(); }
+                    break;
                 case 'toggle-photo-examples':
                     var exBody = document.getElementById('photoExamplesBody');
                     var exBtn = document.getElementById('photoExamplesToggle');
