@@ -86,22 +86,28 @@ export default function AuthProvider({ children }) {
   }, [app, lookupUserRole])
 
   useEffect(() => {
+    console.log('[FCA] AuthProvider mounted, initialized:', initialized.current)
     if (initialized.current) return
     initialized.current = true
 
     let mounted = true
 
     const restoreSession = async () => {
+      console.log('[FCA] restoreSession starting...')
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { session }, error } = await supabase.auth.getSession()
+        console.log('[FCA] getSession result:', { hasSession: !!session, hasUser: !!session?.user, error: error?.message || null })
         if (!mounted) return
         if (session?.user) {
+          console.log('[FCA] Session found for:', session.user.email, '— calling initWithUser')
           await initWithUser(session.user)
+          console.log('[FCA] initWithUser complete, authReady should be true')
         } else {
+          console.log('[FCA] No session, setting authReady = true')
           app.update({ authReady: true })
         }
       } catch (err) {
-        console.error('[Auth] getSession error:', err)
+        console.error('[FCA] getSession error:', err)
         if (mounted) app.update({ authReady: true })
       }
     }
@@ -109,6 +115,7 @@ export default function AuthProvider({ children }) {
     restoreSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[FCA] onAuthStateChange:', event, { hasUser: !!session?.user })
       if (!mounted) return
       if (event === 'SIGNED_IN' && session?.user) {
         await initWithUser(session.user)
