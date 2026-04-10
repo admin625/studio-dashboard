@@ -62,7 +62,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const effectivePrompt =
     overridePrompt !== undefined
       ? overridePrompt
-      : (post.image_prompt || post.generation_prompt || null)
+      : (post.image_prompt || post.generation_prompt || post.photo_keywords || null)
 
   const flashMsg = (msg) => {
     setEditorMsg(msg)
