@@ -8,6 +8,22 @@ import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useApp } from '../context/AppContext'
 
+// Default brand colors — match :root in index.css
+const DEFAULT_BRAND_PRIMARY = '#667eea'
+const DEFAULT_BRAND_SECONDARY = '#764ba2'
+
+/**
+ * Write the studio's brand colors to CSS custom properties on <html>.
+ * Every component (React or raw CSS) can then read them via
+ * var(--brand-primary) / var(--brand-secondary). Passing null/empty
+ * resets to the default purple.
+ */
+function applyBrandColors(primary, secondary) {
+  const root = document.documentElement
+  root.style.setProperty('--brand-primary', primary || DEFAULT_BRAND_PRIMARY)
+  root.style.setProperty('--brand-secondary', secondary || DEFAULT_BRAND_SECONDARY)
+}
+
 // Hardcoded admin accounts — bypass all Supabase role AND studio lookups
 const ADMIN_ACCOUNTS = {
   'admin@fiorsaoirse.com': {
@@ -92,6 +108,7 @@ export default function AuthProvider({ children }) {
           studioType: s.studio_type || '',
           lastContentTypes: s.last_content_types || [],
         })
+        applyBrandColors(s.brand_color, s.brand_color_secondary)
       } else if (ri?.studioId) {
         try {
           const { data: s, error: qErr } = await withTimeout(
@@ -115,6 +132,7 @@ export default function AuthProvider({ children }) {
               studioType: s.studio_type || '',
               lastContentTypes: s.last_content_types || [],
             })
+            applyBrandColors(s.brand_color, s.brand_color_secondary)
           } else {
             // Query succeeded but returned no row — RLS likely blocked or wrong id
             updates.studioLoadError = true
@@ -174,6 +192,7 @@ export default function AuthProvider({ children }) {
       } else if (event === 'SIGNED_OUT') {
         app.reset()
         app.update({ authReady: true })
+        applyBrandColors(null, null)
         clearTimeout(safetyTimer)
       }
     })

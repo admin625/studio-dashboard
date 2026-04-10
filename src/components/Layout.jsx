@@ -37,7 +37,7 @@ export default function Layout({ children }) {
             {/* Owl logo + FCA wordmark */}
             <Link to="/deliveries" className="flex items-center gap-2.5 group">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0"
-                style={{ background: `linear-gradient(135deg, ${primary}, ${primary}aa)` }}>
+                style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}>
                 <span className="text-white text-[11px] font-black font-display">F</span>
               </div>
               <span
@@ -91,8 +91,8 @@ export default function Layout({ children }) {
           </div>
         </div>
 
-        {/* Brand color accent line */}
-        <div className="h-px w-full" style={{ background: `linear-gradient(90deg, transparent, ${primary}, transparent)` }} />
+        {/* Brand color accent line — reads live from CSS var, updates instantly when studio switches */}
+        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, var(--brand-primary), transparent)' }} />
       </nav>
 
       {/* ── Page content — directly on dark background ── */}

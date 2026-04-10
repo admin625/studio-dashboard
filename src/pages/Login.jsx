@@ -46,7 +46,7 @@ export default function Login() {
         <div className="text-center mb-10">
           <div
             className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-6"
-            style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+            style={{ background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-secondary) 100%)' }}
           >
             <span className="text-white text-xl font-bold font-display">F</span>
           </div>
@@ -77,8 +77,8 @@ export default function Login() {
               autoComplete="email"
               required
               className="w-full px-4 py-3.5 rounded-xl text-sm text-white placeholder-slate-600
-                         focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+                         focus:outline-none focus:ring-2 transition-all"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', outlineColor: 'var(--brand-primary)' }}
             />
           </div>
 
@@ -94,8 +94,8 @@ export default function Login() {
               autoComplete="current-password"
               required
               className="w-full px-4 py-3.5 rounded-xl text-sm text-white placeholder-slate-600
-                         focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+                         focus:outline-none focus:ring-2 transition-all"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', outlineColor: 'var(--brand-primary)' }}
             />
           </div>
 
@@ -113,9 +113,9 @@ export default function Login() {
                        disabled:opacity-60 disabled:cursor-not-allowed
                        hover:-translate-y-0.5 active:translate-y-0"
             style={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-secondary) 100%)',
               color: 'white',
-              boxShadow: '0 4px 20px rgba(102,126,234,0.3)',
+              boxShadow: '0 4px 20px color-mix(in srgb, var(--brand-primary) 40%, transparent)',
             }}
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
@@ -125,7 +125,7 @@ export default function Login() {
 
         <p className="text-center mt-6 text-xs text-slate-600">
           Forgot password?{' '}
-          <a href="#/forgot-password" className="text-indigo-400 hover:text-indigo-300 transition-colors">
+          <a href="#/forgot-password" className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
             Reset it here
           </a>
         </p>

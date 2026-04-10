@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* ── Brand color custom properties ──
+ * Defaults match the legacy purple. AuthProvider overwrites these on
+ * studio_accounts load so every component (and raw CSS) can pick up the
+ * active studio's brand identity via var(--brand-primary) / var(--brand-secondary).
+ */
+:root {
+  --brand-primary: #667eea;
+  --brand-secondary: #764ba2;
+}
+
 /* ── Base — nuclear dark background guarantee ── */
 html, body, #root {
   margin: 0;
@@ -14,7 +24,16 @@ html, body, #root {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb:hover { background: var(--brand-primary); }
+
+/* ── Link accent hover ── */
+a:hover { color: var(--brand-primary); }
+
+/* ── Text selection ── */
+::selection {
+  background: var(--brand-primary);
+  color: #fff;
+}
 
 /* ── Bebas Neue headings ── */
 .font-display {
