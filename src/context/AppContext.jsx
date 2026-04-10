@@ -10,6 +10,7 @@ const INITIAL_STATE = {
   resolvedStudioId: null,
   resolvedClientId: null,
   authReady: false,
+  studioLoadError: false,
   // Studio settings
   photoSource: 'studio_only',
   aiPhotoPrompt: '',

@@ -5,14 +5,8 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useApp } from '../context/AppContext'
-
-function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`TIMEOUT: ${label} (${ms}ms)`)), ms))
-  ])
-}
 
 // Hardcoded admin accounts — bypass all Supabase role AND studio lookups
 const ADMIN_ACCOUNTS = {
@@ -78,6 +72,7 @@ export default function AuthProvider({ children }) {
         resolvedStudioId: ri?.studioId || null,
         resolvedClientId: ri?.clientId || null,
         authReady: true,
+        studioLoadError: false,
       }
 
       // Admin accounts have studioData baked in — skip the Supabase query entirely
@@ -99,12 +94,13 @@ export default function AuthProvider({ children }) {
         })
       } else if (ri?.studioId) {
         try {
-          const { data: s } = await withTimeout(
+          const { data: s, error: qErr } = await withTimeout(
             supabase.from('studio_accounts')
               .select('studio_name, photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, is_beta, studio_type, last_content_types')
               .eq('id', ri.studioId).single(),
             5000, 'studio_accounts'
           )
+          if (qErr) throw qErr
           if (s) {
             Object.assign(updates, {
               studioName: s.studio_name || '',
@@ -119,9 +115,13 @@ export default function AuthProvider({ children }) {
               studioType: s.studio_type || '',
               lastContentTypes: s.last_content_types || [],
             })
+          } else {
+            // Query succeeded but returned no row — RLS likely blocked or wrong id
+            updates.studioLoadError = true
           }
         } catch (e) {
           console.warn('[FCA] studio_accounts load failed:', e.message)
+          updates.studioLoadError = true
         }
       }
 
