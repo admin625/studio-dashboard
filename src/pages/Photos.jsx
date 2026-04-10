@@ -98,9 +98,14 @@ export default function Photos() {
     setDeleting(null)
   }
 
-  const activity = photos.filter(p => p.keywords !== 'headshot')
-  const headshots = photos.filter(p => p.keywords === 'headshot')
-  const filtered = filter === 'all' ? photos : filter === 'activity' ? activity : headshots
+  const isAiPhoto = (p) => p.source === 'ai_generated'
+  const uploaded = photos.filter(p => !isAiPhoto(p))
+  const aiPhotos = photos.filter(isAiPhoto)
+  const filtered =
+    filter === 'all' ? photos
+    : filter === 'uploaded' ? uploaded
+    : filter === 'ai_generated' ? aiPhotos
+    : photos
 
   const formatSize = (bytes) => {
     if (!bytes) return ''
@@ -135,13 +140,13 @@ export default function Photos() {
         )}
       </div>
 
-      {/* Stats bar */}
+      {/* Filter tabs */}
       {!loading && photos.length > 0 && (
         <div className="flex items-center gap-4 mb-6">
           {[
             { label: 'All', value: 'all', count: photos.length },
-            { label: 'Activity', value: 'activity', count: activity.length },
-            { label: 'Headshots', value: 'headshot', count: headshots.length },
+            { label: 'Studio Photos', value: 'uploaded', count: uploaded.length },
+            { label: 'AI Generated', value: 'ai_generated', count: aiPhotos.length },
           ].map(tab => (
             <button
               key={tab.value}
@@ -257,19 +262,31 @@ export default function Photos() {
         <div className="text-center py-20">
           <ImageIcon size={48} className="mx-auto mb-4" style={{ color: 'rgba(255,255,255,0.1)' }} />
           <p className="text-white text-lg font-semibold mb-1">
-            {photos.length === 0 ? 'No photos yet' : 'No photos in this category'}
+            {photos.length === 0
+              ? 'No photos yet'
+              : filter === 'ai_generated'
+                ? 'No AI generated photos yet'
+                : filter === 'uploaded'
+                  ? 'No studio photos uploaded yet'
+                  : 'No photos in this category'}
           </p>
           <p className="text-slate-500 text-sm">
-            {photos.length === 0 ? 'Upload studio photos to use in your content.' : 'Try a different filter.'}
+            {photos.length === 0
+              ? 'Upload studio photos or save AI images from the photo editor.'
+              : filter === 'ai_generated'
+                ? 'Generate images in the photo editor and click Save to Library.'
+                : 'Try a different filter.'}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
           {filtered.map(photo => {
-            const isHeadshot = photo.keywords === 'headshot'
-            const label = isHeadshot
-              ? (photo.tags?.[0] || 'Headshot')
-              : (photo.keywords || photo.file_name || 'Studio Photo')
+            const photoIsAI = isAiPhoto(photo)
+            const label = photoIsAI
+              ? (photo.generation_prompt || 'AI Generated')
+              : (photo.keywords === 'headshot'
+                  ? (photo.tags?.[0] || 'Headshot')
+                  : (photo.keywords || photo.file_name || 'Studio Photo'))
             const isDeleting = deleting === photo.id
 
             return (
@@ -307,16 +324,16 @@ export default function Photos() {
                   )}
                 </div>
 
-                {/* Category badge */}
+                {/* Source badge (AI / Studio) — matches PostCard picker style */}
                 <span
                   className="absolute top-2 left-2 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider"
                   style={{
-                    background: isHeadshot ? 'rgba(139,92,246,0.25)' : 'rgba(16,185,129,0.25)',
-                    color: isHeadshot ? '#c4b5fd' : '#6ee7b7',
+                    background: photoIsAI ? 'rgba(139,92,246,0.3)' : 'rgba(16,185,129,0.3)',
+                    color: photoIsAI ? '#c4b5fd' : '#6ee7b7',
                     backdropFilter: 'blur(8px)',
                   }}
                 >
-                  {isHeadshot ? 'Headshot' : 'Activity'}
+                  {photoIsAI ? 'AI' : 'Studio'}
                 </span>
 
                 {/* Label */}
@@ -356,9 +373,21 @@ export default function Photos() {
             style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)' }}
             onClick={e => e.stopPropagation()}
           >
-            <span className="text-xs text-white/70">{lightbox.file_name || 'Photo'}</span>
+            <span className="text-xs text-white/70">
+              {isAiPhoto(lightbox)
+                ? (lightbox.generation_prompt || 'AI Generated')
+                : (lightbox.file_name || 'Studio Photo')}
+            </span>
             {lightbox.file_size && <span className="text-[10px] text-white/40">{formatSize(lightbox.file_size)}</span>}
-            <span className="text-[10px] text-white/40 uppercase">{lightbox.keywords || 'activity'}</span>
+            <span
+              className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+              style={{
+                background: isAiPhoto(lightbox) ? 'rgba(139,92,246,0.3)' : 'rgba(16,185,129,0.3)',
+                color: isAiPhoto(lightbox) ? '#c4b5fd' : '#6ee7b7',
+              }}
+            >
+              {isAiPhoto(lightbox) ? 'AI' : 'Studio'}
+            </span>
             {isOwner && (
               <button
                 onClick={() => { deletePhoto(lightbox); setLightbox(null) }}
