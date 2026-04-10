@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
-  Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp,
+  Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp, Edit3,
 } from 'lucide-react'
 
 const PLATFORM_LABEL = { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', all: 'All Platforms' }
@@ -47,6 +47,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [overridePhotoUrl, setOverridePhotoUrl] = useState(null)
   const [overrideIsAI, setOverrideIsAI] = useState(null)
+  // undefined = no override yet (use post values); null/string = explicit override after regenerate or pick
+  const [overridePrompt, setOverridePrompt] = useState(undefined)
   const [editorMsg, setEditorMsg] = useState(null)
 
   const currentPhotoUrl = overridePhotoUrl || post.photo_url
@@ -54,6 +56,13 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const isAI = overrideIsAI !== null ? overrideIsAI : baseIsAI
   const hasImage = currentPhotoUrl || post.needs_ai_image
   const fmtStyle = FORMAT_COLORS[post.format] || null
+
+  // Effective prompt that generated the currently displayed photo.
+  // Prefers the in-session override (set on regenerate/pick) over the persisted post value.
+  const effectivePrompt =
+    overridePrompt !== undefined
+      ? overridePrompt
+      : (post.image_prompt || post.generation_prompt || null)
 
   const flashMsg = (msg) => {
     setEditorMsg(msg)
@@ -172,6 +181,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
       const newUrl = data.image_url
       setOverridePhotoUrl(newUrl)
       setOverrideIsAI(true)
+      setOverridePrompt(prompt)
       await persistPhotoChange(newUrl, {
         image_prompt: prompt,
         generation_prompt: prompt,
@@ -188,6 +198,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const handlePickPhoto = async (photo) => {
     setOverridePhotoUrl(photo.photo_url)
     setOverrideIsAI(photo.source === 'ai_generated')
+    setOverridePrompt(photo.generation_prompt || null)
     try {
       await persistPhotoChange(photo.photo_url, {
         matched_photo_id: photo.id,
@@ -263,6 +274,25 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
               <span className="text-[10px] text-slate-600 italic truncate">{post.image_direction}</span>
             )}
           </div>
+
+          {/* Prompt subtext — click to open editor pre-filled. Hidden if no prompt exists. */}
+          {effectivePrompt && (
+            <button
+              type="button"
+              onClick={() => { if (!editorOpen && !readOnly) setEditorOpen(true) }}
+              title={effectivePrompt}
+              className="w-full flex items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:bg-white/[0.025]"
+              style={{
+                background: 'rgba(255,255,255,0.01)',
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                cursor: editorOpen || readOnly ? 'default' : 'pointer',
+              }}
+            >
+              <Edit3 size={10} className="flex-shrink-0 text-slate-600" />
+              <span className="text-[10px] font-semibold text-slate-500 flex-shrink-0">Generated with:</span>
+              <span className="text-[10px] text-slate-400 italic truncate min-w-0">{effectivePrompt}</span>
+            </button>
+          )}
 
           {/* Edit Photo toggle */}
           {!readOnly && (
