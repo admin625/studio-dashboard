@@ -1,13 +1,13 @@
 /**
  * PostCard — Single post within a delivery detail.
- * Caption, hashtags, photo, metadata, edit/copy/download actions.
+ * Caption, hashtags, photo, metadata, edit/copy/download actions, inline photo editor.
  */
 import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
-  Image as ImageIcon, Sparkles,
+  Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 const PLATFORM_LABEL = { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', all: 'All Platforms' }
@@ -18,8 +18,10 @@ const FORMAT_COLORS = {
   carousel: { bg: '#fce7f3', color: '#9d174d' },
 }
 
+const PROMPT_PLACEHOLDER = 'Describe the photo you want...'
+
 export default function PostCard({ post, index, platform, deliveryId, readOnly }) {
-  const { brandColorPrimary } = useApp()
+  const { brandColorPrimary, resolvedStudioId, email } = useApp()
   const primary = brandColorPrimary || '#667eea'
 
   const [editing, setEditing] = useState(null) // 'caption' | 'hashtags' | null
@@ -29,9 +31,34 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const [saving, setSaving] = useState(false)
   const textareaRef = useRef(null)
 
-  const isAI = post.needs_ai_image || (!post.matched_photo_id && post.photo_url)
-  const hasImage = post.photo_url || post.needs_ai_image
+  // Photo editor state
+  const [editorOpen, setEditorOpen] = useState(false)
+  const initialPrompt =
+    post.image_prompt ||
+    post.generation_prompt ||
+    post.image_direction ||
+    post.photo_keywords ||
+    ''
+  const [promptText, setPromptText] = useState(initialPrompt || PROMPT_PLACEHOLDER)
+  const [regenerating, setRegenerating] = useState(false)
+  const [savingToLib, setSavingToLib] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [studioPhotos, setStudioPhotos] = useState([])
+  const [loadingPhotos, setLoadingPhotos] = useState(false)
+  const [overridePhotoUrl, setOverridePhotoUrl] = useState(null)
+  const [overrideIsAI, setOverrideIsAI] = useState(null)
+  const [editorMsg, setEditorMsg] = useState(null)
+
+  const currentPhotoUrl = overridePhotoUrl || post.photo_url
+  const baseIsAI = post.needs_ai_image || (!post.matched_photo_id && post.photo_url)
+  const isAI = overrideIsAI !== null ? overrideIsAI : baseIsAI
+  const hasImage = currentPhotoUrl || post.needs_ai_image
   const fmtStyle = FORMAT_COLORS[post.format] || null
+
+  const flashMsg = (msg) => {
+    setEditorMsg(msg)
+    setTimeout(() => setEditorMsg(null), 4000)
+  }
 
   const handleCopy = async (type) => {
     const text = type === 'caption' ? captionText : hashtagText
@@ -47,7 +74,6 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const handleSave = async (field) => {
     setSaving(true)
     try {
-      // Read current content, update the specific post, write back
       const { data } = await supabase
         .from('content_deliveries')
         .select(`${platform}_content`)
@@ -71,6 +97,132 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     setEditing(null)
   }
 
+  // Persist photo changes back to the content_deliveries JSONB
+  const persistPhotoChange = async (newUrl, extraFields = {}) => {
+    try {
+      const { data } = await supabase
+        .from('content_deliveries')
+        .select(`${platform}_content`)
+        .eq('id', deliveryId)
+        .single()
+      if (!data) return
+      const content = data[`${platform}_content`] || []
+      if (!content[index]) return
+      content[index].photo_url = newUrl
+      Object.assign(content[index], extraFields)
+      await supabase
+        .from('content_deliveries')
+        .update({ [`${platform}_content`]: content })
+        .eq('id', deliveryId)
+    } catch (e) {
+      console.error('[PostCard] Photo persist failed:', e)
+    }
+  }
+
+  // Load studio photos for the picker (lazy, only on open)
+  const loadStudioPhotos = async () => {
+    if (!resolvedStudioId) return
+    setLoadingPhotos(true)
+    try {
+      const { data } = await supabase
+        .from('studio_photos')
+        .select('id, photo_url, thumbnail_url, keywords, source, tags, file_name')
+        .eq('studio_id', resolvedStudioId)
+        .eq('is_active', true)
+        .order('upload_date', { ascending: false })
+        .limit(60)
+      if (data) setStudioPhotos(data)
+    } catch (e) {
+      flashMsg({ type: 'error', text: 'Could not load photo library' })
+    }
+    setLoadingPhotos(false)
+  }
+
+  const togglePicker = async () => {
+    if (!pickerOpen && studioPhotos.length === 0) {
+      await loadStudioPhotos()
+    }
+    setPickerOpen(v => !v)
+  }
+
+  const handleRegenerate = async () => {
+    const prompt = (promptText || '').trim()
+    if (!prompt || prompt === PROMPT_PLACEHOLDER || !resolvedStudioId) {
+      flashMsg({ type: 'error', text: 'Write a real prompt first' })
+      return
+    }
+    setRegenerating(true)
+    setEditorMsg(null)
+    try {
+      const res = await fetch('/.netlify/functions/proxy-webhook?target=ai-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: 'nano_banana_pro',
+          prompt,
+          width: 1024,
+          height: 1024,
+          studio_id: resolvedStudioId,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.image_url) {
+        throw new Error(data.error || data.detail || 'Image generation failed')
+      }
+      const newUrl = data.image_url
+      setOverridePhotoUrl(newUrl)
+      setOverrideIsAI(true)
+      await persistPhotoChange(newUrl, {
+        image_prompt: prompt,
+        generation_prompt: prompt,
+        matched_photo_id: null,
+        needs_ai_image: false,
+      })
+      flashMsg({ type: 'success', text: 'Image regenerated' })
+    } catch (e) {
+      flashMsg({ type: 'error', text: e.message || 'Regenerate failed' })
+    }
+    setRegenerating(false)
+  }
+
+  const handlePickPhoto = async (photo) => {
+    setOverridePhotoUrl(photo.photo_url)
+    setOverrideIsAI(photo.source === 'ai_generated')
+    try {
+      await persistPhotoChange(photo.photo_url, {
+        matched_photo_id: photo.id,
+        needs_ai_image: false,
+      })
+      flashMsg({ type: 'success', text: 'Photo replaced' })
+      setPickerOpen(false)
+    } catch (e) {
+      flashMsg({ type: 'error', text: 'Could not replace photo' })
+    }
+  }
+
+  const handleSaveToLibrary = async () => {
+    if (!currentPhotoUrl || !resolvedStudioId) return
+    setSavingToLib(true)
+    try {
+      const { error } = await supabase.from('studio_photos').insert({
+        studio_id: resolvedStudioId,
+        photo_url: currentPhotoUrl,
+        keywords: 'ai_generated',
+        source: 'ai_generated',
+        generation_model: 'nano_banana_pro',
+        generation_prompt: promptText !== PROMPT_PLACEHOLDER ? promptText : null,
+        uploaded_by: email || null,
+        is_active: true,
+        tags: null,
+      })
+      if (error) throw error
+      flashMsg({ type: 'success', text: 'Saved to photo library' })
+    } catch (e) {
+      flashMsg({ type: 'error', text: 'Save failed: ' + e.message })
+    }
+    setSavingToLib(false)
+  }
+
   return (
     <div
       className="rounded-xl overflow-hidden mb-4"
@@ -92,7 +244,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
       </div>
 
       {/* Image */}
-      {hasImage && post.photo_url && (
+      {hasImage && currentPhotoUrl && (
         <div className="relative">
           {post.image_platform && (
             <span
@@ -102,7 +254,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
               {PLATFORM_LABEL[post.image_platform] || post.image_platform}
             </span>
           )}
-          <img src={post.photo_url} alt="Post" className="w-full max-h-96 object-cover" />
+          <img src={currentPhotoUrl} alt="Post" className="w-full max-h-96 object-cover" />
           <div className="flex items-center gap-2 px-5 py-2" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: isAI ? '#a78bfa' : '#10b981' }}>
               {isAI ? 'AI Generated' : 'Studio Photo'}
@@ -111,6 +263,153 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
               <span className="text-[10px] text-slate-600 italic truncate">{post.image_direction}</span>
             )}
           </div>
+
+          {/* Edit Photo toggle */}
+          {!readOnly && (
+            <div className="px-5 py-2" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: editorOpen ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+              <button
+                onClick={() => setEditorOpen(v => !v)}
+                className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors"
+                style={{ color: editorOpen ? primary : '#64748b' }}
+              >
+                <Pencil size={11} />
+                {editorOpen ? 'Close photo editor' : 'Edit Photo'}
+                {editorOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+              </button>
+            </div>
+          )}
+
+          {/* Inline editor panel */}
+          {!readOnly && editorOpen && (
+            <div className="px-5 py-4" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              {/* Prompt */}
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                Photo Prompt
+              </label>
+              <textarea
+                value={promptText}
+                onChange={e => setPromptText(e.target.value)}
+                onFocus={e => { if (promptText === PROMPT_PLACEHOLDER) setPromptText('') }}
+                onBlur={e => { if (!promptText.trim()) setPromptText(initialPrompt || PROMPT_PLACEHOLDER) }}
+                rows={3}
+                placeholder={PROMPT_PLACEHOLDER}
+                className="w-full px-3 py-2.5 rounded-lg text-sm text-white resize-y focus:outline-none mb-3"
+                style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${primary}40` }}
+              />
+
+              {/* Action buttons */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleRegenerate}
+                  disabled={regenerating}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                  style={{ background: primary, color: '#fff' }}
+                >
+                  {regenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {regenerating ? 'Regenerating...' : 'Regenerate'}
+                </button>
+
+                <button
+                  onClick={togglePicker}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all hover:-translate-y-0.5"
+                  style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  <ImageIcon size={12} />
+                  {pickerOpen ? 'Hide library' : 'Choose from Studio Photos'}
+                </button>
+
+                <button
+                  onClick={handleSaveToLibrary}
+                  disabled={savingToLib || !currentPhotoUrl}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
+                  style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  {savingToLib ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                  {savingToLib ? 'Saving...' : 'Save to Library'}
+                </button>
+              </div>
+
+              {/* Status message */}
+              {editorMsg && (
+                <div
+                  className="mt-3 px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-2"
+                  style={{
+                    background: editorMsg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                    color: editorMsg.type === 'success' ? '#10b981' : '#ef4444',
+                    border: `1px solid ${editorMsg.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                  }}
+                >
+                  {editorMsg.type === 'success' ? <Check size={12} /> : <X size={12} />}
+                  {editorMsg.text}
+                </div>
+              )}
+
+              {/* Studio photo picker */}
+              {pickerOpen && (
+                <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Studio Photo Library {!loadingPhotos && studioPhotos.length > 0 && `(${studioPhotos.length})`}
+                    </span>
+                    <button onClick={() => setPickerOpen(false)} className="text-slate-600 hover:text-white transition-colors">
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  {loadingPhotos ? (
+                    <div className="py-8 text-center">
+                      <Loader2 size={20} className="animate-spin mx-auto" style={{ color: primary }} />
+                    </div>
+                  ) : studioPhotos.length === 0 ? (
+                    <p className="text-xs text-slate-600 py-4 text-center">No photos in your library yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-72 overflow-y-auto">
+                      {studioPhotos.map(photo => {
+                        const isCurrent = photo.photo_url === currentPhotoUrl
+                        const photoIsAI = photo.source === 'ai_generated'
+                        return (
+                          <button
+                            key={photo.id}
+                            onClick={() => handlePickPhoto(photo)}
+                            className="relative aspect-square rounded-lg overflow-hidden group transition-all hover:-translate-y-0.5"
+                            style={{
+                              border: isCurrent ? `2px solid ${primary}` : '1px solid rgba(255,255,255,0.06)',
+                              boxShadow: isCurrent ? `0 0 0 2px ${primary}30` : 'none',
+                            }}
+                          >
+                            <img
+                              src={photo.thumbnail_url || photo.photo_url}
+                              alt={photo.keywords || 'Studio photo'}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                            <span
+                              className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider"
+                              style={{
+                                background: photoIsAI ? 'rgba(139,92,246,0.3)' : 'rgba(16,185,129,0.3)',
+                                color: photoIsAI ? '#c4b5fd' : '#6ee7b7',
+                                backdropFilter: 'blur(4px)',
+                              }}
+                            >
+                              {photoIsAI ? 'AI' : 'Studio'}
+                            </span>
+                            {isCurrent && (
+                              <span
+                                className="absolute bottom-1 right-1 w-4 h-4 rounded-full flex items-center justify-center"
+                                style={{ background: primary }}
+                              >
+                                <Check size={10} className="text-white" />
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -228,8 +527,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
             {copied === 'hashtags' ? 'Copied!' : 'Copy Tags'}
           </button>
         )}
-        {post.photo_url && (
-          <a href={post.photo_url} download target="_blank" rel="noopener noreferrer"
+        {currentPhotoUrl && (
+          <a href={currentPhotoUrl} download target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:-translate-y-0.5"
             style={{ background: 'rgba(255,255,255,0.04)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', textDecoration: 'none' }}>
             <Download size={12} /> Image

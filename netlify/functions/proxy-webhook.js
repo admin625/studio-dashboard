@@ -2,6 +2,12 @@ const TARGETS = {
   'photo-editor': 'N8N_PHOTO_EDITOR_URL',
   'video-reel': 'N8N_VIDEO_REEL_URL',
   'fca-carousel': 'N8N_CAROUSEL_URL',
+  'ai-photo': 'N8N_AI_PHOTO_URL',
+};
+
+// Fallback webhook URLs when env vars are not set — keeps features working out of the box
+const DEFAULTS = {
+  'ai-photo': 'https://jmac.app.n8n.cloud/webhook/fca-ai-photo',
 };
 
 exports.handler = async (event) => {
@@ -19,7 +25,7 @@ exports.handler = async (event) => {
   }
 
   const envVar = TARGETS[target];
-  const webhookUrl = process.env[envVar];
+  const webhookUrl = process.env[envVar] || DEFAULTS[target];
   if (!webhookUrl) {
     console.error('[proxy-webhook] ' + envVar + ' env var is not set');
     return respond(500, { error: envVar + ' is not configured. Set it in Netlify environment variables.' });
