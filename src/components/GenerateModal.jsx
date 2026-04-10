@@ -175,7 +175,6 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
       body: JSON.stringify(payload),
     }).then(r => {
       if (!r.ok) console.warn('[Generate] Server responded with', r.status)
-      else console.log('[Generate] Server accepted request')
     }).catch(err => {
       console.warn('[Generate] Request error:', err.message)
     })

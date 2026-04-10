@@ -29,8 +29,6 @@ exports.handler = async (event) => {
     return respond(400, { error: 'At least one platform is required' });
   }
 
-  console.log('[generate-content] Forwarding to:', webhookUrl);
-
   // Send request to n8n with a 25s timeout (Netlify Pro max is 26s).
   // n8n webhook is responseMode=lastNode, so it holds the connection open
   // until the full pipeline completes (~35-60s with Claude). If it takes
@@ -48,7 +46,6 @@ exports.handler = async (event) => {
     });
     clearTimeout(timeout);
     const text = await res.text();
-    console.log('[generate-content] Upstream status:', res.status, 'body length:', text.length);
     let data;
     try { data = JSON.parse(text); } catch { data = text; }
     return respond(res.status, data);
@@ -56,7 +53,6 @@ exports.handler = async (event) => {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
       // Timeout — n8n is still processing, will save results when done
-      console.log('[generate-content] Timeout after 25s — n8n still processing');
       return respond(202, { success: true, message: 'Content generation in progress. Results will appear in your deliveries.' });
     }
     console.error('[generate-content] Upstream fetch failed:', err.message);

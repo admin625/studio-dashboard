@@ -17,7 +17,6 @@ export default function Login() {
   // Redirect to dashboard if already authenticated
   useEffect(() => {
     if (authReady && user) {
-      console.log('[FCA] Login: user authenticated, redirecting to /deliveries')
       navigate('/deliveries', { replace: true })
     }
   }, [authReady, user, navigate])
@@ -31,7 +30,6 @@ export default function Login() {
       await login(email, password)
       // AuthProvider will set user + authReady via onAuthStateChange
       // The useEffect above will redirect once user is set
-      console.log('[FCA] Login: signInWithPassword succeeded, waiting for auth state...')
     } catch (err) {
       setError(err.message || 'Login failed')
       setLoading(false)

@@ -32,7 +32,6 @@ exports.handler = async (event) => {
       body: event.body,
     });
     const text = await res.text();
-    console.log('[proxy-webhook] Upstream status:', res.status, 'body length:', text.length);
     if (!text || text.trim() === '') {
       return respond(res.status, { success: res.ok, message: 'Upstream returned empty response' });
     }
