@@ -50,6 +50,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   // undefined = no override yet (use post values); null/string = explicit override after regenerate or pick
   const [overridePrompt, setOverridePrompt] = useState(undefined)
   const [editorMsg, setEditorMsg] = useState(null)
+  const [promptExpanded, setPromptExpanded] = useState(false)
 
   const currentPhotoUrl = overridePhotoUrl || post.photo_url
   const baseIsAI = post.needs_ai_image || (!post.matched_photo_id && post.photo_url)
@@ -275,24 +276,61 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
             )}
           </div>
 
-          {/* Prompt subtext — click to open editor pre-filled. Hidden if no prompt exists. */}
-          {effectivePrompt && (
-            <button
-              type="button"
-              onClick={() => { if (!editorOpen && !readOnly) setEditorOpen(true) }}
-              title={effectivePrompt}
-              className="w-full flex items-center gap-1.5 px-5 py-1.5 text-left transition-colors hover:bg-white/[0.025]"
-              style={{
-                background: 'rgba(255,255,255,0.01)',
-                borderBottom: '1px solid rgba(255,255,255,0.04)',
-                cursor: editorOpen || readOnly ? 'default' : 'pointer',
-              }}
-            >
-              <Edit3 size={10} className="flex-shrink-0 text-slate-600" />
-              <span className="text-[10px] font-semibold text-slate-500 flex-shrink-0">Generated with:</span>
-              <span className="text-[10px] text-slate-400 italic truncate min-w-0">{effectivePrompt}</span>
-            </button>
-          )}
+          {/* Image prompt subtext — AI-generated photos ONLY, not studio library photos.
+              Click the row to open the photo editor pre-filled. Truncates at 120 chars
+              with a "show more" toggle. Helper line below points to the edit flow. */}
+          {isAI && effectivePrompt && (() => {
+            const PROMPT_LIMIT = 120
+            const isLong = effectivePrompt.length > PROMPT_LIMIT
+            const shown = promptExpanded || !isLong
+              ? effectivePrompt
+              : effectivePrompt.slice(0, PROMPT_LIMIT).trimEnd() + '…'
+            return (
+              <div
+                style={{
+                  background: 'rgba(255,255,255,0.01)',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => { if (!editorOpen && !readOnly) setEditorOpen(true) }}
+                  title={effectivePrompt}
+                  className="w-full flex items-start gap-2 px-5 pt-3 pb-1 text-left transition-colors hover:bg-white/[0.025]"
+                  style={{ cursor: editorOpen || readOnly ? 'default' : 'pointer' }}
+                >
+                  <Edit3 size={13} className="flex-shrink-0 mt-[2px]" style={{ color: '#A0A0A0' }} />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-semibold mr-1.5" style={{ color: '#A0A0A0', fontSize: '13px' }}>
+                      Image prompt:
+                    </span>
+                    <span style={{ color: '#A0A0A0', fontSize: '13px' }}>
+                      {shown}
+                    </span>
+                    {isLong && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPromptExpanded(v => !v)
+                        }}
+                        className="ml-1.5 font-semibold transition-colors"
+                        style={{ color: primary, fontSize: '13px' }}
+                      >
+                        {promptExpanded ? 'show less' : 'show more'}
+                      </button>
+                    )}
+                  </div>
+                </button>
+                <p
+                  className="px-5 pb-2 italic"
+                  style={{ color: '#666666', fontSize: '11px', paddingLeft: '39px' }}
+                >
+                  Adjust this prompt in Edit Photo to regenerate with changes.
+                </p>
+              </div>
+            )
+          })()}
 
           {/* Edit Photo toggle */}
           {!readOnly && (
