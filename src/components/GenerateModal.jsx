@@ -293,6 +293,30 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
                       )}
                     </div>
                   ))}
+
+                  {/* Reels (disabled — coming soon) */}
+                  <div
+                    className="flex items-center gap-3 p-3 rounded-lg opacity-60 cursor-not-allowed"
+                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.04)' }}
+                    title="Video reels are coming soon — we'll notify you when they're ready."
+                  >
+                    <label className="flex items-center gap-2 flex-1 cursor-not-allowed">
+                      <input
+                        type="checkbox"
+                        disabled
+                        checked={false}
+                        readOnly
+                        className="accent-indigo-500 cursor-not-allowed"
+                      />
+                      <span className="text-sm text-slate-500 font-medium">Reels</span>
+                      <span
+                        className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ background: '#2A2A2A', color: '#A0A0A0' }}
+                      >
+                        Coming Soon
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
