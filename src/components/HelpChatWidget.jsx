@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 const WEBHOOK_URL = 'https://jmac.app.n8n.cloud/webhook/fca-help-chat'
 
@@ -25,7 +26,6 @@ export default function HelpChatWidget({ currentPage }) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Build history array for Claude (alternating user/assistant)
   function getHistory() {
     return messages.map((m) => ({ role: m.role, content: m.text }))
   }
@@ -52,7 +52,7 @@ export default function HelpChatWidget({ currentPage }) {
         ...prev,
         { role: 'assistant', text: data.reply || 'No response received.' },
       ])
-    } catch (e) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', text: 'Could not reach the help assistant. Please try again.' },
@@ -66,18 +66,20 @@ export default function HelpChatWidget({ currentPage }) {
     send(input)
   }
 
-  return (
+  // Render via portal directly into document.body so position:fixed
+  // is never broken by a parent with overflow/transform/will-change.
+  return createPortal(
     <>
       {/* Chat panel */}
       {open && (
         <div
           style={{
             position: 'fixed',
-            bottom: 80,
+            bottom: 88,
             right: 24,
             width: 360,
             height: 460,
-            zIndex: 9999,
+            zIndex: 99999,
             display: 'flex',
             flexDirection: 'column',
             borderRadius: 12,
@@ -203,9 +205,9 @@ export default function HelpChatWidget({ currentPage }) {
                     gap: 4,
                   }}
                 >
-                  <span style={{ animation: 'pulse 1.2s infinite' }}>●</span>
-                  <span style={{ animation: 'pulse 1.2s infinite 0.2s' }}>●</span>
-                  <span style={{ animation: 'pulse 1.2s infinite 0.4s' }}>●</span>
+                  <span style={{ animation: 'fca-help-pulse 1.2s infinite' }}>●</span>
+                  <span style={{ animation: 'fca-help-pulse 1.2s infinite 0.2s' }}>●</span>
+                  <span style={{ animation: 'fca-help-pulse 1.2s infinite 0.4s' }}>●</span>
                 </div>
               </div>
             )}
@@ -262,21 +264,21 @@ export default function HelpChatWidget({ currentPage }) {
         </div>
       )}
 
-      {/* Toggle button */}
+      {/* Toggle button — 56px, visible ring, green availability dot */}
       <button
         onClick={() => setOpen((o) => !o)}
         style={{
           position: 'fixed',
           bottom: 24,
           right: 24,
-          width: 48,
-          height: 48,
+          width: 56,
+          height: 56,
           borderRadius: '50%',
           background: '#0A0B0D',
-          border: '1px solid rgba(255,255,255,0.12)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          border: 'none',
+          boxShadow: '0 0 0 2px rgba(255,255,255,0.15), 0 4px 16px rgba(0,0,0,0.4)',
           cursor: 'pointer',
-          zIndex: 9999,
+          zIndex: 99999,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -284,11 +286,11 @@ export default function HelpChatWidget({ currentPage }) {
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'scale(1.08)'
-          e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.5)'
+          e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.25), 0 6px 20px rgba(0,0,0,0.5)'
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'scale(1)'
-          e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.4)'
+          e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.15), 0 4px 16px rgba(0,0,0,0.4)'
         }}
         title="Help"
       >
@@ -298,21 +300,41 @@ export default function HelpChatWidget({ currentPage }) {
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
+          /* Chat bubble icon */
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
+        )}
+        {/* Green availability dot */}
+        {!open && (
+          <span
+            style={{
+              position: 'absolute',
+              top: 2,
+              right: 2,
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: '#22c55e',
+              border: '2px solid #0A0B0D',
+              animation: 'fca-help-dot 2s ease-in-out infinite',
+            }}
+          />
         )}
       </button>
 
-      {/* Typing indicator keyframes */}
+      {/* Keyframes */}
       <style>{`
-        @keyframes pulse {
+        @keyframes fca-help-pulse {
           0%, 80%, 100% { opacity: 0.3; }
           40% { opacity: 1; }
         }
+        @keyframes fca-help-dot {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
       `}</style>
-    </>
+    </>,
+    document.body
   )
 }
