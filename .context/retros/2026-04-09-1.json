@@ -1,0 +1,29 @@
+{
+  "date": "2026-04-09",
+  "window": "7d",
+  "metrics": {
+    "commits": 32,
+    "contributors": 1,
+    "prs_merged": 0,
+    "insertions": 12279,
+    "deletions": 6764,
+    "net_loc": 5515,
+    "test_loc": 0,
+    "test_ratio": 0,
+    "active_days": 2,
+    "sessions": 3,
+    "deep_sessions": 1,
+    "avg_session_minutes": 115,
+    "loc_per_session_hour": 2150,
+    "feat_pct": 0.59,
+    "fix_pct": 0.34,
+    "peak_hour": 11,
+    "ai_assisted_commits": 32
+  },
+  "authors": {
+    "John McDonald": { "commits": 32, "insertions": 12279, "deletions": 6764, "test_ratio": 0, "top_area": "src/" }
+  },
+  "version_range": null,
+  "streak_days": 2,
+  "tweetable": "Week of Apr 2: 32 commits, 12.3k LOC, React migration shipped, AI photo pipeline live, 100% AI-assisted | Streak: 2d"
+}

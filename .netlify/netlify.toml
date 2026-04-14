@@ -1,0 +1,44 @@
+functionsDirectory = "C:\\Users\\gurum\\studio-dashboard-migrate\\netlify\\functions"
+functionsDirectoryOrigin = "config"
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[build]
+publish = "C:\\Users\\gurum\\studio-dashboard-migrate\\dist"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npm run build"
+functions = "C:\\Users\\gurum\\studio-dashboard-migrate\\netlify\\functions"
+
+[build.environment]
+NODE_VERSION = "20"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[functions]
+
+[functions."*"]
+node_bundler = "esbuild"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

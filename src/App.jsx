@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthProvider from './components/AuthProvider'
@@ -8,6 +8,13 @@ import BrandSettings from './pages/BrandSettings'
 import Photos from './pages/Photos'
 import DeliveryView from './pages/DeliveryView'
 import ProtectedRoute from './components/ProtectedRoute'
+import HelpChatWidget from './components/HelpChatWidget'
+
+function HelpChat() {
+  const location = useLocation()
+  const page = location.pathname.replace(/^\//, '') || 'deliveries'
+  return <HelpChatWidget currentPage={page} />
+}
 
 export default function App() {
   return (
@@ -15,6 +22,7 @@ export default function App() {
       <AppProvider>
         <HashRouter>
           <AuthProvider>
+            <HelpChat />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route

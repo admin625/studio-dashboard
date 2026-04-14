@@ -1,0 +1,31 @@
+{
+  "date": "2026-04-10",
+  "window": "24h",
+  "metrics": {
+    "commits": 8,
+    "contributors": 1,
+    "prs_merged": 0,
+    "insertions": 788,
+    "deletions": 143,
+    "net_loc": 645,
+    "test_loc": 0,
+    "test_ratio": 0,
+    "active_days": 1,
+    "sessions": 1,
+    "deep_sessions": 1,
+    "avg_session_minutes": 57,
+    "loc_per_session_hour": 830,
+    "feat_pct": 0.625,
+    "fix_pct": 0.25,
+    "chore_pct": 0.125,
+    "peak_hour": 11,
+    "ai_assisted_commits": 8
+  },
+  "authors": {
+    "John McDonald": { "commits": 8, "insertions": 788, "deletions": 143, "test_ratio": 0, "top_area": "src/components/" }
+  },
+  "version_range": null,
+  "streak_days_personal": 2,
+  "streak_days_team": 3,
+  "tweetable": "Apr 10: 8 commits, +788/-143 LOC, inline photo editor + AI Reimagine + brand colors + teaching loop. One 57min session. Smoke test 8/8 pass | Streak: 2d"
+}
