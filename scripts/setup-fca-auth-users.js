@@ -11,7 +11,7 @@
 // NEVER hardcode passwords in source files.
 // ============================================================
 
-const SUPABASE_URL = 'https://kidgcrqxrfcbsaeguwop.supabase.co';
+const SUPABASE_URL = 'https://fidhmvuurygpknhshpml.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 if (!SERVICE_KEY) {
