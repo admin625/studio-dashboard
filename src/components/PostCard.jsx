@@ -274,7 +274,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     if (postExcerpt) parts.push(`Post: "${postExcerpt}"`)
     const aesthetic = []
     if (studioType) aesthetic.push(`${studioType} studio`)
-    if (primary) aesthetic.push(`brand color ${primary}`)
+    if (brandColorPrimary) aesthetic.push(`brand color ${brandColorPrimary}`)
     if (brandVoice) aesthetic.push(`voice ${brandVoice}`)
     if (aesthetic.length) parts.push(`Studio aesthetic: ${aesthetic.join(', ')}.`)
     if (aiPhotoPrompt) parts.push(aiPhotoPrompt.trim())
@@ -310,8 +310,14 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
         content_focus: (post.caption || '').slice(0, 120),
         _source: 'post_picker_generate_button',
       }),
+    }).then(r => {
+      if (!r.ok) {
+        setAiGenerating(false)
+        flashMsg({ type: 'error', text: `Could not start generation (${r.status})` })
+      }
     }).catch(err => {
-      console.warn('[AI Gen] fire-and-forget error:', err.message)
+      setAiGenerating(false)
+      flashMsg({ type: 'error', text: err.message || 'Network error starting generation' })
     })
   }
 
