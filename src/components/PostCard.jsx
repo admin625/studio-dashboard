@@ -2,12 +2,12 @@
  * PostCard — Single post within a delivery detail.
  * Caption, hashtags, photo, metadata, edit/copy/download actions, inline photo editor.
  */
-import { useState, useRef } from 'react'
-import { supabase } from '../lib/supabase'
+import { useState, useRef, useEffect } from 'react'
+import { supabase, SUPABASE_URL } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
-  Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp, Edit3,
+  Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp, Edit3, Wand2,
 } from 'lucide-react'
 
 const PLATFORM_LABEL = { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', all: 'All Platforms' }
@@ -21,7 +21,7 @@ const FORMAT_COLORS = {
 const PROMPT_PLACEHOLDER = 'Describe the photo you want...'
 
 export default function PostCard({ post, index, platform, deliveryId, readOnly }) {
-  const { brandColorPrimary, resolvedStudioId, email } = useApp()
+  const { brandColorPrimary, resolvedStudioId, email, studioName, studioType, brandVoice, aiPhotoPrompt } = useApp()
   const primary = brandColorPrimary || '#667eea'
 
   const [editing, setEditing] = useState(null) // 'caption' | 'hashtags' | null
@@ -51,6 +51,60 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const [overridePrompt, setOverridePrompt] = useState(undefined)
   const [editorMsg, setEditorMsg] = useState(null)
   const [promptExpanded, setPromptExpanded] = useState(false)
+
+  // AI generate from picker — async flow separate from sync handleRegenerate in editor
+  const [aiGenOpen, setAiGenOpen] = useState(false)
+  const [aiGenPrompt, setAiGenPrompt] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiGenStartedAt, setAiGenStartedAt] = useState(0)
+  const [aiGenTimedOut, setAiGenTimedOut] = useState(false)
+  const [sessionAiPhotos, setSessionAiPhotos] = useState([])
+
+  // Poll the studio-photos bucket for AI-generated files landing after our trigger.
+  // Bypasses the studio_photos table (Bug C — anon INSERT blocked by RLS) by reading
+  // storage.objects directly, which has a permissive SELECT policy for this bucket.
+  // 30-min deadline: stop polling but leave the banner showing a graceful fallback.
+  useEffect(() => {
+    if (!aiGenerating || !resolvedStudioId) return
+    const POLL_MS = 10_000
+    const DEADLINE_MS = 30 * 60 * 1000
+    const deadline = aiGenStartedAt + DEADLINE_MS
+    const id = setInterval(async () => {
+      if (Date.now() > deadline) {
+        setAiGenTimedOut(true)
+        clearInterval(id)
+        return
+      }
+      try {
+        const { data } = await supabase.storage
+          .from('studio-photos')
+          .list(`ai-generated/${resolvedStudioId}/`, {
+            limit: 10,
+            sortBy: { column: 'created_at', order: 'desc' },
+          })
+        if (!data || data.length === 0) return
+        const fresh = data.filter(f => new Date(f.created_at).getTime() > aiGenStartedAt)
+        if (fresh.length === 0) return
+        const toAdd = fresh.map(f => ({
+          photo_url: `${SUPABASE_URL}/storage/v1/object/public/studio-photos/ai-generated/${resolvedStudioId}/${f.name}`,
+          file_name: f.name,
+          generation_prompt: aiGenPrompt,
+          source: 'ai_generated',
+          created_at: f.created_at,
+        }))
+        setSessionAiPhotos(prev => {
+          const existing = new Set(prev.map(p => p.file_name))
+          const novel = toAdd.filter(p => !existing.has(p.file_name))
+          return novel.length > 0 ? [...novel, ...prev] : prev
+        })
+        setAiGenerating(false)
+        clearInterval(id)
+      } catch (e) {
+        // Silent — next tick retries. A stalled poll isn't recoverable here anyway.
+      }
+    }, POLL_MS)
+    return () => clearInterval(id)
+  }, [aiGenerating, aiGenStartedAt, resolvedStudioId, aiGenPrompt])
 
   const currentPhotoUrl = overridePhotoUrl || post.photo_url
   const baseIsAI = post.needs_ai_image || (!post.matched_photo_id && post.photo_url)
@@ -210,6 +264,66 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     } catch (e) {
       flashMsg({ type: 'error', text: 'Could not replace photo' })
     }
+  }
+
+  // Compose a prompt from the post + the studio's brand context. Editable before firing.
+  const buildAiPrompt = () => {
+    const postExcerpt = (post.caption || '').trim().slice(0, 200)
+    const parts = []
+    parts.push(`${studioName || 'Fitness studio'} — photo for this post.`)
+    if (postExcerpt) parts.push(`Post: "${postExcerpt}"`)
+    const aesthetic = []
+    if (studioType) aesthetic.push(`${studioType} studio`)
+    if (brandColorPrimary) aesthetic.push(`brand color ${brandColorPrimary}`)
+    if (brandVoice) aesthetic.push(`voice ${brandVoice}`)
+    if (aesthetic.length) parts.push(`Studio aesthetic: ${aesthetic.join(', ')}.`)
+    if (aiPhotoPrompt) parts.push(aiPhotoPrompt.trim())
+    return parts.join('\n\n')
+  }
+
+  const openAiGen = () => {
+    setAiGenPrompt(buildAiPrompt())
+    setAiGenOpen(true)
+  }
+
+  const startAiGeneration = () => {
+    const prompt = (aiGenPrompt || '').trim()
+    if (!prompt || !resolvedStudioId) {
+      flashMsg({ type: 'error', text: 'Prompt required' })
+      return
+    }
+    setAiGenStartedAt(Date.now())
+    setAiGenTimedOut(false)
+    setAiGenOpen(false)
+    setAiGenerating(true)
+    // Fire and forget — the async flow polls the bucket for completion. The Netlify proxy's
+    // 26s function-timeout is longer than we need here since we're not awaiting the response.
+    fetch('/.netlify/functions/proxy-webhook?target=ai-photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        studio_id: resolvedStudioId,
+        platform: 'nano_banana_pro',
+        prompt,
+        width: 1024,
+        height: 1024,
+        content_focus: (post.caption || '').slice(0, 120),
+        _source: 'post_picker_generate_button',
+      }),
+    }).then(r => {
+      if (!r.ok) {
+        setAiGenerating(false)
+        flashMsg({ type: 'error', text: `Could not start generation (${r.status})` })
+      }
+    }).catch(err => {
+      setAiGenerating(false)
+      flashMsg({ type: 'error', text: err.message || 'Network error starting generation' })
+    })
+  }
+
+  const dismissAiBanner = () => {
+    setAiGenerating(false)
+    setAiGenTimedOut(false)
   }
 
   const handleSaveToLibrary = async () => {
@@ -423,6 +537,106 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                       <X size={14} />
                     </button>
                   </div>
+
+                  {/* ── AI generate: primary CTA (initial state) ── */}
+                  {!aiGenOpen && !aiGenerating && (
+                    <button
+                      onClick={openAiGen}
+                      disabled={!resolvedStudioId}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed mb-3"
+                      style={{ background: primary, color: '#fff' }}
+                    >
+                      <Wand2 size={14} /> Generate AI Image
+                    </button>
+                  )}
+
+                  {/* ── AI generate: confirmation panel (prompt edit before firing) ── */}
+                  {aiGenOpen && (
+                    <div className="mb-3 p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${primary}30` }}>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                        Describe the photo you want
+                      </label>
+                      <textarea
+                        value={aiGenPrompt}
+                        onChange={e => setAiGenPrompt(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-slate-600 resize-y focus:outline-none mb-3"
+                        style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${primary}40` }}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={startAiGeneration}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all hover:-translate-y-0.5"
+                          style={{ background: primary, color: '#fff' }}
+                        >
+                          <Sparkles size={12} /> Generate
+                        </button>
+                        <button
+                          onClick={() => setAiGenOpen(false)}
+                          className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all"
+                          style={{ background: 'rgba(255,255,255,0.06)' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── AI generate: in-flight banner ── */}
+                  {aiGenerating && (
+                    <div
+                      className="mb-3 flex items-start gap-3 px-4 py-3 rounded-lg"
+                      style={{ background: `${primary}12`, border: `1px solid ${primary}30` }}
+                    >
+                      <Sparkles size={16} className="flex-shrink-0 mt-0.5 animate-pulse" style={{ color: primary }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-semibold">
+                          {aiGenTimedOut ? 'Taking longer than usual' : 'Your AI image is generating'}
+                        </p>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          {aiGenTimedOut
+                            ? 'Image will appear in your Photos page when ready.'
+                            : "Ready in about 1 minute. Keep working — it'll land here when done."}
+                        </p>
+                      </div>
+                      <button onClick={dismissAiBanner} className="flex-shrink-0 text-slate-400 hover:text-white transition-colors" aria-label="Dismiss">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ── Just generated (session) ── */}
+                  {sessionAiPhotos.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: primary }}>
+                        Just generated ({sessionAiPhotos.length})
+                      </p>
+                      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                        {sessionAiPhotos.map(photo => {
+                          const isCurrent = photo.photo_url === currentPhotoUrl
+                          return (
+                            <button
+                              key={photo.file_name}
+                              onClick={() => handlePickPhoto(photo)}
+                              className="aspect-square rounded-lg overflow-hidden relative transition-all hover:-translate-y-0.5"
+                              style={{
+                                border: isCurrent ? `2px solid ${primary}` : `1.5px solid ${primary}40`,
+                                opacity: isCurrent ? 0.65 : 1,
+                              }}
+                            >
+                              <img src={photo.photo_url} alt="Just generated" className="w-full h-full object-cover" loading="lazy" />
+                              <span
+                                className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider"
+                                style={{ background: 'rgba(0,0,0,0.7)', color: '#fff', backdropFilter: 'blur(4px)' }}
+                              >
+                                AI
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {loadingPhotos ? (
                     <div className="py-8 text-center">
