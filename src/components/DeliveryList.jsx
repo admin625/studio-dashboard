@@ -53,7 +53,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <Loader2 size={32} className="animate-spin mb-4" style={{ color: primary }} />
-        <p className="text-slate-500 text-sm">Loading your deliveries...</p>
+        <p className="text-slate-400 text-sm">Loading your deliveries...</p>
       </div>
     )
   }
@@ -62,7 +62,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
     return (
       <div className="text-center py-20">
         <p className="text-red-400 text-sm mb-2">Error loading deliveries</p>
-        <p className="text-slate-600 text-xs">{error}</p>
+        <p className="text-slate-500 text-xs">{error}</p>
       </div>
     )
   }
@@ -72,7 +72,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
       <div className="text-center py-20">
         <Inbox size={48} className="mx-auto mb-4" style={{ color: 'rgba(255,255,255,0.1)' }} />
         <p className="text-white text-lg font-semibold mb-1">No content yet</p>
-        <p className="text-slate-500 text-sm mb-6">Hit Create Content to generate your first post.</p>
+        <p className="text-slate-200 text-sm mb-6">Hit Create Content to generate your first post.</p>
         <button
           onClick={onOpenGenerate}
           className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5"
@@ -120,7 +120,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
             >
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <Calendar size={12} className="text-slate-600" />
+                  <Calendar size={12} className="text-slate-500" />
                   <span className="text-xs text-slate-400 font-medium">{date}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -134,7 +134,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
                     </span>
                   ))}
                   {platforms.length === 0 && (
-                    <span className="text-xs text-slate-600">No content</span>
+                    <span className="text-xs text-slate-500">No content</span>
                   )}
                 </div>
               </div>
@@ -142,7 +142,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
                 <span className="text-sm font-semibold text-slate-300">
                   {total} post{total !== 1 ? 's' : ''}
                 </span>
-                <ChevronRight size={16} className="text-slate-600 group-hover:text-white transition-colors" />
+                <ChevronRight size={16} className="text-slate-500 group-hover:text-white transition-colors" />
               </div>
             </Link>
           )

@@ -272,7 +272,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
               {isAI ? 'AI Generated' : 'Studio Photo'}
             </span>
             {post.image_direction && (
-              <span className="text-[10px] text-slate-600 italic truncate">{post.image_direction}</span>
+              <span className="text-[10px] text-slate-500 italic truncate">{post.image_direction}</span>
             )}
           </div>
 
@@ -351,7 +351,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
           {!readOnly && editorOpen && (
             <div className="px-5 py-4" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
               {/* Prompt */}
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                 Photo Prompt
               </label>
               <textarea
@@ -416,10 +416,10 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
               {pickerOpen && (
                 <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Studio Photo Library {!loadingPhotos && studioPhotos.length > 0 && `(${studioPhotos.length})`}
                     </span>
-                    <button onClick={() => setPickerOpen(false)} className="text-slate-600 hover:text-white transition-colors">
+                    <button onClick={() => setPickerOpen(false)} className="text-slate-500 hover:text-white transition-colors">
                       <X size={14} />
                     </button>
                   </div>
@@ -429,7 +429,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                       <Loader2 size={20} className="animate-spin mx-auto" style={{ color: primary }} />
                     </div>
                   ) : studioPhotos.length === 0 ? (
-                    <p className="text-xs text-slate-600 py-4 text-center">No photos in your library yet.</p>
+                    <p className="text-xs text-slate-400 py-4 text-center">No photos in your library yet.</p>
                   ) : (
                     <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-72 overflow-y-auto">
                       {studioPhotos.map(photo => {
@@ -486,14 +486,14 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
         <div className="px-5 py-3 flex flex-wrap gap-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
           {post.optimal_posting_time && (
             <div className="flex items-center gap-2">
-              <Clock size={12} className="text-slate-600" />
-              <span className="text-[11px] text-slate-500"><span className="font-semibold text-slate-400">Best Time:</span> {post.optimal_posting_time}</span>
+              <Clock size={12} className="text-slate-500" />
+              <span className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Best Time:</span> {post.optimal_posting_time}</span>
             </div>
           )}
           {post.engagement_goal && (
             <div className="flex items-center gap-2">
-              <Target size={12} className="text-slate-600" />
-              <span className="text-[11px] text-slate-500"><span className="font-semibold text-slate-400">Goal:</span> {post.engagement_goal}</span>
+              <Target size={12} className="text-slate-500" />
+              <span className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Goal:</span> {post.engagement_goal}</span>
             </div>
           )}
         </div>
@@ -571,7 +571,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
           <div className="mt-3 px-3 py-2 rounded-lg" style={{ background: 'rgba(3,105,161,0.1)', border: '1px solid rgba(3,105,161,0.15)' }}>
             <p className="text-[11px] text-sky-400 font-medium">{post.postingTip}</p>
             {post.studioType && (
-              <p className="text-[10px] text-slate-600 mt-0.5">
+              <p className="text-[10px] text-slate-500 mt-0.5">
                 Based on typical {({'yoga_pilates':'Yoga/Pilates','hiit_crossfit':'HIIT/CrossFit','dance_barre':'Dance/Barre','martial_arts':'Martial Arts','general_fitness':'General Fitness'})[post.studioType] || 'fitness'} audiences
               </p>
             )}

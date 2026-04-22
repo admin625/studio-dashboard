@@ -201,7 +201,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
             <h2 className="text-white text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.03em' }}>
               Generate New Content
             </h2>
-            <p className="text-slate-500 text-xs">FCA creates content suggestions — you decide what goes live.</p>
+            <p className="text-slate-300 text-xs">FCA creates content suggestions — you decide what goes live.</p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1"><X size={20} /></button>
         </div>
@@ -210,7 +210,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
           {/* Session Vibe */}
           <div className="p-4 rounded-xl" style={{ background: `${primary}10`, border: `1px solid ${primary}30` }}>
             <label className="block text-xs font-bold tracking-wider uppercase mb-1" style={{ color: primary }}>This session's vibe</label>
-            <p className="text-[11px] text-slate-500 mb-2">Adjust for this batch only — won't affect your saved settings.</p>
+            <p className="text-[11px] text-slate-400 mb-2">Adjust for this batch only — won't affect your saved settings.</p>
             <textarea
               value={sessionVibe}
               onChange={e => setSessionVibe(e.target.value)}
@@ -256,7 +256,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
             <div className="space-y-4">
               {/* Platform selector */}
               <div>
-                <label className="block text-xs font-bold tracking-wider uppercase text-slate-500 mb-2">Platforms</label>
+                <label className="block text-xs font-bold tracking-wider uppercase text-slate-400 mb-2">Platforms</label>
                 <div className="space-y-2">
                   {Object.entries(platforms).map(([name, cfg]) => (
                     <div key={name} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: cfg.on ? 'rgba(255,255,255,0.04)' : 'transparent', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -335,14 +335,14 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
           {/* Image Slot Builder (owner + AI modes) */}
           {showImageBuilder && (
             <div>
-              <label className="block text-xs font-bold tracking-wider uppercase text-slate-500 mb-2">AI Image Direction</label>
+              <label className="block text-xs font-bold tracking-wider uppercase text-slate-400 mb-2">AI Image Direction</label>
               <div className="space-y-2">
                 {imageSlots.map((slot, idx) => (
                   <div key={slot.id} className="p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Image {idx + 1}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Image {idx + 1}</span>
                       {imageSlots.length > 1 && (
-                        <button onClick={() => removeSlot(idx)} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
+                        <button onClick={() => removeSlot(idx)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-1.5 mb-2">
@@ -376,7 +376,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
                   <Plus size={14} /> Add Image
                 </button>
               )}
-              <p className="text-[10px] text-slate-600 mt-2 text-center">Each AI image adds ~1 minute to generation time</p>
+              <p className="text-[10px] text-slate-500 mt-2 text-center">Each AI image adds ~1 minute to generation time</p>
             </div>
           )}
 
@@ -398,7 +398,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
               {submitting ? <><Loader2 size={16} className="animate-spin" /> Creating...</> : <><Sparkles size={16} /> Create Content</>}
             </button>
           </div>
-          <p className="text-[10px] text-slate-600 text-center mt-3">
+          <p className="text-[10px] text-slate-500 text-center mt-3">
             FCA generates premium content — great things take a moment. Ready within 20 minutes.
           </p>
         </div>
@@ -410,7 +410,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
 function Field({ label, value, onChange }) {
   return (
     <div>
-      <label className="block text-[10px] font-semibold tracking-wider uppercase text-slate-600 mb-1">{label}</label>
+      <label className="block text-[10px] font-semibold tracking-wider uppercase text-slate-400 mb-1">{label}</label>
       <input
         type="text"
         value={value}

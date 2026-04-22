@@ -10,7 +10,7 @@ export default function ProtectedRoute({ children }) {
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#0A0B0D' }}>
         <div className="text-center">
           <Loader2 size={32} className="animate-spin text-indigo-400 mx-auto mb-4" />
-          <p className="text-slate-500 text-sm">Loading your studio...</p>
+          <p className="text-slate-400 text-sm">Loading your studio...</p>
         </div>
       </div>
     )

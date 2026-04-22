@@ -61,12 +61,12 @@ export default function Login() {
           >
             FCA Studio
           </h1>
-          <p className="text-slate-500 text-sm">Sign in to your dashboard</p>
+          <p className="text-slate-300 text-sm">Sign in to your dashboard</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold tracking-wider uppercase text-slate-500 mb-2">
+            <label className="block text-xs font-semibold tracking-wider uppercase text-slate-400 mb-2">
               Email
             </label>
             <input
@@ -83,7 +83,7 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold tracking-wider uppercase text-slate-500 mb-2">
+            <label className="block text-xs font-semibold tracking-wider uppercase text-slate-400 mb-2">
               Password
             </label>
             <input
@@ -123,7 +123,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center mt-6 text-xs text-slate-600">
+        <p className="text-center mt-6 text-xs text-slate-500">
           Forgot password?{' '}
           <a href="#/forgot-password" className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
             Reset it here

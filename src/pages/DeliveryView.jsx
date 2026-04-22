@@ -76,7 +76,7 @@ export default function DeliveryView() {
       <Layout>
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 size={32} className="animate-spin mb-4" style={{ color: primary }} />
-          <p className="text-slate-500 text-sm">Loading content...</p>
+          <p className="text-slate-400 text-sm">Loading content...</p>
         </div>
       </Layout>
     )
@@ -88,7 +88,7 @@ export default function DeliveryView() {
         <div className="text-center py-20">
           <Lock size={48} className="mx-auto mb-4" style={{ color: 'rgba(255,255,255,0.1)' }} />
           <p className="text-white text-lg font-semibold mb-1">Access Denied</p>
-          <p className="text-slate-500 text-sm mb-6">This content does not belong to your account.</p>
+          <p className="text-slate-200 text-sm mb-6">This content does not belong to your account.</p>
           <Link to="/deliveries" className="text-sm font-semibold transition-colors" style={{ color: primary }}>
             Back to Deliveries
           </Link>
@@ -102,7 +102,7 @@ export default function DeliveryView() {
       <Layout>
         <div className="text-center py-20">
           <p className="text-red-400 text-sm mb-2">Error loading content</p>
-          <p className="text-slate-600 text-xs">{error}</p>
+          <p className="text-slate-500 text-xs">{error}</p>
           <Link to="/deliveries" className="block mt-4 text-sm font-semibold" style={{ color: primary }}>Back to Deliveries</Link>
         </div>
       </Layout>
@@ -126,7 +126,7 @@ export default function DeliveryView() {
   return (
     <Layout>
       {/* Back nav */}
-      <Link to="/deliveries" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-white transition-colors mb-6">
+      <Link to="/deliveries" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-400 hover:text-white transition-colors mb-6">
         <ChevronLeft size={16} /> All Deliveries
       </Link>
 
@@ -141,7 +141,7 @@ export default function DeliveryView() {
           <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.02em' }}>{date}</h1>
         </div>
         {readOnly && (
-          <p className="text-xs text-slate-600 mt-2 flex items-center gap-1.5">
+          <p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
             <Lock size={10} /> Read-only — instructors cannot edit content
           </p>
         )}
@@ -160,11 +160,11 @@ export default function DeliveryView() {
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"
                 style={{
                   background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
-                  color: active ? '#fff' : '#64748b',
+                  color: active ? '#fff' : '#94a3b8',
                   border: `1px solid ${active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)'}`,
                 }}
               >
-                <span style={{ color: active ? primary : '#64748b' }}>{PLATFORM_SHORT[p]}</span>
+                <span style={{ color: active ? primary : '#94a3b8' }}>{PLATFORM_SHORT[p]}</span>
                 {PLATFORM_LABELS[p]} ({count})
               </button>
             )
@@ -188,7 +188,7 @@ export default function DeliveryView() {
         </div>
       ) : (
         <div className="text-center py-12">
-          <p className="text-slate-600 text-sm">No content on this platform.</p>
+          <p className="text-slate-400 text-sm">No content on this platform.</p>
         </div>
       )}
 
