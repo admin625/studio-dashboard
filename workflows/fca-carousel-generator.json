@@ -1,0 +1,401 @@
+{
+  "name": "FCA Carousel Generator",
+  "nodes": [
+    {
+      "id": "c1",
+      "name": "Webhook - Carousel",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fca-carousel",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "webhookId": "619dd2fc-d3e6-4c02-88a7-9bcce4349a7a"
+    },
+    {
+      "id": "c2",
+      "name": "Fetch Studio & Instructor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst studioId = body.studio_id;\nconst email = body.email || body.instructor_email;\n\nif (!studioId) throw new Error('studio_id is required');\n\nconst supaUrl = 'https://kidgcrqxrfcbsaeguwop.supabase.co';\nconst key = $vars.FCA_SUPABASE_SERVICE_KEY;\nconst h = { apikey: key, Authorization: 'Bearer ' + key };\n\n// Fetch studio data\nconst sRes = await fetch(supaUrl + '/rest/v1/studio_accounts?id=eq.' + studioId + '&select=studio_name,brand_voice,brand_color,brand_color_secondary,brand_font,logo_url,studio_type', { headers: h });\nconst studios = await sRes.json();\nconst studio = (Array.isArray(studios) && studios[0]) || {};\n\n// Fetch instructor bio from clients\nlet instructor = { name: body.instructor_name || 'Instructor', bio: null, specialties: null };\nif (email) {\n  const cRes = await fetch(supaUrl + '/rest/v1/clients?email=eq.' + encodeURIComponent(email) + '&studio_id=eq.' + studioId + '&select=id,bio,specialties', { headers: h });\n  const clients = await cRes.json();\n  if (Array.isArray(clients) && clients[0]) {\n    instructor.bio = clients[0].bio || null;\n    instructor.specialties = clients[0].specialties || null;\n    instructor.client_id = clients[0].id;\n  }\n}\n\nreturn [{ json: {\n  studio_id: studioId,\n  studio_name: studio.studio_name || 'Fitness Studio',\n  brand_voice: studio.brand_voice || '',\n  brand_color: studio.brand_color || '#1a1a1a',\n  brand_color_secondary: studio.brand_color_secondary || '#ffffff',\n  brand_font: studio.brand_font || 'Montserrat',\n  logo_url: studio.logo_url || '',\n  studio_type: studio.studio_type || 'general_fitness',\n  instructor_name: instructor.name,\n  instructor_bio: instructor.bio,\n  instructor_specialties: instructor.specialties,\n  instructor_client_id: instructor.client_id || null,\n  topic: body.topic || null,\n  email: email\n} }];"
+      }
+    },
+    {
+      "id": "c3",
+      "name": "Generate Carousel with Claude",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-6"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Generate a 5-slide Instagram carousel for {{ $json.studio_name }}, a {{ $json.studio_type }} studio.\n\nBrand voice: {{ $json.brand_voice || 'Professional and motivational' }}\nInstructor: {{ $json.instructor_name }}{{ $json.instructor_bio ? ' — ' + $json.instructor_bio : '' }}{{ $json.instructor_specialties ? '. Specialties: ' + $json.instructor_specialties : '' }}\n{{ $json.topic ? 'Topic: ' + $json.topic : '' }}\n\nReturn a JSON array of exactly 5 objects:\n[{ \"slide_number\": 1, \"headline\": \"(max 6 words, punchy hook)\", \"body\": \"(max 20 words, value/tip)\", \"cta\": null },\n{ \"slide_number\": 2, \"headline\": \"(max 6 words)\", \"body\": \"(max 20 words)\", \"cta\": null },\n{ \"slide_number\": 3, \"headline\": \"(max 6 words)\", \"body\": \"(max 20 words)\", \"cta\": null },\n{ \"slide_number\": 4, \"headline\": \"(max 6 words)\", \"body\": \"(max 20 words)\", \"cta\": null },\n{ \"slide_number\": 5, \"headline\": \"(closing statement, max 6 words)\", \"body\": \"(max 20 words)\", \"cta\": \"(one clear call to action, max 8 words)\" }]\n\nMake slides flow as a series — each one should make the viewer swipe to the next.\nGood carousel topics: 5 reasons to try [class type], Common mistakes in [discipline], What to expect your first class, 5 benefits of [practice], Your week at [studio name]."
+            }
+          ]
+        },
+        "options": {
+          "system": "You generate Instagram carousel content for fitness studios. Return ONLY valid JSON array, no markdown, no preamble, no explanation. Just the raw JSON array."
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "JTFNCajjQzTlI8q0",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "id": "c4",
+      "name": "Parse Slides & Build Renders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const claudeRes = $input.first().json;\nconst studio = $('Fetch Studio & Instructor').first().json;\n\n// Parse Claude response\nlet responseText = '';\nif (claudeRes.content && Array.isArray(claudeRes.content)) {\n  responseText = claudeRes.content[0]?.text || '';\n} else if (typeof claudeRes === 'string') {\n  responseText = claudeRes;\n}\n\n// Extract JSON array\nlet slides;\ntry {\n  const match = responseText.match(/\\[\\s*\\{[\\s\\S]*\\}\\s*\\]/);\n  slides = JSON.parse(match ? match[0] : responseText);\n} catch (e) {\n  throw new Error('Failed to parse carousel JSON from Claude: ' + e.message);\n}\n\nif (!Array.isArray(slides) || slides.length !== 5) {\n  throw new Error('Expected 5 slides, got ' + (slides ? slides.length : 0));\n}\n\n// Build Creatomate render payloads\nconst bc = studio.brand_color;\nconst bc2 = studio.brand_color_secondary;\nconst bf = studio.brand_font;\nconst logo = studio.logo_url;\n\nconst renders = slides.map((slide, i) => {\n  const isFirst = i === 0;\n  const isLast = i === 4;\n  const elements = [];\n\n  // Background\n  elements.push({ type: 'shape', x: '50%', y: '50%', width: '100%', height: '100%', fill_color: bc });\n\n  // Logo on slides 1 and 5\n  if ((isFirst || isLast) && logo) {\n    elements.push({ type: 'image', source: logo, x: '50%', y: '15%', width: '25%', fit: 'contain' });\n  }\n\n  // Headline\n  elements.push({\n    type: 'text', text: slide.headline || '', x: '50%', y: (isFirst || isLast) && logo ? '45%' : '35%',\n    width: '85%', font_family: bf, font_weight: '800', font_size: '9 vmin',\n    fill_color: bc2, x_alignment: '50%', y_alignment: '50%', line_height: '120%'\n  });\n\n  // Body\n  elements.push({\n    type: 'text', text: slide.body || '', x: '50%', y: (isFirst || isLast) && logo ? '65%' : '60%',\n    width: '80%', font_family: bf, font_weight: '400', font_size: '5.5 vmin',\n    fill_color: bc2, x_alignment: '50%', y_alignment: '50%', line_height: '140%'\n  });\n\n  // CTA button on slide 5\n  if (isLast && slide.cta) {\n    elements.push({ type: 'shape', x: '50%', y: '82%', width: '65%', height: '9%', fill_color: bc2, border_radius: '50' });\n    elements.push({\n      type: 'text', text: slide.cta, x: '50%', y: '82%', width: '60%',\n      font_family: bf, font_weight: '700', font_size: '5 vmin',\n      fill_color: bc, x_alignment: '50%', y_alignment: '50%'\n    });\n  }\n\n  // Slide counter dot indicators at bottom\n  const dotY = '93%';\n  for (let d = 0; d < 5; d++) {\n    elements.push({\n      type: 'shape', x: (38 + d * 6) + '%', y: dotY,\n      width: '2.5%', height: '2.5%', border_radius: '50',\n      fill_color: d === i ? bc2 : (bc2 + '44')\n    });\n  }\n\n  return {\n    output_format: 'jpg',\n    width: 1080, height: 1080,\n    elements: elements\n  };\n});\n\nreturn [{ json: { slides, renders, studio } }];"
+      }
+    },
+    {
+      "id": "c5",
+      "name": "Creatomate - Batch Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.creatomate.com/v2/renders",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.renders) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "S3ucmThNUaPkimH2",
+          "name": "Creatomate API Key"
+        }
+      }
+    },
+    {
+      "id": "c6",
+      "name": "Extract Render IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const renders = $input.first().json;\nconst prev = $('Parse Slides & Build Renders').first().json;\n\n// Creatomate returns array of render objects\nconst renderArray = Array.isArray(renders) ? renders : [renders];\nconst ids = renderArray.map(r => r.id);\n\nreturn [{ json: { render_ids: ids, slides: prev.slides, studio: prev.studio, render_count: ids.length } }];"
+      }
+    },
+    {
+      "id": "c7",
+      "name": "Wait 15s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "webhookId": "29ace2b8-a46e-4c0b-9a97-37e68a994381"
+    },
+    {
+      "id": "c8",
+      "name": "Poll Render Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const prev = .first().json;\nconst ids = prev.render_ids;\n\nconst results = [];\nlet allDone = true;\n\nfor (const id of ids) {\n  const res = await fetch(\"https://api.creatomate.com/v2/renders/\" + id, {\n    headers: { Authorization: \"Bearer \" + .CREATOMATE_API_KEY }\n  });\n  const r = await res.json();\n  results.push({ id: r.id, status: r.status, url: r.url || null });\n  if (r.status !== \"succeeded\" && r.status !== \"failed\") allDone = false;\n}\n\nreturn [{ json: { ...prev, render_results: results, all_done: allDone } }];"
+      }
+    },
+    {
+      "id": "c9",
+      "name": "All Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "done-check",
+              "leftValue": "={{ $json.all_done }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c10",
+      "name": "Wait More",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        520
+      ],
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "webhookId": "117ea295-7fb2-47f9-a17e-5872e98468c7"
+    },
+    {
+      "id": "c11",
+      "name": "Save & Respond",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const prev = $input.first().json;\nconst slides = prev.slides;\nconst results = prev.render_results;\nconst studio = prev.studio;\n\n// Merge image URLs into slides\nconst enrichedSlides = slides.map((slide, i) => ({\n  ...slide,\n  image_url: results[i]?.url || null\n}));\n\n// Posting tip (feed_post timing for carousels)\nconst tipMatrix = {\n  yoga_pilates: 'Best for your audience: Tue/Thu 7\\u20139am or Sun evening 6\\u20138pm',\n  hiit_crossfit: 'Best for your audience: Mon/Wed/Fri 6\\u20138am or 6\\u20138pm',\n  dance_barre: 'Best for your audience: Tue/Thu 12\\u20132pm or 7\\u20139pm',\n  martial_arts: 'Best for your audience: Tue/Thu 4\\u20136pm or 7\\u20139pm',\n  general_fitness: 'Best for most fitness audiences: Mon/Wed/Fri 12pm or 7pm'\n};\nconst postingTip = tipMatrix[studio.studio_type] || tipMatrix.general_fitness;\n\n// Save to fitness_content\nconst supaUrl = 'https://kidgcrqxrfcbsaeguwop.supabase.co';\nconst key = $vars.FCA_SUPABASE_SERVICE_KEY;\ntry {\n  await fetch(supaUrl + '/rest/v1/fitness_content', {\n    method: 'POST',\n    headers: {\n      apikey: key, Authorization: 'Bearer ' + key,\n      'Content-Type': 'application/json', Prefer: 'return=minimal'\n    },\n    body: JSON.stringify({\n      content_type: 'carousel',\n      platform: 'instagram',\n      content_data: { slides: enrichedSlides },\n      studio_id: studio.studio_id\n    })\n  });\n} catch (e) { /* non-critical */ }\n\nreturn [{ json: {\n  success: true,\n  carousel: enrichedSlides,\n  postingTip: postingTip,\n  studioType: studio.studio_type,\n  studio_name: studio.studio_name\n} }];"
+      }
+    },
+    {
+      "id": "c12",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "c13",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        600
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c14",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.execution?.error?.message || 'Carousel generation failed' }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Carousel": {
+      "main": [
+        [
+          {
+            "node": "Fetch Studio & Instructor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Studio & Instructor": {
+      "main": [
+        [
+          {
+            "node": "Generate Carousel with Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Carousel with Claude": {
+      "main": [
+        [
+          {
+            "node": "Parse Slides & Build Renders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Slides & Build Renders": {
+      "main": [
+        [
+          {
+            "node": "Creatomate - Batch Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Creatomate - Batch Render": {
+      "main": [
+        [
+          {
+            "node": "Extract Render IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Render IDs": {
+      "main": [
+        [
+          {
+            "node": "Wait 15s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 15s": {
+      "main": [
+        [
+          {
+            "node": "Poll Render Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Render Status": {
+      "main": [
+        [
+          {
+            "node": "All Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Done?": {
+      "main": [
+        [
+          {
+            "node": "Save & Respond",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait More",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait More": {
+      "main": [
+        [
+          {
+            "node": "Poll Render Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save & Respond": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}
