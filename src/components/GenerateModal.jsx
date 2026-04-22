@@ -201,7 +201,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
             <h2 className="text-white text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.03em' }}>
               Generate New Content
             </h2>
-            <p className="text-slate-200 text-xs">FCA creates content suggestions — you decide what goes live.</p>
+            <p className="text-slate-300 text-xs">FCA creates content suggestions — you decide what goes live.</p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1"><X size={20} /></button>
         </div>

@@ -61,7 +61,7 @@ export default function Login() {
           >
             FCA Studio
           </h1>
-          <p className="text-slate-200 text-sm">Sign in to your dashboard</p>
+          <p className="text-slate-300 text-sm">Sign in to your dashboard</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

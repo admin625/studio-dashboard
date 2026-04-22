@@ -487,13 +487,13 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
           {post.optimal_posting_time && (
             <div className="flex items-center gap-2">
               <Clock size={12} className="text-slate-500" />
-              <span className="text-[11px] text-slate-400"><span className="font-semibold text-slate-400">Best Time:</span> {post.optimal_posting_time}</span>
+              <span className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Best Time:</span> {post.optimal_posting_time}</span>
             </div>
           )}
           {post.engagement_goal && (
             <div className="flex items-center gap-2">
               <Target size={12} className="text-slate-500" />
-              <span className="text-[11px] text-slate-400"><span className="font-semibold text-slate-400">Goal:</span> {post.engagement_goal}</span>
+              <span className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Goal:</span> {post.engagement_goal}</span>
             </div>
           )}
         </div>
