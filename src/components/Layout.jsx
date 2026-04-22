@@ -83,7 +83,7 @@ export default function Layout({ children }) {
             </div>
             <button
               onClick={signOut}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-600 hover:text-white hover:bg-white/5 transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-500 hover:text-white hover:bg-white/5 transition-all"
             >
               <LogOut size={13} />
               <span className="hidden sm:inline">Out</span>

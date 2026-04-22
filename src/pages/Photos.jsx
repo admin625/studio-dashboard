@@ -308,8 +308,8 @@ export default function Photos() {
             onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
           >
             <Upload size={18} style={{ color: 'rgba(255,255,255,0.15)' }} />
-            <p className="text-sm text-slate-500">Drop photos here or click to browse</p>
-            <span className="text-[10px] text-slate-700">JPG, PNG, WebP — max 25MB</span>
+            <p className="text-sm text-slate-400">Drop photos here or click to browse</p>
+            <span className="text-[10px] text-slate-500">JPG, PNG, WebP — max 25MB</span>
           </div>
 
           {pendingFiles.length > 0 && (
@@ -321,8 +321,8 @@ export default function Photos() {
                 {pendingFiles.map((f, i) => (
                   <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
                     <span className="text-xs text-slate-300 truncate flex-1">{f.name}</span>
-                    <span className="text-[10px] text-slate-600 mx-3">{formatSize(f.size)}</span>
-                    <button onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-slate-600 hover:text-red-400 transition-colors"><X size={12} /></button>
+                    <span className="text-[10px] text-slate-500 mx-3">{formatSize(f.size)}</span>
+                    <button onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-slate-500 hover:text-red-400 transition-colors"><X size={12} /></button>
                   </div>
                 ))}
               </div>
@@ -346,7 +346,7 @@ export default function Photos() {
                 </button>
                 <button
                   onClick={() => setPendingFiles([])}
-                  className="px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-white transition-colors"
+                  className="px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-white transition-colors"
                   style={{ background: 'rgba(255,255,255,0.04)' }}
                 >
                   Clear
@@ -373,7 +373,7 @@ export default function Photos() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 size={32} className="animate-spin mb-4" style={{ color: primary }} />
-          <p className="text-slate-500 text-sm">Loading photos...</p>
+          <p className="text-slate-400 text-sm">Loading photos...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
@@ -387,7 +387,7 @@ export default function Photos() {
                   ? 'No studio photos uploaded yet'
                   : 'No photos in this category'}
           </p>
-          <p className="text-slate-500 text-sm">
+          <p className="text-slate-400 text-sm">
             {photos.length === 0
               ? 'Upload studio photos or save AI images from the photo editor.'
               : filter === 'ai_generated'

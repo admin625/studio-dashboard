@@ -108,7 +108,7 @@ export default function PhotoGallery() {
             >
               <ImageIcon size={24} style={{ color: 'rgba(255,255,255,0.2)' }} />
               <p className="text-sm text-slate-400">Drop photos here or click to browse</p>
-              <p className="text-[10px] text-slate-600">JPG, PNG, WebP — max 25MB each</p>
+              <p className="text-[10px] text-slate-500">JPG, PNG, WebP — max 25MB each</p>
             </div>
             <input ref={fileRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = '' }} />
 
@@ -118,8 +118,8 @@ export default function PhotoGallery() {
                   {pendingFiles.map((f, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
                       <span className="text-xs text-slate-300 truncate flex-1">{f.name}</span>
-                      <span className="text-[10px] text-slate-600 mx-3">{(f.size / 1024).toFixed(0)}KB</span>
-                      <button onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-slate-600 hover:text-red-400"><X size={12} /></button>
+                      <span className="text-[10px] text-slate-500 mx-3">{(f.size / 1024).toFixed(0)}KB</span>
+                      <button onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-slate-500 hover:text-red-400"><X size={12} /></button>
                     </div>
                   ))}
                 </div>
@@ -155,7 +155,7 @@ export default function PhotoGallery() {
           <div className="flex items-center gap-2">
             <ImageIcon size={16} style={{ color: primary }} />
             <span className="text-sm font-bold text-white">Studio Photos</span>
-            {!loading && <span className="text-xs text-slate-500">{photos.length} photos</span>}
+            {!loading && <span className="text-xs text-slate-400">{photos.length} photos</span>}
           </div>
           {expanded ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
         </button>
@@ -165,7 +165,7 @@ export default function PhotoGallery() {
             {loading ? (
               <div className="py-8 text-center"><Loader2 size={20} className="animate-spin mx-auto" style={{ color: primary }} /></div>
             ) : photos.length === 0 ? (
-              <p className="text-sm text-slate-600 py-4">No photos uploaded yet.</p>
+              <p className="text-sm text-slate-400 py-4">No photos uploaded yet.</p>
             ) : (
               <div>
                 {activity.length > 0 && (

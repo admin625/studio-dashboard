@@ -25,7 +25,7 @@ export default function Scaffold() {
           FCA Studio Dashboard
         </h1>
 
-        <p className="text-slate-400 text-sm leading-relaxed mb-8 max-w-sm mx-auto">
+        <p className="text-slate-300 text-sm leading-relaxed mb-8 max-w-sm mx-auto">
           React + Vite + Tailwind migration in progress.
           <br />
           Phase 1 scaffold deployed successfully.
@@ -57,7 +57,7 @@ export default function Scaffold() {
           ))}
         </div>
 
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-slate-500">
           v2.0.0 &middot; Phase 1 Complete &middot; Auth + routing coming in Phase 2
         </p>
       </div>

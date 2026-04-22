@@ -23,7 +23,7 @@ export default class ErrorBoundary extends Component {
             <h1 className="text-white text-xl font-bold mb-2" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
               Something went wrong
             </h1>
-            <p className="text-slate-500 text-sm mb-4">
+            <p className="text-slate-200 text-sm mb-4">
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button
