@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import BrandSettings from './pages/BrandSettings'
 import Photos from './pages/Photos'
 import DeliveryView from './pages/DeliveryView'
+import AccountSettings from './pages/AccountSettings'
 import ProtectedRoute from './components/ProtectedRoute'
 import HelpChatWidget from './components/HelpChatWidget'
 
@@ -58,6 +59,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <DeliveryView />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings/account"
+                element={
+                  <ProtectedRoute>
+                    <AccountSettings />
                   </ProtectedRoute>
                 }
               />
