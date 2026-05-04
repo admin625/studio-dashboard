@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
@@ -119,15 +119,15 @@ export default function Login() {
             }}
           >
             {loading && <Loader2 size={16} className="animate-spin" />}
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
         <p className="text-center mt-6 text-xs text-slate-500">
           Forgot password?{' '}
-          <a href="#/forgot-password" className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
+          <Link to="/forgot-password" className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
             Reset it here
-          </a>
+          </Link>
         </p>
       </div>
     </div>
