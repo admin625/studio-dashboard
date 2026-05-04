@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import AuthProvider from './components/AuthProvider'
 import Login from './pages/Login'
 import AuthCallback from './pages/AuthCallback'
+import ForgotPassword from './pages/ForgotPassword'
 import Dashboard from './pages/Dashboard'
 import BrandSettings from './pages/BrandSettings'
 import Photos from './pages/Photos'
@@ -27,6 +28,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route
                 path="/deliveries"
                 element={
