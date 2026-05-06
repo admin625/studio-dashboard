@@ -3,7 +3,7 @@
 > Read this at the start of every session. Do not skip it.
 
 ## What This Is
-FCA (Fitness Content Agent) is an AI-powered social media content platform for boutique fitness studios. Studio owners pay $400/mo base + $60/instructor seat. The agent generates platform-specific social media posts, matches or generates photos, creates video reels, and delivers everything to a dashboard where owners and instructors review, edit, and approve content.
+FCA (Fitness Content Agent) is an AI-powered social media content platform for boutique fitness studios. FCA Studio is $599/mo standard, with quarterly ($1,617/3mo, ~10% savings) and annual ($5,750/yr, ~20% savings) commitment options. The first 100 founding studios pay $299/mo, locked in for life — quarterly $807/3mo and annual $2,870/yr also available at founding rates. Founding pricing is automatic at signup based on availability; no coupon code required. The agent generates platform-specific social media posts, matches or generates photos, creates video reels, and delivers everything to a dashboard where owners and instructors review, edit, and approve content.
 
 This repo (`admin625/studio-dashboard`) is the seller-facing dashboard — the primary UI for studio owners and instructors. It is a single-file vanilla JS SPA deployed on Netlify. All content generation happens in n8n workflows that write to Supabase; this dashboard reads and displays that data.
 
@@ -80,6 +80,7 @@ No server-side secrets in this repo. All sensitive API calls (Claude, BFL, Creat
 
 ### RPC Functions
 - `get_delivery_summaries(studio_id)` — returns delivery list with content counts without transferring 36MB of JSONB content. Fallback: direct query with LIMIT 50.
+- `claim_founder_slot(...)` — server-side founding cohort gating. Determines whether a new signup qualifies for the founding rate ($299/mo) or pays standard ($599/mo). First-100 cap enforced atomically. Called at checkout — never bypass with coupon codes.
 
 ### RLS
 Enabled on all tables. Queries are scoped by authenticated user's studio_id.
@@ -149,9 +150,10 @@ Dashboard sends `photo_source` and `ai_photo_prompt` in the generation payload:
 - Progress bar and step counter on delivery detail
 
 ## Stripe Integration
-- **FCA Studio Base:** `prod_U2sa3c2chgeAJR` — $400/mo
-- **FCA Instructor Seat:** `prod_U2saYxquSGGsP9` — $60/mo per seat
-- **Coupon:** FOUNDING25 — 25% off forever (FCA only)
+- **FCA Studio (standard):** $599/mo, $1,617/3mo (~10% savings), $5,750/yr (~20% savings)
+- **FCA Studio (founding cohort, first 100 only):** $299/mo, $807/3mo, $2,870/yr — locked in for life
+- **All-in pricing per HQ:** no per-seat add-on. The $299/$599 prices include all instructor seats.
+- **Founding cohort routing:** gated server-side via the `claim_founder_slot` RPC, NOT a coupon code. Founding rate is automatic at signup based on availability — no code required, no manual coupon assignment.
 - Stripe customer ID and subscription ID stored on studio_accounts
 - Subscription status checked on login
 
@@ -192,3 +194,4 @@ Auto-sanitization in n8n MCP handles this when any update is made via MCP.
 | 2026-03-09 | Freestyle mode, FREESTYLE_OWNERS_ONLY flag, delivery query optimization, video reel renderer v3 |
 | 2026-03-14 | Inline editing for captions/hashtags, Instagram sub-format selector, format badges, HeardChef tables removed |
 | 2026-03-18 | Photo source 3-way selector, AI photo prompt, Generate button fix, Save button fix, toggle/dropdown contrast, n8n workflow updated for photo_source routing |
+| 2026-05-05 | CLAUDE.md pricing updated to canonical $299/$599 founding cohort routing (no per-seat add-on, server-side gating via `claim_founder_slot` RPC). |
