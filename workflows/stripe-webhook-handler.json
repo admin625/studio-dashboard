@@ -1,0 +1,660 @@
+{
+  "name": "Stripe Webhook Handler",
+  "nodes": [
+    {
+      "id": "2ce7119d-9c4a-4d1f-b2e6-b79a8653508e",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "checkout.session.completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "66ae233d-6187-4927-9bdc-a0485cf8c0d4"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "ea41548f-e143-47d0-8775-9b5de961aa76",
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "customer.subscription.created",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "efbf971d-3d85-4c74-aa5a-ec25a09d0d4a",
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "customer.subscription.updated",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "93513907-e60d-44ff-a678-8aebfb07d776",
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "customer.subscription.deleted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4f057b33-17e3-47cb-92ad-5b6cec2ce813",
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "invoice.payment_succeeded",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "7f8daac5-0ca8-476a-9226-f18a6b196ba8",
+                    "leftValue": "={{ $json.body.type }}",
+                    "rightValue": "invoice.payment_failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e1a87212-3f0e-42b9-a072-b26c777d0a24",
+      "name": "Activate Client",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -272
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "clients",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.data.object.customer_details.email }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "subscription_status",
+              "fieldValue": "active"
+            },
+            {
+              "fieldId": "stripe_customer_id",
+              "fieldValue": "={{ $json.body.data.object.customer }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "CtuHcbye96uOBa2a",
+          "name": "FCA Default - kidgcrqxrfcbsaeguwop"
+        }
+      }
+    },
+    {
+      "id": "3d333976-3f59-4d9c-9259-0e113f26d0f7",
+      "name": "Stripe Trigger",
+      "type": "n8n-nodes-base.stripeTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        64
+      ],
+      "parameters": {
+        "events": [
+          "customer.subscription.created",
+          "customer.subscription.deleted",
+          "customer.subscription.updated",
+          "invoice.payment_failed",
+          "invoice.payment_succeeded",
+          "checkout.session.completed"
+        ]
+      },
+      "credentials": {
+        "stripeApi": {
+          "id": "IPKpGYuPLgZkHGjb",
+          "name": "Stripe account"
+        }
+      },
+      "webhookId": "e8ad4b20-1e4e-4d46-a83c-607e14bb2191"
+    },
+    {
+      "id": "mark-trial-converted-001",
+      "name": "Mark Trial Converted",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -176
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "trials",
+        "filterType": "string",
+        "filterString": "=email=eq.{{ $json.body.data.object.customer_details.email }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "converted",
+              "fieldValue": "true"
+            },
+            {
+              "fieldId": "conversion_date",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "CtuHcbye96uOBa2a",
+          "name": "FCA Default - kidgcrqxrfcbsaeguwop"
+        }
+      }
+    },
+    {
+      "id": "email-sub-active-001",
+      "name": "Email: Subscription Active",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        416,
+        -80
+      ],
+      "parameters": {
+        "fromEmail": "Fior Saoirse <admin@fiorsaoirse.com>",
+        "toEmail": "={{ $json.body.data.object.customer_details.email }}",
+        "subject": "Welcome aboard! Your FCA subscription is active",
+        "html": "=<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#667eea;\">Your subscription is now active!</h2><p>Thank you for subscribing to FCA. Your content generation is now unlimited.</p><p><a href=\"https://studio-dash.netlify.app\" style=\"display:inline-block;background:#667eea;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;\">Go to Dashboard</a></p><p>Questions? Reply to this email.</p><p>— The Fior Saoirse Team</p></div>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "XH1W1oB6xEAEHGYx",
+          "name": "SMTP account 2"
+        }
+      },
+      "webhookId": "26f6d06b-baff-4d40-a0f6-df00a5253e12"
+    },
+    {
+      "id": "notify-admin-customer-001",
+      "name": "Notify Admin: New Customer",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        624,
+        -272
+      ],
+      "parameters": {
+        "fromEmail": "admin@fiorsaoirse.com",
+        "toEmail": "admin@fiorsaoirse.com",
+        "subject": "=💰 New Paying Customer: {{ $json.body.data.object.customer_details.email }}",
+        "html": "=<p>New paying customer!</p><p><strong>Email:</strong> {{ $json.body.data.object.customer_details.email }}</p><p><strong>Amount:</strong> ${{ Math.round($json.body.data.object.amount_total / 100) }}</p><p><strong>Time:</strong> {{ new Date().toLocaleString() }}</p>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "XH1W1oB6xEAEHGYx",
+          "name": "SMTP account 2"
+        }
+      },
+      "webhookId": "4c174b27-ee47-4fd4-b93f-c015c4b0d8ce"
+    },
+    {
+      "id": "handle-payment-failed-001",
+      "name": "Handle Payment Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        384
+      ],
+      "parameters": {
+        "jsCode": "const event = $json.body.data.object;\nconst email = event.customer_email || '';\nreturn [{ json: { email: email, customer_id: event.customer, invoice_id: event.id } }];"
+      }
+    },
+    {
+      "id": "update-past-due-001",
+      "name": "Update Status: Past Due",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        624,
+        384
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "clients",
+        "filterType": "string",
+        "filterString": "=email=eq.{{ $json.email }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "subscription_status",
+              "fieldValue": "past_due"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "CtuHcbye96uOBa2a",
+          "name": "FCA Default - kidgcrqxrfcbsaeguwop"
+        }
+      }
+    },
+    {
+      "id": "email-payment-failed-001",
+      "name": "Email: Payment Failed",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        384
+      ],
+      "parameters": {
+        "fromEmail": "Fior Saoirse <admin@fiorsaoirse.com>",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Action needed: Your FCA payment failed",
+        "html": "=<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#ef4444;\">Payment Failed</h2><p>We were unable to process your latest payment. Please update your payment method to continue receiving content.</p><p><a href=\"https://fiorsaoirse.com/#contact\" style=\"display:inline-block;background:#667eea;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;\">Update Payment Method</a></p><p>Questions? Reply to this email.</p><p>— The Fior Saoirse Team</p></div>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "XH1W1oB6xEAEHGYx",
+          "name": "SMTP account 2"
+        }
+      },
+      "webhookId": "02c133fd-4f77-4c9d-833b-42f755f387a6"
+    },
+    {
+      "id": "handle-cancellation-001",
+      "name": "Handle Cancellation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        192
+      ],
+      "parameters": {
+        "jsCode": "const sub = $json.body.data.object;\nconst email = sub.metadata?.email || '';\nconst customerId = sub.customer;\nreturn [{ json: { email: email, customer_id: customerId, subscription_id: sub.id } }];"
+      }
+    },
+    {
+      "id": "update-cancelled-001",
+      "name": "Update Status: Cancelled",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        624,
+        192
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "clients",
+        "filterType": "string",
+        "filterString": "=stripe_customer_id=eq.{{ $json.customer_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "subscription_status",
+              "fieldValue": "cancelled"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "CtuHcbye96uOBa2a",
+          "name": "FCA Default - kidgcrqxrfcbsaeguwop"
+        }
+      }
+    },
+    {
+      "id": "email-cancelled-001",
+      "name": "Email: Subscription Cancelled",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        192
+      ],
+      "parameters": {
+        "fromEmail": "Fior Saoirse <admin@fiorsaoirse.com>",
+        "toEmail": "={{ $json.email || 'admin@fiorsaoirse.com' }}",
+        "subject": "Your FCA subscription has been cancelled",
+        "html": "=<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#667eea;\">Subscription Cancelled</h2><p>We’re sorry to see you go. Your content access has been deactivated.</p><p>If you change your mind, you can resubscribe anytime:</p><p><a href=\"https://fiorsaoirse.com/#contact\" style=\"display:inline-block;background:#667eea;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;\">Resubscribe</a></p><p>We’d love to hear your feedback — just reply to this email.</p><p>— The Fior Saoirse Team</p></div>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "XH1W1oB6xEAEHGYx",
+          "name": "SMTP account 2"
+        }
+      },
+      "webhookId": "79e4b46b-8ce8-499c-92d1-4d1911771234"
+    },
+    {
+      "id": "handle-sub-updated-001",
+      "name": "Handle Sub Updated",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        64
+      ],
+      "parameters": {
+        "jsCode": "const sub = $json.body.data.object;\nconst customerId = sub.customer;\nconst status = sub.status;\nlet tier = 'basic';\nif (sub.items && sub.items.data && sub.items.data[0]) {\n  const price = sub.items.data[0].price;\n  if (price.metadata && price.metadata.plan_tier) {\n    tier = price.metadata.plan_tier;\n  } else if (price.unit_amount >= 14900) {\n    tier = 'pro';\n  }\n}\nreturn [{ json: { customer_id: customerId, subscription_status: status, subscription_tier: tier } }];"
+      }
+    },
+    {
+      "id": "update-sub-details-001",
+      "name": "Update Subscription Details",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        624,
+        64
+      ],
+      "parameters": {
+        "operation": "update",
+        "tableId": "clients",
+        "filterType": "string",
+        "filterString": "=stripe_customer_id=eq.{{ $json.customer_id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "subscription_status",
+              "fieldValue": "={{ $json.subscription_status }}"
+            },
+            {
+              "fieldId": "subscription_tier",
+              "fieldValue": "={{ $json.subscription_tier }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "CtuHcbye96uOBa2a",
+          "name": "FCA Default - kidgcrqxrfcbsaeguwop"
+        }
+      }
+    },
+    {
+      "id": "notify-admin-failed-001",
+      "name": "Notify Admin: Payment Failed",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        480
+      ],
+      "parameters": {
+        "fromEmail": "admin@fiorsaoirse.com",
+        "toEmail": "admin@fiorsaoirse.com",
+        "subject": "=⚠️ Payment Failed: {{ $json.email }}",
+        "html": "=<p>Payment failed!</p><p><strong>Email:</strong> {{ $json.email }}</p><p><strong>Invoice:</strong> {{ $json.invoice_id }}</p><p><strong>Time:</strong> {{ new Date().toLocaleString() }}</p>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "XH1W1oB6xEAEHGYx",
+          "name": "SMTP account 2"
+        }
+      },
+      "webhookId": "e3a0c861-a473-49a8-8048-5cff95d44873"
+    }
+  ],
+  "connections": {
+    "Stripe Trigger": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Activate Client",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mark Trial Converted",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email: Subscription Active",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Admin: New Customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "Handle Sub Updated",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Cancellation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "Handle Payment Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Sub Updated": {
+      "main": [
+        [
+          {
+            "node": "Update Subscription Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Cancellation": {
+      "main": [
+        [
+          {
+            "node": "Update Status: Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status: Cancelled": {
+      "main": [
+        [
+          {
+            "node": "Email: Subscription Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Payment Failed": {
+      "main": [
+        [
+          {
+            "node": "Update Status: Past Due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status: Past Due": {
+      "main": [
+        [
+          {
+            "node": "Email: Payment Failed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Admin: Payment Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Stripe Trigger": {
+      "webhookId": "we_1T4joo98SvO3uGBLMxyO200L",
+      "webhookEvents": [
+        "customer.subscription.created",
+        "customer.subscription.deleted",
+        "customer.subscription.updated",
+        "invoice.payment_failed",
+        "invoice.payment_succeeded",
+        "checkout.session.completed"
+      ],
+      "webhookSecret": "whsec_fv9fwZPyFu7VRtwQT3lDBSfG1BjhjkNo"
+    },
+    "webhookSecret": "whsec_SHlYCIJJnI5rKai2nEEI0mCMK5VX9zKh"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
