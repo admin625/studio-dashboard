@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthProvider from './components/AuthProvider'
@@ -23,7 +23,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <HashRouter>
+        <BrowserRouter>
           <AuthProvider>
             <HelpChat />
             <Routes>
@@ -74,7 +74,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/deliveries" replace />} />
             </Routes>
           </AuthProvider>
-        </HashRouter>
+        </BrowserRouter>
       </AppProvider>
     </ErrorBoundary>
   )

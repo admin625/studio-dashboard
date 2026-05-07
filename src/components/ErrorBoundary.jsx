@@ -27,7 +27,7 @@ export default class ErrorBoundary extends Component {
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button
-              onClick={() => { this.setState({ hasError: false, error: null }); window.location.hash = '#/deliveries' }}
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.assign('/deliveries') }}
               className="px-6 py-3 rounded-xl text-sm font-bold text-white transition-all hover:-translate-y-0.5"
               style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}
             >
