@@ -9,6 +9,9 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+[functions."proxy-webhook"]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
