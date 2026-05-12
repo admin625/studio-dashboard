@@ -168,20 +168,48 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
       })
     }
 
-    // Fire and forget — don't wait for n8n
-    fetch('/.netlify/functions/generate-content', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).then(r => {
-      if (!r.ok) console.warn('[Generate] Server responded with', r.status)
-    }).catch(err => {
-      console.warn('[Generate] Request error:', err.message)
-    })
-
-    onClose()
-    if (onSubmitted) onSubmitted(activePlatforms.map(p => p.name))
-    setSubmitting(false)
+    // Wait for response before claiming success.
+    // 200/202 = accepted (n8n may still be processing — Dashboard polls for the row).
+    // 4xx/5xx = surface in modal, keep modal open so user can retry.
+    // 30s abort budget covers Netlify Pro function timeout (26s) + transport.
+    //
+    // TODO(post-launch): the admin@fiorsaoirse.com support contact hardcoded in
+    // the error messages below couples Mac's personal identity to customer-facing
+    // error surfaces. Replace with a generic support address (e.g.,
+    // support@fiorsaoirse.com) once that mailbox/alias is provisioned.
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+    try {
+      const res = await fetch('/.netlify/functions/generate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+      if (!res.ok) {
+        let detail = ''
+        try {
+          const body = await res.json()
+          detail = body.error || body.message || ''
+        } catch { /* response body not JSON */ }
+        setError(`We couldn't submit your request (status ${res.status}${detail ? ': ' + detail : ''}). Please try again. If this keeps happening, contact support at admin@fiorsaoirse.com.`)
+        setSubmitting(false)
+        return
+      }
+      // 2xx — proceed
+      onClose()
+      if (onSubmitted) onSubmitted(activePlatforms.map(p => p.name))
+      setSubmitting(false)
+    } catch (err) {
+      clearTimeout(timeoutId)
+      if (err.name === 'AbortError') {
+        setError("Request timed out after 30 seconds. We couldn't reach our servers. Please try again, or contact support at admin@fiorsaoirse.com.")
+      } else {
+        setError(`We couldn't reach our servers (${err.message}). Please try again, or contact support at admin@fiorsaoirse.com.`)
+      }
+      setSubmitting(false)
+    }
   }
 
   if (!open) return null

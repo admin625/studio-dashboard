@@ -17,8 +17,10 @@ export default function Dashboard() {
   const [pollTrigger, setPollTrigger] = useState(0)
   const [pendingPlatforms, setPendingPlatforms] = useState(null)
   const [pendingTime, setPendingTime] = useState(null)
+  const [pendingTakingLonger, setPendingTakingLonger] = useState(false)
   const pollRef = useRef(null)
   const knownIdsRef = useRef(new Set())
+  const fallbackTimeoutRef = useRef(null)
 
   // Capture known delivery IDs on mount
   useEffect(() => {
@@ -40,10 +42,15 @@ export default function Dashboard() {
           // New delivery found — stop polling, update list
           clearInterval(pollRef.current)
           pollRef.current = null
+          if (fallbackTimeoutRef.current) {
+            clearTimeout(fallbackTimeoutRef.current)
+            fallbackTimeoutRef.current = null
+          }
           newIds.forEach(d => knownIdsRef.current.add(d.id))
           setPendingPlatforms(null)
           setPendingTime(null)
           setShowBanner(false)
+          setPendingTakingLonger(false)
           setPollTrigger(t => t + 1)
         }
       } catch (e) { /* silent */ }
@@ -51,13 +58,21 @@ export default function Dashboard() {
   }, [app.resolvedStudioId])
 
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
+    }
   }, [])
 
   const handleGenSubmitted = (platforms) => {
     setShowBanner(true)
     setPendingPlatforms(platforms || ['instagram'])
     setPendingTime(new Date())
+    setPendingTakingLonger(false)
+    if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
+    fallbackTimeoutRef.current = setTimeout(() => {
+      setPendingTakingLonger(true)
+    }, 90_000)
     startPolling()
   }
 
@@ -129,7 +144,14 @@ export default function Dashboard() {
                     {pendingTime ? new Date(pendingTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Now'}
                   </span>
                 </div>
-                <p className="text-sm text-slate-300 font-medium">Generating your content...</p>
+                <p className="text-sm text-slate-300 font-medium">
+                  {pendingTakingLonger ? 'Still generating — this is taking longer than expected.' : 'Generating your content...'}
+                </p>
+                {pendingTakingLonger && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    If this hasn't completed soon, please <a href="mailto:admin@fiorsaoirse.com" className="underline">contact support</a>.
+                  </p>
+                )}
                 <div className="flex gap-1.5 mt-1.5">
                   {pendingPlatforms.map(p => (
                     <span key={p} className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style={{ background: `${primary}20`, color: primary }}>
