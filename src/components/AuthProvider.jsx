@@ -33,7 +33,7 @@ const ADMIN_ACCOUNTS = {
     scopeType: 'studio',
     studioData: {
       studio_name: 'Mac Test Studio v2',
-      photo_source: 'ai_assist',
+      photo_source: 'ai_only',
       ai_photo_prompt: '',
       brand_color: '#667eea',
       brand_color_secondary: '',
