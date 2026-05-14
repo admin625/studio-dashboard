@@ -19,10 +19,26 @@ All core features built and deployed. One active paying client (Katie / TLK).
 - **Hosting:** Netlify (studio-dash.netlify.app)
 - **Content generation:** n8n Cloud (jmac.app.n8n.cloud) → Claude API → Supabase
 - **AI photos:** Flux 2 Pro via BFL API (n8n)
+> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
 - **Video reels:** Creatomate API (n8n)
 - **AI text:** Anthropic Claude (via n8n, not called from dashboard directly)
 - **Auth:** Supabase Auth (email/password, password reset)
 - **Repo:** admin625/studio-dashboard
+
+## ⚠️ Reel Architecture Status (2026-05-14)
+
+Creatomate-based reel pipeline DEPRECATED. New composite architecture decided 2026-05-14:
+- Rendering: Shotstack (replaces Creatomate; handles variable-length user clips)
+- Captions: Submagic API
+- Edit decision list: Claude API (Anthropic)
+- Orchestration: n8n (three-workflow pattern, mirrors AI Photo gen)
+- Storage: new `reel-raw-clips` Supabase bucket (lifecycle: 30 days)
+- Feature-flagged: `reel_editor_enabled` scoped per studio, Katie-only initial beta
+- NOT a separate product or Supabase project — feature inside FCA
+
+Formal architecture spec to be drafted post-FCA-launch (target: post-Monday 2026-05-18). Until spec exists, do NOT implement against any reel-related section in this file. If reel work is requested before the spec is published, surface to Mac for direction.
+
+Sections marked ⚠️ DEPRECATED 2026-05-14 below are preserved for historical context and JARVIS compile continuity.
 
 ## Key Files
 ```
@@ -50,6 +66,7 @@ No server-side secrets in this repo. All sensitive API calls (Claude, BFL, Creat
 - id, created_at, studio_id, client_id, instructor_email
 - instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content (JSONB — array of post objects per platform)
 - platform_content (JSONB — unified format used by newer code paths)
+> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
 - video_url, video_status ('pending', 'rendering', 'ready', 'error'), video_render_id, video_error
 - reel_script (JSONB — full reel scene data)
 
@@ -98,8 +115,10 @@ Role stored in `AppState.role`. Owner-only sections gated by `AppState.role === 
 |----------|-----|--------|---------|
 | Main Content Generator | `pTTpsIlhtOYHqvXd` | Active | Dashboard webhook |
 | FCA AI Photo Generator | `nJ9eWDmfPA0TH8og` | Active | `/webhook/fca-ai-photo` |
-| FCA Video Reel Generator | `t1xDbyCiad2oVJTM` | Active | `/webhook/fca-video-reel` |
+| FCA Video Reel Generator | `t1xDbyCiad2oVJTM` | DEPRECATED 2026-05-14 | `/webhook/fca-video-reel` |
 | DEACTIVATED duplicate | `tqOVZd7JPERcsidM` | Inactive | (was causing webhook conflicts, deactivated 2026-03-04) |
+
+*Video Reel Generator (`t1xDbyCiad2oVJTM`): retired. Carousel Generator (`tFc4DO5gJkAB3hvW`) status TBD pending Mac decision.*
 
 ### Main Content Generator (36 nodes) — Full Flow
 ```
@@ -125,6 +144,8 @@ Dashboard sends `photo_source` and `ai_photo_prompt` in the generation payload:
 
 `ai_photo_prompt` overrides the default fitness prompt in both Check Low Scores and Format Image Prompt nodes when present.
 
+> ⚠️ DEPRECATED 2026-05-14 — Renderer v3 (Creatomate) retired. Composite architecture pending. The block below is preserved for historical context only. Do not implement.
+
 ### Video Reel Renderer (v3, 2026-03-09)
 - 1080x1920, 30fps, dynamic 7-9 scenes, 18-20s target duration
 - Text in bottom 25%, gradient overlay (transparent top → 60% black bottom)
@@ -139,6 +160,7 @@ Dashboard sends `photo_source` and `ai_photo_prompt` in the generation payload:
 - Delivery detail view with per-platform post cards and format badges (feed post, story, thread)
 - Inline caption and hashtag editing (saves to platform_content JSONB)
 - Photo swap via photo editor with auto-save ("Saved" state feedback)
+> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
 - Video reel player with status indicators (spinner while rendering, player when ready, error display)
 - Generate Content modal:
   - Standard mode: brand voice, target audience, fitness focus, goal, mood, CTA, hashtags, themes, promotions
@@ -159,6 +181,7 @@ Dashboard sends `photo_source` and `ai_photo_prompt` in the generation payload:
 
 ## API Auth Patterns
 - **BFL (Flux 2 Pro):** `x-key` header — NOT Bearer
+> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
 - **Creatomate:** `Authorization: Bearer` prefix
 - **Anthropic Claude:** via n8n (not called from dashboard)
 
