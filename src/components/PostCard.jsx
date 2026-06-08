@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
   Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp, Edit3, Wand2,
+  Stamp, RotateCcw,
 } from 'lucide-react'
 
 const PLATFORM_LABEL = { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', all: 'All Platforms' }
@@ -20,8 +21,21 @@ const FORMAT_COLORS = {
 
 const PROMPT_PLACEHOLDER = 'Describe the photo you want...'
 
+// Watermark placement zones — must match the compositing service's ZONES tuple
+// (logo_placement.py). Laid out as a 3-row grid for the picker.
+const WM_ZONES = [
+  { value: 'top-left', label: 'Top L', row: 0, col: 0 },
+  { value: 'top-right', label: 'Top R', row: 0, col: 2 },
+  { value: 'bottom-left', label: 'Bot L', row: 2, col: 0 },
+  { value: 'bottom-center', label: 'Bot C', row: 2, col: 1 },
+  { value: 'bottom-right', label: 'Bot R', row: 2, col: 2 },
+]
+
 export default function PostCard({ post, index, platform, deliveryId, readOnly }) {
-  const { brandColorPrimary, resolvedStudioId, email, studioName, studioType, brandVoice, aiPhotoPrompt } = useApp()
+  const {
+    brandColorPrimary, resolvedStudioId, email, studioName, studioType, brandVoice, aiPhotoPrompt,
+    brandLogoLightUrl, brandLogoDarkUrl, watermarkDefaultZone, watermarkDefaultVariant, update,
+  } = useApp()
   const primary = brandColorPrimary || '#667eea'
 
   const [editing, setEditing] = useState(null) // 'caption' | 'hashtags' | null
@@ -51,6 +65,20 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const [overridePrompt, setOverridePrompt] = useState(undefined)
   const [editorMsg, setEditorMsg] = useState(null)
   const [promptExpanded, setPromptExpanded] = useState(false)
+
+  // Watermark state. A studio with at least one logo variant gets the toggle ON
+  // by default. Zone/variant pre-fill from the studio's last-used defaults; the
+  // last successful apply persists back to those defaults.
+  const hasLight = !!brandLogoLightUrl
+  const hasDark = !!brandLogoDarkUrl
+  const hasVariant = hasLight || hasDark
+  const wmTouched = useRef(false)
+  const [wmEnabled, setWmEnabled] = useState(hasVariant)
+  const [wmZone, setWmZone] = useState(watermarkDefaultZone || 'bottom-right')
+  const [wmVariant, setWmVariant] = useState(watermarkDefaultVariant || 'auto')
+  const [wmApplying, setWmApplying] = useState(false)
+  const [wmSourceUrl, setWmSourceUrl] = useState(null) // un-watermarked base to composite from
+  const [wmAppliedUrl, setWmAppliedUrl] = useState(null) // watermarked result this session
 
   // AI generate from picker — async flow separate from sync handleRegenerate in editor
   const [aiGenOpen, setAiGenOpen] = useState(false)
@@ -105,6 +133,19 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     }, POLL_MS)
     return () => clearInterval(id)
   }, [aiGenerating, aiGenStartedAt, resolvedStudioId, aiGenPrompt])
+
+  // Default the watermark toggle ON once we know the studio has a logo variant
+  // (logos may load into AppContext after first render). Stops once the user
+  // manually toggles, so we never override an explicit choice.
+  useEffect(() => {
+    if (!wmTouched.current) setWmEnabled(hasVariant)
+  }, [hasVariant])
+
+  // Keep the manual-variant choice valid for what the studio actually uploaded.
+  useEffect(() => {
+    if (wmVariant === 'light' && !hasLight) setWmVariant(hasDark ? 'dark' : 'auto')
+    if (wmVariant === 'dark' && !hasDark) setWmVariant(hasLight ? 'light' : 'auto')
+  }, [hasLight, hasDark, wmVariant])
 
   const currentPhotoUrl = overridePhotoUrl || post.photo_url
   const baseIsAI = post.needs_ai_image || (!post.matched_photo_id && post.photo_url)
@@ -237,6 +278,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
       setOverridePhotoUrl(newUrl)
       setOverrideIsAI(true)
       setOverridePrompt(prompt)
+      setWmAppliedUrl(null)
+      setWmSourceUrl(null)
       await persistPhotoChange(newUrl, {
         image_prompt: prompt,
         generation_prompt: prompt,
@@ -254,6 +297,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     setOverridePhotoUrl(photo.photo_url)
     setOverrideIsAI(photo.source === 'ai_generated')
     setOverridePrompt(photo.generation_prompt || null)
+    setWmAppliedUrl(null)
+    setWmSourceUrl(null)
     try {
       await persistPhotoChange(photo.photo_url, {
         matched_photo_id: photo.id,
@@ -347,6 +392,96 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
       flashMsg({ type: 'error', text: 'Save failed: ' + e.message })
     }
     setSavingToLib(false)
+  }
+
+  // Persist the last-used zone/variant to the studio's defaults so the next post
+  // (and next session) pre-fills the same choice. Fire-and-forget; non-fatal.
+  const persistWatermarkDefault = async (zone, variant) => {
+    try {
+      if (resolvedStudioId) {
+        await supabase.from('studio_accounts')
+          .update({ watermark_default_zone: zone, watermark_default_variant: variant })
+          .eq('id', resolvedStudioId)
+      }
+      update({ watermarkDefaultZone: zone, watermarkDefaultVariant: variant })
+    } catch (e) {
+      console.warn('[PostCard] watermark default persist failed:', e)
+    }
+  }
+
+  const applyWatermark = async () => {
+    if (!hasVariant || !resolvedStudioId) return
+    // Composite from the original un-watermarked image, never from an already-
+    // stamped result (avoids double logos when re-applying with a new zone).
+    const source = wmAppliedUrl ? wmSourceUrl : currentPhotoUrl
+    if (!source) {
+      flashMsg({ type: 'error', text: 'No image to watermark yet' })
+      return
+    }
+    setWmApplying(true)
+    setEditorMsg(null)
+    try {
+      const res = await fetch('/.netlify/functions/watermark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_url: source,
+          studio_id: resolvedStudioId,
+          logo_light_url: brandLogoLightUrl || null,
+          logo_dark_url: brandLogoDarkUrl || null,
+          zone: wmZone,
+          variant: wmVariant,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.watermarked_url) {
+        throw new Error(data.error || data.detail || 'Watermark failed')
+      }
+      if (data.watermarked === false) {
+        flashMsg({ type: 'error', text: 'No logo variant available to apply' })
+        setWmApplying(false)
+        return
+      }
+      setWmSourceUrl(source)
+      setWmAppliedUrl(data.watermarked_url)
+      setOverridePhotoUrl(data.watermarked_url)
+      await persistPhotoChange(data.watermarked_url, {
+        watermark_applied: true,
+        watermark_zone: data.zone || wmZone,
+        watermark_variant: data.variant_used || wmVariant,
+        original_photo_url: source,
+      })
+      persistWatermarkDefault(wmZone, wmVariant)
+      flashMsg({ type: 'success', text: `Watermark applied (${data.variant_used || wmVariant})` })
+    } catch (e) {
+      flashMsg({ type: 'error', text: e.message || 'Watermark failed' })
+    }
+    setWmApplying(false)
+  }
+
+  const removeWatermark = async () => {
+    if (!wmSourceUrl) return
+    setOverridePhotoUrl(wmSourceUrl)
+    setWmAppliedUrl(null)
+    try {
+      await persistPhotoChange(wmSourceUrl, {
+        watermark_applied: false,
+        watermark_zone: null,
+        watermark_variant: null,
+      })
+      flashMsg({ type: 'success', text: 'Watermark removed' })
+    } catch (e) {
+      flashMsg({ type: 'error', text: 'Could not remove watermark' })
+    }
+  }
+
+  const toggleWatermark = () => {
+    wmTouched.current = true
+    setWmEnabled(prev => {
+      const next = !prev
+      if (!next && wmAppliedUrl) removeWatermark()
+      return next
+    })
   }
 
   return (
@@ -510,6 +645,121 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                   {savingToLib ? 'Saving...' : 'Save to Library'}
                 </button>
               </div>
+
+              {/* ── Logo watermark ── (only when the studio has uploaded a variant) */}
+              {hasVariant && (
+                <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Stamp size={13} style={{ color: wmEnabled ? primary : '#64748b' }} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: wmEnabled ? '#cbd5e1' : '#64748b' }}>
+                        Logo Watermark
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleWatermark}
+                      role="switch"
+                      aria-checked={wmEnabled}
+                      className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
+                      style={{ background: wmEnabled ? primary : 'rgba(255,255,255,0.12)' }}
+                    >
+                      <span
+                        className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                        style={{ transform: wmEnabled ? 'translateX(16px)' : 'none' }}
+                      />
+                    </button>
+                  </div>
+
+                  {wmEnabled && (
+                    <div className="flex flex-col sm:flex-row gap-5">
+                      {/* Placement picker — 3×3 grid, 5 active zones */}
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-2">Placement</p>
+                        <div className="grid grid-cols-3 gap-1" style={{ width: 84 }}>
+                          {[0, 1, 2].map(row =>
+                            [0, 1, 2].map(col => {
+                              const z = WM_ZONES.find(zn => zn.row === row && zn.col === col)
+                              if (!z) return <div key={`${row}-${col}`} className="aspect-square rounded-sm" style={{ background: 'rgba(255,255,255,0.02)' }} />
+                              const sel = wmZone === z.value
+                              return (
+                                <button
+                                  key={z.value}
+                                  type="button"
+                                  onClick={() => setWmZone(z.value)}
+                                  title={z.value}
+                                  className="aspect-square rounded-sm transition-all flex items-center justify-center"
+                                  style={{
+                                    background: sel ? primary : 'rgba(255,255,255,0.06)',
+                                    border: `1px solid ${sel ? primary : 'rgba(255,255,255,0.1)'}`,
+                                  }}
+                                >
+                                  <span className="rounded-full" style={{ width: 5, height: 5, background: sel ? '#fff' : 'rgba(255,255,255,0.35)' }} />
+                                </button>
+                              )
+                            })
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Variant selector + actions */}
+                      <div className="flex-1">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-2">Logo version</p>
+                        <div className="inline-flex rounded-lg overflow-hidden mb-3" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                          {[
+                            { v: 'auto', label: 'Auto', show: true },
+                            { v: 'light', label: 'Light', show: hasLight },
+                            { v: 'dark', label: 'Dark', show: hasDark },
+                          ].filter(o => o.show).map((o, i) => {
+                            const sel = wmVariant === o.v
+                            return (
+                              <button
+                                key={o.v}
+                                type="button"
+                                onClick={() => setWmVariant(o.v)}
+                                className="px-3 py-1.5 text-[11px] font-bold transition-colors"
+                                style={{
+                                  background: sel ? primary : 'transparent',
+                                  color: sel ? '#fff' : '#94a3b8',
+                                  borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                                }}
+                              >
+                                {o.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {wmVariant === 'auto' && hasLight && hasDark && (
+                          <p className="text-[10px] text-slate-500 mb-3 -mt-1">Picks light or dark automatically based on the photo behind the logo.</p>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={applyWatermark}
+                            disabled={wmApplying || !currentPhotoUrl}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                            style={{ background: primary, color: '#fff' }}
+                          >
+                            {wmApplying ? <Loader2 size={12} className="animate-spin" /> : <Stamp size={12} />}
+                            {wmApplying ? 'Applying…' : wmAppliedUrl ? 'Re-apply' : 'Apply Watermark'}
+                          </button>
+                          {wmAppliedUrl && (
+                            <button
+                              type="button"
+                              onClick={removeWatermark}
+                              disabled={wmApplying}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
+                              style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}
+                            >
+                              <RotateCcw size={12} /> Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Status message */}
               {editorMsg && (
