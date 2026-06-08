@@ -80,5 +80,27 @@ export function useBrandSettings() {
     return publicUrl
   }, [studioId, app])
 
-  return { saveBrand, saveStudioType, savePhotoSource, savePhotoPrompt, uploadLogo }
+  // Watermark logo variants (light for dark backgrounds, dark for light backgrounds).
+  // Stored alongside the primary logo; never overwrites logo_url.
+  const uploadLogoVariant = useCallback(async (file, variant) => {
+    if (!studioId || !file) return
+    if (variant !== 'light' && variant !== 'dark') throw new Error('invalid logo variant')
+    const ext = file.name.split('.').pop()
+    const path = `logos/${studioId}/logo-${variant}.${ext}`
+    const { error: upErr } = await withTimeout(
+      supabase.storage.from('studio-photos').upload(path, file, { upsert: true }),
+      15000, 'uploadLogoVariant.storage'
+    )
+    if (upErr) throw upErr
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/studio-photos/${path}`
+    const col = variant === 'light' ? 'logo_light_url' : 'logo_dark_url'
+    await withTimeout(
+      supabase.from('studio_accounts').update({ [col]: publicUrl }).eq('id', studioId),
+      TIMEOUT_MS, 'uploadLogoVariant.record'
+    )
+    app.update(variant === 'light' ? { brandLogoLightUrl: publicUrl } : { brandLogoDarkUrl: publicUrl })
+    return publicUrl
+  }, [studioId, app])
+
+  return { saveBrand, saveStudioType, savePhotoSource, savePhotoPrompt, uploadLogo, uploadLogoVariant }
 }

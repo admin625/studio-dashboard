@@ -104,6 +104,10 @@ export default function AuthProvider({ children }) {
           brandFont: s.brand_font || '',
           brandVoice: s.brand_voice || '',
           brandLogoUrl: s.logo_url || '',
+          brandLogoLightUrl: s.logo_light_url || '',
+          brandLogoDarkUrl: s.logo_dark_url || '',
+          watermarkDefaultZone: s.watermark_default_zone || 'bottom-right',
+          watermarkDefaultVariant: s.watermark_default_variant || 'auto',
           isBeta: s.is_beta || false,
           studioType: s.studio_type || '',
           lastContentTypes: s.last_content_types || [],
@@ -113,7 +117,7 @@ export default function AuthProvider({ children }) {
         try {
           const { data: s, error: qErr } = await withTimeout(
             supabase.from('studio_accounts')
-              .select('studio_name, photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, is_beta, studio_type, last_content_types')
+              .select('studio_name, photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, logo_light_url, logo_dark_url, watermark_default_zone, watermark_default_variant, is_beta, studio_type, last_content_types')
               .eq('id', ri.studioId).single(),
             5000, 'studio_accounts'
           )
@@ -128,6 +132,10 @@ export default function AuthProvider({ children }) {
               brandFont: s.brand_font || '',
               brandVoice: s.brand_voice || '',
               brandLogoUrl: s.logo_url || '',
+              brandLogoLightUrl: s.logo_light_url || '',
+              brandLogoDarkUrl: s.logo_dark_url || '',
+              watermarkDefaultZone: s.watermark_default_zone || 'bottom-right',
+              watermarkDefaultVariant: s.watermark_default_variant || 'auto',
               isBeta: s.is_beta || false,
               studioType: s.studio_type || '',
               lastContentTypes: s.last_content_types || [],

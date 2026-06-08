@@ -146,13 +146,15 @@ function ExampleCard({ example, onUse, brandColor }) {
 ══════════════════════════════════════════════════════════ */
 export default function BrandSettings() {
   const app = useApp()
-  const { saveBrand, saveStudioType, savePhotoSource, savePhotoPrompt, uploadLogo } = useBrandSettings()
+  const { saveBrand, saveStudioType, savePhotoSource, savePhotoPrompt, uploadLogo, uploadLogoVariant } = useBrandSettings()
 
   const [primary, setPrimary] = useState(app.brandColorPrimary || '#667eea')
   const [secondary, setSecondary] = useState(app.brandColorSecondary || '#0A0B0D')
   const [font, setFont] = useState(app.brandFont || '')
   const [voice, setVoice] = useState(app.brandVoice || '')
   const [logoUrl, setLogoUrl] = useState(app.brandLogoUrl || '')
+  const [logoLightUrl, setLogoLightUrl] = useState(app.brandLogoLightUrl || '')
+  const [logoDarkUrl, setLogoDarkUrl] = useState(app.brandLogoDarkUrl || '')
   const [photoSrc, setPhotoSrc] = useState(app.photoSource || 'studio_only')
   const [prompt, setPrompt] = useState(app.aiPhotoPrompt || '')
   const [studioTyp, setStudioTyp] = useState(app.studioType || '')
@@ -163,6 +165,8 @@ export default function BrandSettings() {
   const promptTimer = useRef(null)
   const customTimer = useRef(null)
   const fileRef = useRef(null)
+  const lightFileRef = useRef(null)
+  const darkFileRef = useRef(null)
 
   // Sync from AppContext when it changes (e.g., after initial load)
   useEffect(() => {
@@ -171,6 +175,8 @@ export default function BrandSettings() {
     if (app.brandFont) setFont(app.brandFont)
     if (app.brandVoice) setVoice(app.brandVoice)
     if (app.brandLogoUrl) setLogoUrl(app.brandLogoUrl)
+    if (app.brandLogoLightUrl) setLogoLightUrl(app.brandLogoLightUrl)
+    if (app.brandLogoDarkUrl) setLogoDarkUrl(app.brandLogoDarkUrl)
     if (app.photoSource) setPhotoSrc(app.photoSource)
     if (app.aiPhotoPrompt) setPrompt(app.aiPhotoPrompt)
     if (app.studioType) {
@@ -181,7 +187,7 @@ export default function BrandSettings() {
         setCustomType(app.studioType)
       }
     }
-  }, [app.brandColorPrimary, app.brandColorSecondary, app.brandFont, app.brandVoice, app.brandLogoUrl, app.photoSource, app.aiPhotoPrompt, app.studioType]) // eslint-disable-line
+  }, [app.brandColorPrimary, app.brandColorSecondary, app.brandFont, app.brandVoice, app.brandLogoUrl, app.brandLogoLightUrl, app.brandLogoDarkUrl, app.photoSource, app.aiPhotoPrompt, app.studioType]) // eslint-disable-line
 
   // Font loader
   useEffect(() => {
@@ -256,6 +262,16 @@ export default function BrandSettings() {
     reader.onload = ev => setLogoUrl(ev.target.result)
     reader.readAsDataURL(file)
     try { await uploadLogo(file) } catch (err) { console.error('[Logo]', err) }
+  }
+
+  const handleVariantUpload = async (e, variant) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Instant preview
+    const reader = new FileReader()
+    reader.onload = ev => (variant === 'light' ? setLogoLightUrl(ev.target.result) : setLogoDarkUrl(ev.target.result))
+    reader.readAsDataURL(file)
+    try { await uploadLogoVariant(file, variant) } catch (err) { console.error('[LogoVariant]', variant, err) }
   }
 
   const saveBtnBg = saveState === 'saved' ? '#10B981' : primary
@@ -462,6 +478,51 @@ export default function BrandSettings() {
               </div>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden" onChange={handleLogoUpload} />
             </div>
+          </div>
+
+          {/* ── Watermark logos (optional) ── */}
+          <div className="mt-10 pt-8" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-[10px] font-semibold tracking-[0.18em] uppercase" style={{ color: primary }}>Watermark logos (optional)</span>
+            </div>
+            <p className="text-[#4A4E5A] text-sm leading-relaxed mb-6 max-w-lg">
+              For stamping your logo onto generated images and reels. Upload a <em className="not-italic font-medium text-[#6A6E7A]">light</em> version for dark photos and a <em className="not-italic font-medium text-[#6A6E7A]">dark</em> version for light photos. FCA picks the right one automatically per image.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {/* Light variant — for dark backgrounds */}
+              <div>
+                <p className="text-[10px] font-bold tracking-[0.16em] uppercase mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>Light logo · for dark photos</p>
+                <div className="h-32 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-200"
+                  style={{ background: DARK, border: logoLightUrl ? `1px solid ${primary}30` : '1.5px dashed rgba(255,255,255,0.14)' }}
+                  onClick={() => lightFileRef.current?.click()}>
+                  {logoLightUrl ? <img src={logoLightUrl} alt="Light watermark" className="max-w-full max-h-full object-contain p-4" /> :
+                    <div className="text-center"><ImagePlus size={20} className="mx-auto mb-2" style={{ color: 'rgba(255,255,255,0.18)' }} /><p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.18)' }}>UPLOAD LIGHT</p></div>}
+                </div>
+                {logoLightUrl && (
+                  <button type="button" onClick={() => lightFileRef.current?.click()} className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: primary }}>
+                    <Upload size={11} /> Replace
+                  </button>
+                )}
+                <input ref={lightFileRef} type="file" accept="image/png,image/svg+xml,image/webp" className="hidden" onChange={e => handleVariantUpload(e, 'light')} />
+              </div>
+              {/* Dark variant — for light backgrounds */}
+              <div>
+                <p className="text-[10px] font-bold tracking-[0.16em] uppercase mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>Dark logo · for light photos</p>
+                <div className="h-32 flex items-center justify-center overflow-hidden cursor-pointer transition-all duration-200"
+                  style={{ background: LIGHT, border: logoDarkUrl ? `1px solid ${primary}30` : '1.5px dashed rgba(0,0,0,0.18)' }}
+                  onClick={() => darkFileRef.current?.click()}>
+                  {logoDarkUrl ? <img src={logoDarkUrl} alt="Dark watermark" className="max-w-full max-h-full object-contain p-4" /> :
+                    <div className="text-center"><ImagePlus size={20} className="mx-auto mb-2" style={{ color: 'rgba(0,0,0,0.2)' }} /><p className="text-[11px]" style={{ color: 'rgba(0,0,0,0.25)' }}>UPLOAD DARK</p></div>}
+                </div>
+                {logoDarkUrl && (
+                  <button type="button" onClick={() => darkFileRef.current?.click()} className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: primary }}>
+                    <Upload size={11} /> Replace
+                  </button>
+                )}
+                <input ref={darkFileRef} type="file" accept="image/png,image/svg+xml,image/webp" className="hidden" onChange={e => handleVariantUpload(e, 'dark')} />
+              </div>
+            </div>
+            <p className="text-[11px] mt-4" style={{ color: 'rgba(255,255,255,0.25)' }}>Transparent PNG or SVG recommended.</p>
           </div>
         </Section>
 
