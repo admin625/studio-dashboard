@@ -515,7 +515,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
               {PLATFORM_LABEL[post.image_platform] || post.image_platform}
             </span>
           )}
-          <img src={currentPhotoUrl} alt="Post" className="w-full max-h-96 object-cover" />
+          <img src={currentPhotoUrl} alt="Post" className="w-full max-h-96 object-contain" />
           <div className="flex items-center gap-2 px-5 py-2" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: isAI ? '#a78bfa' : '#10b981' }}>
               {isAI ? 'AI Generated' : 'Studio Photo'}
