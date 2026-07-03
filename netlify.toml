@@ -1,3 +1,8 @@
+# Deploy path (verified 2026-07-03): git push to main → Netlify auto-build (npm install +
+# `npm run build`) → publish `dist/` + bundle netlify/functions. Continuous deployment is ON
+# (repo linked, stop_builds=false). Do NOT deploy the repo ROOT via the "deploy directory" API/MCP
+# tool — that uploads source (incl. node_modules) into a pre-built-dir deploy and fails at install.
+# For a manual out-of-band publish, use pre-built: `netlify deploy --prod --dir dist --functions netlify/functions`.
 [build]
   command = "npm run build"
   publish = "dist"
