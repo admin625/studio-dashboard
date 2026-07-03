@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import BrandSettings from './pages/BrandSettings'
 import Photos from './pages/Photos'
 import DeliveryView from './pages/DeliveryView'
+import Reels from './pages/Reels'
 import AccountSettings from './pages/AccountSettings'
 import ProtectedRoute from './components/ProtectedRoute'
 import HelpChatWidget from './components/HelpChatWidget'
@@ -43,6 +44,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <Photos />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reels"
+                element={
+                  <ProtectedRoute>
+                    <Reels />
                   </ProtectedRoute>
                 }
               />

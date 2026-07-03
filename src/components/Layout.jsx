@@ -1,7 +1,7 @@
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../hooks/useAuth'
 import { useLocation, Link } from 'react-router-dom'
-import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User } from 'lucide-react'
+import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User, Film } from 'lucide-react'
 
 export default function Layout({ children }) {
   const { email, role, studioName, brandColorPrimary } = useApp()
@@ -20,6 +20,7 @@ export default function Layout({ children }) {
 
   const navItems = [
     { path: '/deliveries', label: 'Content', Icon: LayoutGrid, show: true },
+    { path: '/reels', label: 'Reels', Icon: Film, show: isOwner },
     { path: '/photos', label: 'Photos', Icon: ImageIcon, show: isOwner },
     { path: '/brand', label: 'Brand', Icon: Palette, show: isOwner },
     { path: '/settings/account', label: 'Account', Icon: User, show: true },
