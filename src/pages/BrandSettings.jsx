@@ -145,11 +145,42 @@ function ExampleCard({ example, onUse, brandColor }) {
    MAIN PAGE
 ══════════════════════════════════════════════════════════ */
 export default function BrandSettings() {
+  const { authReady, studioLoadError } = useApp()
+
+  // Gate the entire form on studio-data hydration. AuthProvider sets the brand
+  // fields and authReady in the same context update, so authReady === true
+  // guarantees the stored brand values are present. Mounting BrandSettingsForm
+  // (and therefore allowing a Save) before that would let the form's defaults
+  // overwrite real stored values — e.g. writing black over a studio's secondary
+  // color (the pre-hydration race fixed 2026-07-04).
+  if (!authReady) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-32">
+          <Loader2 size={22} className="animate-spin" style={{ color: '#94A3B8' }} />
+        </div>
+      </Layout>
+    )
+  }
+  if (studioLoadError) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center gap-2 py-32 text-center">
+          <p className="text-sm font-semibold text-[#475569]">Couldn't load your brand settings.</p>
+          <p className="text-xs text-[#94A3B8]">Refresh to try again — we won't show the form until your saved brand loads, so nothing gets overwritten.</p>
+        </div>
+      </Layout>
+    )
+  }
+  return <BrandSettingsForm />
+}
+
+function BrandSettingsForm() {
   const app = useApp()
   const { saveBrand, saveStudioType, savePhotoSource, savePhotoPrompt, uploadLogo, uploadLogoVariant } = useBrandSettings()
 
   const [primary, setPrimary] = useState(app.brandColorPrimary || '#667eea')
-  const [secondary, setSecondary] = useState(app.brandColorSecondary || '#0A0B0D')
+  const [secondary, setSecondary] = useState(app.brandColorSecondary || '')
   const [font, setFont] = useState(app.brandFont || '')
   const [voice, setVoice] = useState(app.brandVoice || '')
   const [logoUrl, setLogoUrl] = useState(app.brandLogoUrl || '')
@@ -171,7 +202,7 @@ export default function BrandSettings() {
   // Sync from AppContext when it changes (e.g., after initial load)
   useEffect(() => {
     if (app.brandColorPrimary && primary === '#667eea') setPrimary(app.brandColorPrimary)
-    if (app.brandColorSecondary) setSecondary(app.brandColorSecondary)
+    if (app.brandColorSecondary && secondary === '') setSecondary(app.brandColorSecondary)
     if (app.brandFont) setFont(app.brandFont)
     if (app.brandVoice) setVoice(app.brandVoice)
     if (app.brandLogoUrl) setLogoUrl(app.brandLogoUrl)
@@ -207,6 +238,9 @@ export default function BrandSettings() {
 
   // Handlers
   const handleSave = async () => {
+    // Defense-in-depth: BrandSettings won't mount this form pre-hydration, but
+    // never let a Save fire against un-hydrated defaults.
+    if (!app.authReady) return
     setSaveState('saving')
     try {
       await saveBrand({ brandColorPrimary: primary, brandColorSecondary: secondary, brandFont: font, brandVoice: voice })
@@ -389,7 +423,7 @@ export default function BrandSettings() {
               <div className="flex items-stretch gap-3">
                 <label className="cursor-pointer flex-shrink-0">
                   <div className="w-16 h-14 border border-black/10 transition-transform hover:scale-105" style={{ background: secondary, border: isLight(secondary) ? '1px solid rgba(0,0,0,0.15)' : undefined }} />
-                  <input type="color" value={secondary} className="sr-only" onChange={e => setSecondary(e.target.value)} />
+                  <input type="color" value={secondary || '#0A0B0D'} className="sr-only" onChange={e => setSecondary(e.target.value)} />
                 </label>
                 <input type="text" value={secondary} maxLength={7} placeholder="#0A0B0D"
                   onChange={e => setSecondary(e.target.value)}

@@ -15,7 +15,7 @@ All core features built and deployed. One active paying client (Katie / TLK).
 
 ## Tech Stack
 - **Frontend:** Vanilla JS SPA — single `index.html` (~2,450 lines, HTML + CSS + JS inline)
-- **Database:** Supabase (`kidgcrqxrfcbsaeguwop`) — us-east-1
+- **Database:** Supabase (`fidhmvuurygpknhshpml`) — us-east-1
 - **Hosting:** Netlify (studio-dash.netlify.app)
 - **Content generation:** n8n Cloud (jmac.app.n8n.cloud) → Claude API → Supabase
 - **AI photos:** Flux 2 Pro via BFL API (n8n)
@@ -53,12 +53,12 @@ No build step. No framework. No bundler. Publish directory is root (`.`).
 ## Environment Variables
 Supabase credentials are initialized directly in `index.html`:
 ```javascript
-const SUPABASE_URL = '...'   // https://kidgcrqxrfcbsaeguwop.supabase.co
+const SUPABASE_URL = '...'   // https://fidhmvuurygpknhshpml.supabase.co
 const SUPABASE_ANON = '...'  // anon key (client-safe)
 ```
 No server-side secrets in this repo. All sensitive API calls (Claude, BFL, Creatomate) happen in n8n workflows, not in the dashboard.
 
-## Supabase Schema (project: kidgcrqxrfcbsaeguwop)
+## Supabase Schema (project: fidhmvuurygpknhshpml)
 
 ### Tables
 
@@ -218,3 +218,4 @@ Auto-sanitization in n8n MCP handles this when any update is made via MCP.
 | 2026-03-14 | Inline editing for captions/hashtags, Instagram sub-format selector, format badges, HeardChef tables removed |
 | 2026-03-18 | Photo source 3-way selector, AI photo prompt, Generate button fix, Save button fix, toggle/dropdown contrast, n8n workflow updated for photo_source routing |
 | 2026-05-05 | CLAUDE.md pricing updated to canonical $299/$599 founding cohort routing (no per-seat add-on, server-side gating via `claim_founder_slot` RPC). |
+| 2026-07-04 | BrandSettings secondary-color persistence fix (gate form on authReady hydration, drop black `#0A0B0D` sentinel for `''` unset). Corrected stale Supabase project ref `kidgcrqxrfcbsaeguwop` → `fidhmvuurygpknhshpml` (live app DB per `src/lib/supabase.js`). |
