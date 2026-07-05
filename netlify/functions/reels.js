@@ -7,17 +7,37 @@
  * service-role key + the WF2 webhook secret in Netlify env (never shipped to the client).
  *
  * Actions (POST body { action, ... }):
- *   list    { studio_id }            -> the studio's reels + render fields (trimmed edl: hook/clip_count/duration)
+ *   list    { studio_id }            -> the studio's reels + render fields (trimmed edl: hook/clip_count/duration).
+ *                                        Delivered reels store a reel-renders storage PATH in render_url (private
+ *                                        bucket); this function mints a short-TTL signed URL for playback (sign-at-load).
  *   approve { reel_id }              -> status pending_approval->approved (conditional), then fire the
  *                                        authenticated WF2 render webhook (x-wf2-secret). Renders nothing without the header.
  *
- * Backend contracts (WF1/WF2/reconciler + reel_edls schema) are LOCKED — this function only reads/writes
- * reel_edls.status and reads render_* fields, and calls the existing /wf2-render webhook. No schema/workflow change.
+ * Track B: source clips (reel-sources) + renders (reel-renders) are private, studio-scoped. Fetchable URLs are
+ * minted at use (WF1 sign-to-probe, WF2 sign-at-render, and here sign-at-load) — never baked into the DB.
  */
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fidhmvuurygpknhshpml.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WF2_URL = process.env.WF2_WEBHOOK_URL || 'https://jmac.app.n8n.cloud/webhook/wf2-render';
 const WF2_SECRET = process.env.WF2_WEBHOOK_SECRET;
+const RENDER_URL_TTL_S = 21600; // 6h — comfortable review window; re-minted on each list.
+
+// Delivered reels hold a reel-renders storage path in render_url. Mint a signed URL for playback.
+// Back-compat: a full http(s) URL (older rows) passes through unchanged; null/empty stays null.
+async function signRenderUrl(val) {
+  if (!val || /^https?:\/\//i.test(val)) return val || null;
+  try {
+    const res = await fetch(SUPABASE_URL + '/storage/v1/object/sign/reel-renders/' + val, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: RENDER_URL_TTL_S }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json().catch(() => ({}));
+    const signed = j.signedURL || j.signedUrl;
+    return signed ? SUPABASE_URL + '/storage/v1' + signed : null;
+  } catch { return null; }
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors() };
@@ -49,18 +69,18 @@ exports.handler = async (event) => {
         '&select=reel_id,studio_id,status,edl,render_status,render_url,render_id,render_submitted_at,created_at,updated_at&order=created_at.desc');
       const rows = await r.json();
       if (!Array.isArray(rows)) return respond(502, { error: 'reel_edls read failed', detail: rows });
-      const reels = rows.map((x) => ({
+      const reels = await Promise.all(rows.map(async (x) => ({
         reel_id: x.reel_id,
         studio_id: x.studio_id,
         status: x.status,
         render_status: x.render_status,
-        render_url: x.render_url,
+        render_url: await signRenderUrl(x.render_url),
         created_at: x.created_at,
         updated_at: x.updated_at,
         hook: x.edl && x.edl.overlays && x.edl.overlays[0] ? x.edl.overlays[0].text : null,
         clip_count: x.edl && Array.isArray(x.edl.timeline) ? x.edl.timeline.length : null,
         duration_s: x.edl && x.edl.output ? x.edl.output.target_duration_s : null,
-      }));
+      })));
       return respond(200, { reels });
     }
 
