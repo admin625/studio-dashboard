@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 
@@ -35,6 +36,8 @@ function sanitize(name) {
 
 export default function ReelUpload() {
   const app = useApp()
+  const navigate = useNavigate()
+  const [sessionOk, setSessionOk] = useState(false)
   const [claimStudioId, setClaimStudioId] = useState(null)
   const [claimChecked, setClaimChecked] = useState(false)
   const [reelId, setReelId] = useState('')
@@ -42,17 +45,23 @@ export default function ReelUpload() {
   const [busy, setBusy] = useState(false)
   const [rlsTest, setRlsTest] = useState(null) // { own, cross }
 
+  // Authoritative session guard: getSession() reflects the actual stored session.
+  // No active session => redirect to login (the surface must not render without one).
+  // This is stricter than ProtectedRoute's cached user check, which can pass on a
+  // stale/persisted user object.
   useEffect(() => {
     let active = true
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return
-      const token = data?.session?.access_token
-      setClaimStudioId(token ? decodeJwtClaim(token, 'fca_studio_id') : null)
+      const session = data?.session
+      if (!session) { navigate('/login', { replace: true }); return }
+      setClaimStudioId(decodeJwtClaim(session.access_token, 'fca_studio_id'))
       setClaimChecked(true)
+      setSessionOk(true)
     })
     setReelId(crypto.randomUUID())
     return () => { active = false }
-  }, [])
+  }, [navigate])
 
   // Prefer the token claim (app-layer hook use); fall back to the DB-resolved studio id.
   const studioId = claimStudioId || app.resolvedStudioId || null
@@ -100,7 +109,9 @@ export default function ReelUpload() {
   const donePaths = rows.filter(r => r.status === 'done').map(r => r.path)
   const brand = app.brandColorPrimary || '#667eea'
 
-  if (!app.authReady) return <div style={{ padding: 24 }}>Loading…</div>
+  // Render nothing but a loader until the session is confirmed. If there is no
+  // session the effect above redirects to /login, so the uploader never renders unauthenticated.
+  if (!app.authReady || !sessionOk) return <div style={{ padding: 24 }}>Loading…</div>
   if (!app.isBeta) {
     return (
       <div style={{ maxWidth: 640, margin: '48px auto', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
