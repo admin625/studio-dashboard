@@ -10,6 +10,7 @@ import BrandSettings from './pages/BrandSettings'
 import Photos from './pages/Photos'
 import DeliveryView from './pages/DeliveryView'
 import Reels from './pages/Reels'
+import ReelUpload from './pages/ReelUpload'
 import AccountSettings from './pages/AccountSettings'
 import ProtectedRoute from './components/ProtectedRoute'
 import HelpChatWidget from './components/HelpChatWidget'
@@ -52,6 +53,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <Reels />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reels/upload"
+                element={
+                  <ProtectedRoute>
+                    <ReelUpload />
                   </ProtectedRoute>
                 }
               />
