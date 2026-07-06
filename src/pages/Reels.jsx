@@ -1,15 +1,17 @@
 /**
- * Reels — Reel Editor review page (D2).
+ * Reels — Reel Editor page (D2 review + B2 create).
  * Lists the studio's reels (reel_edls) via the service-role `reels` function (reel_edls is RLS-locked
- * to the anon key). Reviewer approves a proposed reel -> authenticated WF2 render fires -> the row goes
- * rendering -> the Render Reconciler delivers a playable MP4 (~1 tick, 60s cron). The page polls and
- * surfaces: in-progress after approve, the finished reel when delivered, or a failure state.
+ * to the anon key). "New Reel" opens the in-session create flow (upload + params -> WF1). Reviewer
+ * approves a proposed reel -> authenticated WF2 render fires -> the row goes rendering -> the Render
+ * Reconciler delivers a playable MP4 (~1 tick, 60s cron). The page polls and surfaces:
+ * in-progress after approve, the finished reel when delivered, or a failure state.
  */
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
-import { Loader2, CheckCircle2, AlertTriangle, Film, Sparkles } from 'lucide-react'
+import NewReelModal from '../components/NewReelModal'
+import { Loader2, CheckCircle2, AlertTriangle, Film, Sparkles, Plus } from 'lucide-react'
 
 // render_status terminal classification
 const FAIL_STATES = { render_failed: 'Render failed', render_timeout: 'Render timed out', delivery_failed: 'Delivery failed' }
@@ -38,6 +40,8 @@ export default function Reels() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState({})
+  const [showNew, setShowNew] = useState(false)
+  const [awaitingReelId, setAwaitingReelId] = useState(null)
 
   const load = useCallback(async () => {
     if (!studioId) return
@@ -62,6 +66,15 @@ export default function Reels() {
     return () => clearInterval(t)
   }, [reels, load])
 
+  // After creating a reel, poll until WF1 persists it (it appears in the list), then stop (90s cap).
+  useEffect(() => {
+    if (!awaitingReelId) return
+    if (reels.some((r) => r.reel_id === awaitingReelId)) { setAwaitingReelId(null); return }
+    const t = setInterval(load, 5000)
+    const stop = setTimeout(() => setAwaitingReelId(null), 90000)
+    return () => { clearInterval(t); clearTimeout(stop) }
+  }, [awaitingReelId, reels, load])
+
   const approve = async (reel) => {
     setBusy((b) => ({ ...b, [reel.reel_id]: true }))
     setError(null)
@@ -77,6 +90,26 @@ export default function Reels() {
     }
   }
 
+  const newReelButton = (extra) => (
+    <button
+      onClick={() => setShowNew(true)}
+      disabled={!studioId}
+      className={'flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-60 ' + (extra || '')}
+      style={{ background: primary }}
+    >
+      <Plus size={15} /> New Reel
+    </button>
+  )
+
+  const modal = showNew && (
+    <NewReelModal
+      studioId={studioId}
+      primary={primary}
+      onClose={() => setShowNew(false)}
+      onCreated={(rid) => { setShowNew(false); setAwaitingReelId(rid); load() }}
+    />
+  )
+
   if (loading) {
     return (
       <Layout>
@@ -84,6 +117,7 @@ export default function Reels() {
           <Loader2 size={32} className="animate-spin mb-4" style={{ color: primary }} />
           <p className="text-slate-400 text-sm">Loading reels…</p>
         </div>
+        {modal}
       </Layout>
     )
   }
@@ -91,9 +125,12 @@ export default function Reels() {
   return (
     <Layout>
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-2.5 mb-6">
-          <Film size={20} style={{ color: primary }} />
-          <h1 className="text-white text-xl font-semibold">Reels</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2.5">
+            <Film size={20} style={{ color: primary }} />
+            <h1 className="text-white text-xl font-semibold">Reels</h1>
+          </div>
+          {newReelButton()}
         </div>
 
         {error && (
@@ -102,11 +139,19 @@ export default function Reels() {
           </div>
         )}
 
+        {awaitingReelId && (
+          <div className="mb-5 flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(255,255,255,0.03)', color: '#cbd5e1' }}>
+            <Loader2 size={15} className="animate-spin" style={{ color: primary }} />
+            Creating your reel… it'll appear here in a moment.
+          </div>
+        )}
+
         {reels.length === 0 ? (
           <div className="text-center py-20">
             <Film size={40} className="mx-auto mb-4" style={{ color: 'rgba(255,255,255,0.12)' }} />
             <p className="text-white text-base font-semibold mb-1">No reels yet</p>
-            <p className="text-slate-400 text-sm">Reels appear here once the content agent builds one for your studio.</p>
+            <p className="text-slate-400 text-sm mb-5">Create one from your own clips, or reels appear here once the content agent builds one for your studio.</p>
+            <div className="flex justify-center">{newReelButton()}</div>
           </div>
         ) : (
           <div className="grid gap-4">
@@ -116,6 +161,7 @@ export default function Reels() {
           </div>
         )}
       </div>
+      {modal}
     </Layout>
   )
 }
