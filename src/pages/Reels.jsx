@@ -1,17 +1,18 @@
 /**
- * Reels — Reel Editor page (D2 review + B2 create).
+ * Reels — Reel Editor page (B2 create + D2 review + delivery).
  * Lists the studio's reels (reel_edls) via the service-role `reels` function (reel_edls is RLS-locked
- * to the anon key). "New Reel" opens the in-session create flow (upload + params -> WF1). Reviewer
- * approves a proposed reel -> authenticated WF2 render fires -> the row goes rendering -> the Render
- * Reconciler delivers a playable MP4 (~1 tick, 60s cron). The page polls and surfaces:
- * in-progress after approve, the finished reel when delivered, or a failure state.
+ * to the anon key). "New Reel" opens the in-session create flow (upload + params -> WF1). Active reels
+ * (Ready-to-review / Rendering) stay expanded up top: the reviewer may edit the hook, then Approve &
+ * Render -> the edit is folded into the EDL (moat signal) and WF2 fires -> Rendering -> the reconciler
+ * delivers a playable MP4. Delivered reels collapse to compact rows; the player + its signed URL are
+ * minted only on expand (sign-at-point-of-use — no signing for reels nobody's viewing).
  */
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
 import NewReelModal from '../components/NewReelModal'
-import { Loader2, CheckCircle2, AlertTriangle, Film, Sparkles, Plus } from 'lucide-react'
+import { Loader2, AlertTriangle, Film, Sparkles, Plus, ChevronDown } from 'lucide-react'
 
 // render_status terminal classification
 const FAIL_STATES = { render_failed: 'Render failed', render_timeout: 'Render timed out', delivery_failed: 'Delivery failed' }
@@ -59,7 +60,6 @@ export default function Reels() {
   useEffect(() => { load() }, [load])
 
   // Poll every 15s while any reel is mid-flight (approved but not yet delivered/failed).
-  // The reconciler updates on a 60s cron, so this reflects the transition without a manual reload.
   useEffect(() => {
     if (!reels.some(isMidFlight)) return
     const t = setInterval(load, 15000)
@@ -75,11 +75,11 @@ export default function Reels() {
     return () => { clearInterval(t); clearTimeout(stop) }
   }, [awaitingReelId, reels, load])
 
-  const approve = async (reel) => {
+  const approve = async (reel, hookText) => {
     setBusy((b) => ({ ...b, [reel.reel_id]: true }))
     setError(null)
     try {
-      await callReels('approve', { reel_id: reel.reel_id })
+      await callReels('approve', { reel_id: reel.reel_id, hook_text: hookText })
       setReels((rs) => rs.map((r) => (r.reel_id === reel.reel_id ? { ...r, status: 'approved', render_status: 'rendering' } : r)))
       setTimeout(load, 3000)
     } catch (e) {
@@ -122,6 +122,9 @@ export default function Reels() {
     )
   }
 
+  const active = reels.filter((r) => r.render_status !== 'delivered')
+  const delivered = reels.filter((r) => r.render_status === 'delivered')
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto px-6 py-8">
@@ -146,7 +149,7 @@ export default function Reels() {
           </div>
         )}
 
-        {reels.length === 0 ? (
+        {active.length === 0 && delivered.length === 0 ? (
           <div className="text-center py-20">
             <Film size={40} className="mx-auto mb-4" style={{ color: 'rgba(255,255,255,0.12)' }} />
             <p className="text-white text-base font-semibold mb-1">No reels yet</p>
@@ -154,11 +157,26 @@ export default function Reels() {
             <div className="flex justify-center">{newReelButton()}</div>
           </div>
         ) : (
-          <div className="grid gap-4">
-            {reels.map((reel) => (
-              <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={() => approve(reel)} />
-            ))}
-          </div>
+          <>
+            {active.length > 0 && (
+              <div className="grid gap-4 mb-8">
+                {active.map((reel) => (
+                  <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={(ht) => approve(reel, ht)} />
+                ))}
+              </div>
+            )}
+
+            {delivered.length > 0 && (
+              <div>
+                <h2 className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-3">Delivered</h2>
+                <div className="grid gap-2">
+                  {delivered.map((reel) => (
+                    <DeliveredRow key={reel.reel_id} reel={reel} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
       {modal}
@@ -166,9 +184,10 @@ export default function Reels() {
   )
 }
 
+// Active (non-delivered) reel: Ready-to-review (editable hook + Approve & Render), Rendering, or Failed.
 function ReelCard({ reel, primary, busy, onApprove }) {
+  const [hookText, setHookText] = useState(reel.hook || '')
   const failLabel = FAIL_STATES[reel.render_status]
-  const delivered = reel.render_status === 'delivered' && reel.render_url
   const pending = reel.status === 'pending_approval'
   const rendering = isMidFlight(reel)
 
@@ -187,17 +206,7 @@ function ReelCard({ reel, primary, busy, onApprove }) {
           <StatusPill reel={reel} primary={primary} />
         </div>
 
-        {/* State body */}
         <div className="mt-4">
-          {delivered && (
-            <div>
-              <video src={reel.render_url} controls playsInline className="w-full rounded-lg bg-black" style={{ maxHeight: 520 }} />
-              <div className="flex items-center gap-1.5 mt-2 text-xs" style={{ color: '#34d399' }}>
-                <CheckCircle2 size={14} /> Delivered
-              </div>
-            </div>
-          )}
-
           {rendering && (
             <div className="flex items-center gap-2.5 rounded-lg px-4 py-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <Loader2 size={16} className="animate-spin" style={{ color: primary }} />
@@ -212,18 +221,82 @@ function ReelCard({ reel, primary, busy, onApprove }) {
           )}
 
           {pending && (
-            <button
-              onClick={onApprove}
-              disabled={busy}
-              className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-60"
-              style={{ background: primary }}
-            >
-              {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              {busy ? 'Approving…' : 'Approve & Render'}
-            </button>
+            <div>
+              <label className="block text-slate-400 text-xs font-medium mb-1.5">Hook — edit before approving</label>
+              <textarea
+                value={hookText}
+                onChange={(e) => setHookText(e.target.value)}
+                rows={2}
+                disabled={busy}
+                className="w-full rounded-lg px-3 py-2 text-sm text-white outline-none resize-none mb-3"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
+              />
+              <button
+                onClick={() => onApprove(hookText)}
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-60"
+                style={{ background: primary }}
+              >
+                {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                {busy ? 'Approving…' : 'Approve & Render'}
+              </button>
+            </div>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// Delivered reel: compact row; player + signed URL minted only on expand (sign-at-point-of-use).
+function DeliveredRow({ reel }) {
+  const [open, setOpen] = useState(false)
+  const [url, setUrl] = useState(null)
+  const [loadingUrl, setLoadingUrl] = useState(false)
+  const [err, setErr] = useState(null)
+
+  const toggle = async () => {
+    const next = !open
+    setOpen(next)
+    if (next && !url && !loadingUrl) {
+      setLoadingUrl(true); setErr(null)
+      try {
+        const { render_url } = await callReels('sign_render', { reel_id: reel.reel_id })
+        setUrl(render_url)
+      } catch (e) {
+        setErr(e.message)
+      } finally {
+        setLoadingUrl(false)
+      }
+    }
+  }
+
+  return (
+    <div className="rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <button onClick={toggle} className="w-full flex items-center gap-3 px-4 py-3 text-left">
+        <span className="text-white text-sm font-medium truncate flex-1">{reel.hook || 'Reel'}</span>
+        <span className="text-slate-500 text-xs whitespace-nowrap hidden sm:block">
+          {reel.clip_count != null ? `${reel.clip_count} clips` : ''}
+          {reel.created_at ? ` · ${new Date(reel.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+        </span>
+        <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ color: '#34d399', background: 'rgba(52,211,153,0.12)' }}>
+          Delivered
+        </span>
+        <ChevronDown size={16} className="flex-shrink-0 text-slate-400 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+      </button>
+      {open && (
+        <div className="px-4 pb-4">
+          {loadingUrl ? (
+            <div className="flex items-center gap-2 py-4 text-slate-400 text-sm"><Loader2 size={15} className="animate-spin" /> Loading player…</div>
+          ) : err ? (
+            <div className="text-sm py-2" style={{ color: '#fca5a5' }}>{err}</div>
+          ) : url ? (
+            <video src={url} controls playsInline className="w-full rounded-lg bg-black" style={{ maxHeight: 520 }} />
+          ) : (
+            <div className="text-slate-500 text-sm py-2">Playback unavailable.</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -232,8 +305,7 @@ function StatusPill({ reel, primary }) {
   let label = reel.status
   let color = '#94a3b8'
   let bg = 'rgba(148,163,184,0.12)'
-  if (reel.render_status === 'delivered') { label = 'Delivered'; color = '#34d399'; bg = 'rgba(52,211,153,0.12)' }
-  else if (FAIL_STATES[reel.render_status]) { label = 'Failed'; color = '#fca5a5'; bg = 'rgba(239,68,68,0.12)' }
+  if (FAIL_STATES[reel.render_status]) { label = 'Failed'; color = '#fca5a5'; bg = 'rgba(239,68,68,0.12)' }
   else if (isMidFlight(reel)) { label = 'Rendering'; color = primary; bg = 'rgba(255,255,255,0.06)' }
   else if (reel.status === 'pending_approval') { label = 'Ready to review'; color = '#fbbf24'; bg = 'rgba(251,191,36,0.12)' }
   return (
