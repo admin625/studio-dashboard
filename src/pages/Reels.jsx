@@ -4,8 +4,8 @@
  * to the anon key). "New Reel" opens the in-session create flow (upload + params -> WF1). Active reels
  * (Ready-to-review / Rendering) stay expanded up top: the reviewer may edit the hook, then Approve &
  * Render -> the edit is folded into the EDL (moat signal) and WF2 fires -> Rendering -> the reconciler
- * delivers a playable MP4. Delivered reels collapse to compact rows; the player + its signed URL are
- * minted only on expand (sign-at-point-of-use — no signing for reels nobody's viewing).
+ * delivers a playable MP4. Delivered reels collapse to compact rows; the <video> mounts only on expand
+ * (no bytes fetched while collapsed). render_url is signed at list-load and read directly by the row.
  */
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
@@ -248,32 +248,13 @@ function ReelCard({ reel, primary, busy, onApprove }) {
   )
 }
 
-// Delivered reel: compact row; player + signed URL minted only on expand (sign-at-point-of-use).
+// Delivered reel: compact row; the <video> mounts only on expand (no bytes fetched while collapsed).
+// render_url is signed at list-load and passed in via the reel object.
 function DeliveredRow({ reel }) {
   const [open, setOpen] = useState(false)
-  const [url, setUrl] = useState(null)
-  const [loadingUrl, setLoadingUrl] = useState(false)
-  const [err, setErr] = useState(null)
-
-  const toggle = async () => {
-    const next = !open
-    setOpen(next)
-    if (next && !url && !loadingUrl) {
-      setLoadingUrl(true); setErr(null)
-      try {
-        const { render_url } = await callReels('sign_render', { reel_id: reel.reel_id })
-        setUrl(render_url)
-      } catch (e) {
-        setErr(e.message)
-      } finally {
-        setLoadingUrl(false)
-      }
-    }
-  }
-
   return (
     <div className="rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-      <button onClick={toggle} className="w-full flex items-center gap-3 px-4 py-3 text-left">
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
         <span className="text-white text-sm font-medium truncate flex-1">{reel.hook || 'Reel'}</span>
         <span className="text-slate-500 text-xs whitespace-nowrap hidden sm:block">
           {reel.clip_count != null ? `${reel.clip_count} clips` : ''}
@@ -286,12 +267,8 @@ function DeliveredRow({ reel }) {
       </button>
       {open && (
         <div className="px-4 pb-4">
-          {loadingUrl ? (
-            <div className="flex items-center gap-2 py-4 text-slate-400 text-sm"><Loader2 size={15} className="animate-spin" /> Loading player…</div>
-          ) : err ? (
-            <div className="text-sm py-2" style={{ color: '#fca5a5' }}>{err}</div>
-          ) : url ? (
-            <video src={url} controls playsInline className="w-full rounded-lg bg-black" style={{ maxHeight: 520 }} />
+          {reel.render_url ? (
+            <video src={reel.render_url} controls playsInline className="w-full rounded-lg bg-black" style={{ maxHeight: 520 }} />
           ) : (
             <div className="text-slate-500 text-sm py-2">Playback unavailable.</div>
           )}

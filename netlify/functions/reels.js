@@ -8,22 +8,26 @@
  *
  * Actions (POST body { action, ... }):
  *   list        { studio_id }            -> the studio's reels + render fields (trimmed edl: hook/clip_count/duration).
- *                                           Delivered reels are NOT signed here (sign-at-point-of-use): they return
- *                                           render_ready:true + render_url:null; the client calls sign_render on expand.
- *   sign_render { reel_id }              -> mint a short-TTL signed playback URL for a delivered reel (on expand only).
+ *                                           Delivered reels' render_url is signed here (short-TTL); the compact row
+ *                                           defers the <video> MOUNT to expand, so no video bytes are fetched while
+ *                                           collapsed. (Signing at list keeps the response backward-compatible with any
+ *                                           cached client — the server fn is always current — and avoids an async
+ *                                           expand-sign path that broke playback for stale frontends.)
+ *   sign_render { reel_id }              -> mint a short-TTL signed playback URL for a delivered reel (kept for
+ *                                           on-demand use; the UI now reads the list-signed render_url directly).
  *   approve     { reel_id, hook_text? }  -> capture the reviewer's final hook into the EDL (overlays[0].text +
  *                                           approval.hook_edited) as the moat signal BEFORE render, flip
  *                                           pending_approval->approved (conditional), then fire the authenticated
  *                                           WF2 render webhook (x-wf2-secret). Renders nothing without the header.
  *
  * Track B: source clips (reel-sources) + renders (reel-renders) are private, studio-scoped. Fetchable URLs are
- * minted at use (WF1 sign-to-probe, WF2 sign-at-render, and here sign-at-expand) — never baked into the DB.
+ * minted at use (WF1 sign-to-probe, WF2 sign-at-render, and here sign-at-load) — never baked into the DB.
  */
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fidhmvuurygpknhshpml.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WF2_URL = process.env.WF2_WEBHOOK_URL || 'https://jmac.app.n8n.cloud/webhook/wf2-render';
 const WF2_SECRET = process.env.WF2_WEBHOOK_SECRET;
-const RENDER_URL_TTL_S = 21600; // 6h — comfortable review window; minted on expand (sign-at-point-of-use).
+const RENDER_URL_TTL_S = 21600; // 6h — comfortable review window; re-minted on each list.
 
 // Delivered reels hold a reel-renders storage path in render_url. Mint a signed URL for playback.
 // Back-compat: a full http(s) URL (older rows) passes through unchanged; null/empty stays null.
@@ -71,19 +75,19 @@ exports.handler = async (event) => {
         '&select=reel_id,studio_id,status,edl,render_status,render_url,render_id,render_submitted_at,created_at,updated_at&order=created_at.desc');
       const rows = await r.json();
       if (!Array.isArray(rows)) return respond(502, { error: 'reel_edls read failed', detail: rows });
-      // Do NOT sign delivered reels here — sign-at-expand. Flag which have a playable render.
-      const reels = rows.map((x) => ({
+      const reels = await Promise.all(rows.map(async (x) => ({
         reel_id: x.reel_id,
         studio_id: x.studio_id,
         status: x.status,
         render_status: x.render_status,
+        render_url: await signRenderUrl(x.render_url),
         render_ready: x.render_status === 'delivered' && !!x.render_url,
         created_at: x.created_at,
         updated_at: x.updated_at,
         hook: x.edl && x.edl.overlays && x.edl.overlays[0] ? x.edl.overlays[0].text : null,
         clip_count: x.edl && Array.isArray(x.edl.timeline) ? x.edl.timeline.length : null,
         duration_s: x.edl && x.edl.output ? x.edl.output.target_duration_s : null,
-      }));
+      })));
       return respond(200, { reels });
     }
 
