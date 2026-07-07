@@ -2,8 +2,8 @@
  * Reels — Reel Editor page (B2 create + D2 review + delivery).
  * Lists the studio's reels (reel_edls) via the service-role `reels` function (reel_edls is RLS-locked
  * to the anon key). "New Reel" opens the in-session create flow (upload + params -> WF1). Active reels
- * (Ready-to-review / Rendering) stay expanded up top: the reviewer may edit the hook, then Approve &
- * Render -> the edit is folded into the EDL (moat signal) and WF2 fires -> Rendering -> the reconciler
+ * (Ready-to-review / Rendering) stay expanded up top: the reviewer may edit the hook, then Generate
+ * Reel -> the edit is folded into the EDL (moat signal) and WF2 fires -> Rendering -> the reconciler
  * delivers a playable MP4. Delivered reels collapse to compact rows; the <video> mounts only on expand
  * (no bytes fetched while collapsed). render_url is signed at list-load and read directly by the row.
  */
@@ -184,7 +184,7 @@ export default function Reels() {
   )
 }
 
-// Active (non-delivered) reel: Ready-to-review (editable hook + Approve & Render), Rendering, or Failed.
+// Active (non-delivered) reel: Ready-to-review (editable hook + Generate Reel), Rendering, or Failed.
 function ReelCard({ reel, primary, busy, onApprove }) {
   const [hookText, setHookText] = useState(reel.hook || '')
   const failLabel = FAIL_STATES[reel.render_status]
@@ -238,7 +238,7 @@ function ReelCard({ reel, primary, busy, onApprove }) {
                 style={{ background: primary }}
               >
                 {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                {busy ? 'Approving…' : 'Approve & Render'}
+                {busy ? 'Generating…' : 'Generate Reel'}
               </button>
             </div>
           )}
