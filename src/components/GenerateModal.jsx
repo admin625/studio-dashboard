@@ -4,6 +4,7 @@
  * Payload structure matches legacy exactly.
  */
 import { useState, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
@@ -29,6 +30,7 @@ const FREESTYLE_TEMPLATES = {
 
 export default function GenerateModal({ open, onClose, onSubmitted }) {
   const app = useApp()
+  const navigate = useNavigate()
   const primary = app.brandColorPrimary || '#667eea'
 
   // Form state
@@ -322,29 +324,24 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
                     </div>
                   ))}
 
-                  {/* Reels (disabled — coming soon) */}
-                  <div
-                    className="flex items-center gap-3 p-3 rounded-lg opacity-60 cursor-not-allowed"
-                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.04)' }}
-                    title="Video reels are coming soon — we'll notify you when they're ready."
+                  {/* Reels — live feature; opens the dedicated Reel Editor (separate upload-based flow, WF1/WF2).
+                      Not a submittable platform for generate-content, so this routes to /reels instead. */}
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); navigate('/reels') }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg transition-colors hover:bg-white/[0.06]"
+                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.06)' }}
+                    title="Open the Reel Editor to create a video reel from your clips."
                   >
-                    <label className="flex items-center gap-2 flex-1 cursor-not-allowed">
-                      <input
-                        type="checkbox"
-                        disabled
-                        checked={false}
-                        readOnly
-                        className="accent-indigo-500 cursor-not-allowed"
-                      />
-                      <span className="text-sm text-slate-500 font-medium">Reels</span>
-                      <span
-                        className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
-                        style={{ background: '#2A2A2A', color: '#A0A0A0' }}
-                      >
-                        Coming Soon
-                      </span>
-                    </label>
-                  </div>
+                    <span className="text-sm text-slate-300 font-medium flex-1 text-left">Reels</span>
+                    <span
+                      className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
+                      style={{ background: `${primary}20`, color: primary }}
+                    >
+                      Available
+                    </span>
+                    <ChevronRight size={16} className="text-slate-500" />
+                  </button>
                 </div>
               </div>
 
