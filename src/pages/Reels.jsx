@@ -161,7 +161,7 @@ export default function Reels() {
             {active.length > 0 && (
               <div className="grid gap-4 mb-8">
                 {active.map((reel) => (
-                  <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={(ht) => approve(reel, ht)} />
+                  <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={(ht) => approve(reel, ht)} onNewReel={() => setShowNew(true)} />
                 ))}
               </div>
             )}
@@ -184,10 +184,12 @@ export default function Reels() {
   )
 }
 
-// Active (non-delivered) reel: Ready-to-review (editable hook + Generate Reel), Rendering, or Failed.
-function ReelCard({ reel, primary, busy, onApprove }) {
+// Active (non-delivered) reel: Ready-to-review (editable hook + Generate Reel), Rendering, Failed, or
+// Couldn't-assemble (status='validation_failed' — WF1 could not produce a valid EDL, e.g. truncation).
+function ReelCard({ reel, primary, busy, onApprove, onNewReel }) {
   const [hookText, setHookText] = useState(reel.hook || '')
   const failLabel = FAIL_STATES[reel.render_status]
+  const failedAssembly = reel.status === 'validation_failed'
   const pending = reel.status === 'pending_approval'
   const rendering = isMidFlight(reel)
 
@@ -198,9 +200,9 @@ function ReelCard({ reel, primary, busy, onApprove }) {
           <div className="min-w-0">
             <p className="text-white text-sm font-semibold leading-snug">{reel.hook || 'Reel'}</p>
             <p className="text-slate-500 text-xs mt-1">
-              {reel.clip_count != null ? `${reel.clip_count} clips` : ''}
-              {reel.duration_s != null ? ` · ~${reel.duration_s}s` : ''}
-              {reel.created_at ? ` · ${new Date(reel.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+              {failedAssembly
+                ? (reel.created_at ? new Date(reel.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '')
+                : `${reel.clip_count != null ? `${reel.clip_count} clips` : ''}${reel.duration_s != null ? ` · ~${reel.duration_s}s` : ''}${reel.created_at ? ` · ${new Date(reel.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`}
             </p>
           </div>
           <StatusPill reel={reel} primary={primary} />
@@ -217,6 +219,22 @@ function ReelCard({ reel, primary, busy, onApprove }) {
           {failLabel && (
             <div className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}>
               <AlertTriangle size={15} /> {failLabel}. The team has been notified — try again shortly.
+            </div>
+          )}
+
+          {failedAssembly && (
+            <div>
+              <div className="flex items-start gap-2 rounded-lg px-4 py-3 text-sm mb-3" style={{ background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}>
+                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+                <span>This reel was too dense to assemble — try a calmer pacing or a shorter target length.</span>
+              </div>
+              <button
+                onClick={onNewReel}
+                className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-opacity"
+                style={{ background: primary }}
+              >
+                <Plus size={15} /> Start a new reel
+              </button>
             </div>
           )}
 
@@ -279,10 +297,11 @@ function DeliveredRow({ reel }) {
 }
 
 function StatusPill({ reel, primary }) {
-  let label = reel.status
+  let label = (reel.status || 'unknown').replace(/_/g, ' ')
   let color = '#94a3b8'
   let bg = 'rgba(148,163,184,0.12)'
-  if (FAIL_STATES[reel.render_status]) { label = 'Failed'; color = '#fca5a5'; bg = 'rgba(239,68,68,0.12)' }
+  if (reel.status === 'validation_failed') { label = "Couldn't assemble"; color = '#fca5a5'; bg = 'rgba(239,68,68,0.12)' }
+  else if (FAIL_STATES[reel.render_status]) { label = 'Failed'; color = '#fca5a5'; bg = 'rgba(239,68,68,0.12)' }
   else if (isMidFlight(reel)) { label = 'Rendering'; color = primary; bg = 'rgba(255,255,255,0.06)' }
   else if (reel.status === 'pending_approval') { label = 'Ready to review'; color = '#fbbf24'; bg = 'rgba(251,191,36,0.12)' }
   return (
