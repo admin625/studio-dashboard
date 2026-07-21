@@ -73,6 +73,11 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   const hasDark = !!brandLogoDarkUrl
   const hasVariant = hasLight || hasDark
   const wmTouched = useRef(false)
+  // Bug B guard: the content_deliveries photo_url this card last knew for its own element.
+  // Sent as the optimistic-concurrency guard on every write, and updated on each successful
+  // persist. Stable for the card's lifetime — the parent holds the delivery in state and does
+  // not silently refetch, so post.photo_url is the load-time DB value and won't reset the ref.
+  const dbPhotoUrlRef = useRef(post.photo_url)
   const [wmEnabled, setWmEnabled] = useState(hasVariant)
   const [wmZone, setWmZone] = useState(watermarkDefaultZone || 'bottom-right')
   const [wmVariant, setWmVariant] = useState(watermarkDefaultVariant || 'auto')
@@ -176,52 +181,49 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     }
   }
 
+  // Caption/hashtag save — atomic, guarded single-element write (Bug B fix). No whole-array
+  // read-modify-write, so a concurrent edit to a sibling post can never be clobbered, and the
+  // photo_url guard confirms we are still pointed at the element this card rendered.
   const handleSave = async (field) => {
     setSaving(true)
     try {
-      const { data } = await supabase
-        .from('content_deliveries')
-        .select(`${platform}_content`)
-        .eq('id', deliveryId)
-        .single()
-
-      if (data) {
-        const content = data[`${platform}_content`] || []
-        if (content[index]) {
-          content[index][field] = field === 'caption' ? captionText : hashtagText
-          await supabase
-            .from('content_deliveries')
-            .update({ [`${platform}_content`]: content })
-            .eq('id', deliveryId)
-        }
+      const value = field === 'caption' ? captionText : hashtagText
+      const { data, error } = await supabase.rpc('update_delivery_post_field', {
+        p_delivery_id: deliveryId,
+        p_platform: platform,
+        p_index: index,
+        p_expected_url: dbPhotoUrlRef.current ?? null,
+        p_patch: { [field]: value },
+      })
+      if (error) throw new Error(error.message || 'Save failed')
+      if (!data || data.ok !== true) {
+        flashMsg({ type: 'error', text: 'This post changed since you opened it — reload the page before editing.' })
       }
     } catch (e) {
       console.error('[PostCard] Save failed:', e)
+      flashMsg({ type: 'error', text: e.message || 'Save failed' })
     }
     setSaving(false)
     setEditing(null)
   }
 
-  // Persist photo changes back to the content_deliveries JSONB
+  // Persist a photo change to this post's element in content_deliveries — atomic + guarded.
+  // Writes ONLY if the element at this card's index still shows the photo_url we last knew
+  // (dbPhotoUrlRef); a guard miss means the array changed under us (reorder / concurrent edit),
+  // so we throw and let the caller surface a reload prompt rather than write to the wrong post.
   const persistPhotoChange = async (newUrl, extraFields = {}) => {
-    try {
-      const { data } = await supabase
-        .from('content_deliveries')
-        .select(`${platform}_content`)
-        .eq('id', deliveryId)
-        .single()
-      if (!data) return
-      const content = data[`${platform}_content`] || []
-      if (!content[index]) return
-      content[index].photo_url = newUrl
-      Object.assign(content[index], extraFields)
-      await supabase
-        .from('content_deliveries')
-        .update({ [`${platform}_content`]: content })
-        .eq('id', deliveryId)
-    } catch (e) {
-      console.error('[PostCard] Photo persist failed:', e)
+    const { data, error } = await supabase.rpc('update_delivery_post_field', {
+      p_delivery_id: deliveryId,
+      p_platform: platform,
+      p_index: index,
+      p_expected_url: dbPhotoUrlRef.current ?? null,
+      p_patch: { photo_url: newUrl, ...extraFields },
+    })
+    if (error) throw new Error(error.message || 'Save failed')
+    if (!data || data.ok !== true) {
+      throw new Error('This post changed since you opened it — reload the page to get the latest before editing.')
     }
+    dbPhotoUrlRef.current = newUrl
   }
 
   // Load studio photos for the picker (lazy, only on open)
