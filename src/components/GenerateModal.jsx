@@ -216,7 +216,9 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
 
   if (!open) return null
 
-  const isOwner = app.role === 'studio_owner'
+  // 2b — gate owner-only UI on authReady so role-dependent branches (freestyle,
+  // image builder) never render on a transient null role before auth resolves.
+  const isOwner = app.authReady && app.role === 'studio_owner'
   const showImageBuilder = isOwner && app.photoSource !== 'studio_only'
 
   return (

@@ -4,12 +4,13 @@ import { useLocation, Link } from 'react-router-dom'
 import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User, Film } from 'lucide-react'
 
 export default function Layout({ children }) {
-  const { email, role, studioName, brandColorPrimary } = useApp()
+  const { email, role, studioName, brandColorPrimary, authReady } = useApp()
   const { signOut } = useAuth()
   const location = useLocation()
 
   const primary = brandColorPrimary || '#667eea'
-  const isOwner = role === 'studio_owner'
+  // 2b — gate owner-only nav on authReady.
+  const isOwner = authReady && role === 'studio_owner'
 
   const roleBadge = {
     studio_owner: { label: 'Owner', bg: '#059669', color: '#fff' },

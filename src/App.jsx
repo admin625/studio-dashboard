@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthProvider from './components/AuthProvider'
@@ -19,6 +19,14 @@ function HelpChat() {
   const location = useLocation()
   const page = location.pathname.replace(/^\//, '') || 'deliveries'
   return <HelpChatWidget currentPage={page} />
+}
+
+// 2c — key by :id so DeliveryView fully remounts per delivery. React Router v6
+// reuses the component instance across param changes, which otherwise bleeds
+// prior delivery state (and any latched error) into the next one.
+function DeliveryRoute() {
+  const { id } = useParams()
+  return <DeliveryView key={id} />
 }
 
 export default function App() {
@@ -76,7 +84,7 @@ export default function App() {
                 path="/delivery/:id"
                 element={
                   <ProtectedRoute>
-                    <DeliveryView />
+                    <DeliveryRoute />
                   </ProtectedRoute>
                 }
               />

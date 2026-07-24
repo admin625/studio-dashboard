@@ -24,6 +24,33 @@ function applyBrandColors(primary, secondary) {
   root.style.setProperty('--brand-secondary', secondary || DEFAULT_BRAND_SECONDARY)
 }
 
+/**
+ * Normalize the JWT app_metadata role into the app's internal vocabulary.
+ * The access token carries 'studio_owner' or 'instructor'; the app gates on
+ * 'studio_owner' / 'studio_instructor'. Anything else (individual/unknown/absent)
+ * returns null so resolution falls through to the table lookup.
+ */
+function normalizeRole(r) {
+  if (r === 'studio_owner') return 'studio_owner'
+  if (r === 'instructor' || r === 'studio_instructor') return 'studio_instructor'
+  return null
+}
+
+/**
+ * Read a single claim from a JWT without verifying it (client-side read only).
+ * The server-side custom_access_token_hook injects `fca_studio_id` for studio
+ * sessions; mirrors the decoder already used in ReelUpload.
+ */
+function decodeJwtClaim(token, key) {
+  try {
+    const part = token.split('.')[1]
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'))
+    return JSON.parse(json)[key] ?? null
+  } catch {
+    return null
+  }
+}
+
 // Hardcoded admin accounts — bypass all Supabase role AND studio lookups
 const ADMIN_ACCOUNTS = {
   'admin@fiorsaoirse.com': {
@@ -77,9 +104,30 @@ export default function AuthProvider({ children }) {
     }
   }, [])
 
-  const initWithUser = useCallback(async (user) => {
+  const initWithUser = useCallback(async (session) => {
+    const user = session.user
     try {
-      const ri = await lookupUserRole(user.email)
+      // 2a — Resolve role + studio scope from the JWT rather than the
+      // timeout-prone studio_instructors/clients lookup. The access token
+      // carries app_metadata.role and (via custom_access_token_hook) the
+      // fca_studio_id claim, so studio sessions resolve synchronously and can
+      // never be left with a null role/scope by a slow or timed-out query —
+      // the root cause of the owner-only-UI and delivery-access races.
+      // Admins keep their existing bypass; individual-scope and legacy sessions
+      // (no fca_studio_id claim) fall back to the table lookup, which also
+      // supplies the resolvedClientId used by the individual client_id leg.
+      const isAdmin = !!ADMIN_ACCOUNTS[user.email]
+      const jwtRole = normalizeRole(user.app_metadata?.role)
+      const claimStudioId = decodeJwtClaim(session.access_token, 'fca_studio_id')
+
+      let ri
+      if (!isAdmin && jwtRole && claimStudioId) {
+        ri = { role: jwtRole, studioId: claimStudioId, clientId: null, scopeType: 'studio' }
+      } else {
+        ri = await lookupUserRole(user.email)
+        // Prefer the JWT role even on the fallback path (studioId still from lookup).
+        if (!isAdmin && jwtRole && ri) ri = { ...ri, role: jwtRole }
+      }
 
       const updates = {
         user, email: user.email,
@@ -179,7 +227,7 @@ export default function AuthProvider({ children }) {
         if (!mounted) return
 
         if (session?.user) {
-          await initWithUser(session.user)
+          await initWithUser(session)
         } else {
           app.update({ authReady: true })
         }
@@ -195,7 +243,7 @@ export default function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-        await initWithUser(session.user)
+        await initWithUser(session)
         clearTimeout(safetyTimer)
       } else if (event === 'SIGNED_OUT') {
         app.reset()

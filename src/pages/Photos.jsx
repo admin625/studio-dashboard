@@ -11,7 +11,7 @@ import {
 export default function Photos() {
   const app = useApp()
   const primary = app.brandColorPrimary || '#667eea'
-  const isOwner = app.role === 'studio_owner'
+  const isOwner = app.authReady && app.role === 'studio_owner' // 2b — gate on authReady
 
   const [photos, setPhotos] = useState([])
   const [loading, setLoading] = useState(true)

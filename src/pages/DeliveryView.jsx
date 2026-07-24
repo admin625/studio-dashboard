@@ -24,13 +24,20 @@ export default function DeliveryView() {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState(null)
 
-  const isOwner = app.role === 'studio_owner'
+  // 2b — gate on authReady so edit permissions don't flip on a transient null role.
+  const isOwner = app.authReady && app.role === 'studio_owner'
   const readOnly = !isOwner
 
   useEffect(() => {
     let mounted = true
 
     const loadDelivery = async () => {
+      // 2c — clear any stale denial/error and re-enter the loading state on every
+      // run. Without this, a first pass that raced auth (scope not yet resolved →
+      // 'access_denied') would leave the error latched even after the deps change
+      // and the re-run succeeds, because the error branch renders before delivery.
+      setError(null)
+      setLoading(true)
       try {
         const { data, error: err } = await supabase
           .from('content_deliveries')
