@@ -17,3 +17,8 @@ node_modules/
 # Build output
 dist/
 .gstack/
+
+# n8n workflow exports — MUST NOT be committed to this PUBLIC repo.
+# They have leaked live secrets before (Stripe whsec). Keep exports in the
+# private fiorsaoirse-n8n-workflows repo. Enforced by .github/workflows/no-workflow-exports.yml
+workflows/*.json

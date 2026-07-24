@@ -1,0 +1,26 @@
+name: no-workflow-exports
+
+# Guard: this is a PUBLIC repo. n8n workflow exports (workflows/*.json) must
+# never be committed here — they have leaked live secrets before (a Stripe
+# webhook signing secret was public at HEAD for ~2.5 months). Exports belong
+# in the private fiorsaoirse-n8n-workflows repo. This check fails any push or
+# PR that reintroduces them. Runs regardless of Netlify deploy wiring.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  block-workflow-exports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if n8n workflow exports are present
+        run: |
+          matches=$(git ls-files 'workflows/*.json')
+          if [ -n "$matches" ]; then
+            echo "::error::n8n workflow exports must not be committed to this public repo (they have leaked live secrets). Remove them and keep exports in the private fiorsaoirse-n8n-workflows repo:"
+            echo "$matches"
+            exit 1
+          fi
+          echo "OK — no workflows/*.json committed."
