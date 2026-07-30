@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { downscaleToBase64 } from '../lib/image'
 import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
 import {
@@ -147,12 +148,31 @@ export default function Photos() {
     setReimagineStatus('generating')
     setReimagineError(null)
     try {
+      // Bind the photo the user actually has open in the lightbox — NOT the first in the
+      // collection. openReimagine() seeds from `lightbox`, so the source and its id are
+      // already in hand; without image_base64 the model has nothing to reimagine and
+      // generates from scratch, which is the same bug fixed on PostCard's Regenerate.
+      const srcUrl = lightbox?.photo_url || null
+      const srcId = lightbox?.id || null
+      let src = null
+      if (srcUrl) {
+        try {
+          src = await downscaleToBase64(srcUrl, 1024)
+        } catch (e) {
+          src = null // fall back to generate-from-scratch rather than block the user
+        }
+      }
+
       const res = await fetch('/.netlify/functions/proxy-webhook?target=ai-photo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Pinned: 'auto' would let Route Request send logo/text prompts to flux2_pro,
+          // which is text-to-image only and silently drops image_base64. EDIT stays pinned.
           platform: 'nano_banana_pro',
           prompt,
+          ...(src ? { edit_prompt: prompt, image_base64: src.base64, mime_type: src.mime } : {}),
+          ...(srcId ? { reference_photo_ids: [srcId] } : {}),
           width: 1024,
           height: 1024,
           studio_id: app.resolvedStudioId,
