@@ -48,17 +48,30 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
 
   // Photo editor state
   const [editorOpen, setEditorOpen] = useState(false)
-  const initialPrompt =
+  // The workflow's Route Request appends a camera profile to the prompt and Prepare Save
+  // stores that enhanced string. Re-seeding it here and regenerating appends ANOTHER copy,
+  // so the block compounds once per edit — three refinements, three copies in the box the
+  // user reads. Strip any trailing camera block(s) before seeding.
+  // Requires "lens." so a user legitimately writing "photographed with my phone" is left
+  // alone — only the generated block (which always names a lens) is stripped. Global so
+  // an already-compounded prompt loses every copy, not just the first.
+  const stripCameraProfile = (s) =>
+    (s || '').replace(/\s*Photographed with [^\n]*?\slens\.[\s\S]*?(?=(\s*Photographed with )|$)/gi, '').trim()
+  const initialPrompt = stripCameraProfile(
     post.image_prompt ||
     post.generation_prompt ||
     post.image_direction ||
     post.photo_keywords ||
     ''
+  )
   const [promptText, setPromptText] = useState(initialPrompt || PROMPT_PLACEHOLDER)
   const [regenerating, setRegenerating] = useState(false)
   const [savingToLib, setSavingToLib] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [studioPhotos, setStudioPhotos] = useState([])
+  const [photoTotal, setPhotoTotal] = useState(null) // server-side total, for truncation signal
+  const [pickerFilter, setPickerFilter] = useState('all') // 'all' | 'uploaded' | 'ai_generated'
+  const [pickerQuery, setPickerQuery] = useState('')
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [overridePhotoUrl, setOverridePhotoUrl] = useState(null)
   const [overrideIsAI, setOverrideIsAI] = useState(null)
@@ -153,6 +166,30 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     if (wmVariant === 'dark' && !hasDark) setWmVariant(hasLight ? 'light' : 'auto')
   }, [hasLight, hasDark, wmVariant])
 
+  // Picker sectioning — mirrors the Photos page tabs so both surfaces behave the same.
+  const pickerUploaded = studioPhotos.filter(p => p.source !== 'ai_generated')
+  const pickerAI = studioPhotos.filter(p => p.source === 'ai_generated')
+  const pickerBase =
+    pickerFilter === 'uploaded' ? pickerUploaded
+    : pickerFilter === 'ai_generated' ? pickerAI
+    : studioPhotos
+  // Search over what actually distinguishes near-duplicates: the prompt that made them,
+  // and the original filename. Client-side over already-loaded rows — no extra query.
+  const pickerQ = pickerQuery.trim().toLowerCase()
+  const pickerList = pickerQ
+    ? pickerBase.filter(p =>
+        `${p.file_name || ''} ${p.generation_prompt || ''} ${p.keywords || ''}`
+          .toLowerCase().includes(pickerQ))
+    : pickerBase
+  const relDate = (d) => {
+    if (!d) return ''
+    const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000)
+    if (days < 1) return 'today'
+    if (days < 7) return `${days}d`
+    if (days < 60) return `${Math.floor(days / 7)}w`
+    return `${Math.floor(days / 30)}mo`
+  }
+
   const currentPhotoUrl = overridePhotoUrl || post.photo_url
   const baseIsAI = post.needs_ai_image || (!post.matched_photo_id && post.photo_url)
   const isAI = overrideIsAI !== null ? overrideIsAI : baseIsAI
@@ -232,14 +269,22 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     if (!resolvedStudioId) return
     setLoadingPhotos(true)
     try {
-      const { data } = await supabase
+      // generation_prompt + upload_date were previously NOT selected — the query ordered by
+      // a column it never fetched, so tiles had nothing to tell near-duplicates apart with.
+      // Limit was 60 with no signal: TLK had 69 active photos, so its 9 OLDEST — all
+      // uploaded originals (LK_frontLobby, LK_meetingRoom, …) — were silently invisible.
+      const { data, count } = await supabase
         .from('studio_photos')
-        .select('id, photo_url, thumbnail_url, keywords, source, tags, file_name')
+        .select(
+          'id, photo_url, thumbnail_url, keywords, source, tags, file_name, generation_prompt, upload_date',
+          { count: 'exact' }
+        )
         .eq('studio_id', resolvedStudioId)
         .eq('is_active', true)
         .order('upload_date', { ascending: false })
-        .limit(60)
+        .limit(200)
       if (data) setStudioPhotos(data)
+      if (typeof count === 'number') setPhotoTotal(count)
     } catch (e) {
       flashMsg({ type: 'error', text: 'Could not load photo library' })
     }
@@ -926,14 +971,62 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                   ) : studioPhotos.length === 0 ? (
                     <p className="text-xs text-slate-400 py-4 text-center">No photos in your library yet.</p>
                   ) : (
+                    <>
+                    <div className="flex items-center gap-1 mb-2 flex-wrap">
+                      {[
+                        { label: 'All', value: 'all', count: studioPhotos.length },
+                        { label: 'Studio Photos', value: 'uploaded', count: pickerUploaded.length },
+                        { label: 'AI Generated', value: 'ai_generated', count: pickerAI.length },
+                      ].map(tab => (
+                        <button
+                          key={tab.value}
+                          onClick={() => setPickerFilter(tab.value)}
+                          className="px-2 py-1 rounded text-[10px] font-medium transition-colors"
+                          style={{
+                            background: pickerFilter === tab.value ? `${primary}25` : 'rgba(255,255,255,0.04)',
+                            color: pickerFilter === tab.value ? primary : '#94a3b8',
+                            border: `1px solid ${pickerFilter === tab.value ? `${primary}60` : 'transparent'}`,
+                          }}
+                        >
+                          {tab.label} ({tab.count})
+                        </button>
+                      ))}
+                      {typeof photoTotal === 'number' && photoTotal > studioPhotos.length && (
+                        <span className="text-[10px] text-amber-400/80">
+                          showing {studioPhotos.length} of {photoTotal}
+                        </span>
+                      )}
+                      <input
+                        value={pickerQuery}
+                        onChange={e => setPickerQuery(e.target.value)}
+                        placeholder="Search name or prompt..."
+                        className="ml-auto px-2 py-1 rounded text-[10px] outline-none"
+                        style={{
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          color: '#e2e8f0',
+                          minWidth: 130,
+                        }}
+                      />
+                    </div>
+                    {pickerList.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-4 text-center">
+                        {pickerQ
+                          ? `No photos match "${pickerQuery.trim()}".`
+                          : `No ${pickerFilter === 'ai_generated' ? 'AI-generated' : 'studio'} photos yet.`}
+                      </p>
+                    ) : (
                     <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-72 overflow-y-auto">
-                      {studioPhotos.map(photo => {
+                      {pickerList.map(photo => {
                         const isCurrent = photo.photo_url === currentPhotoUrl
                         const photoIsAI = photo.source === 'ai_generated'
+                        const tileHint = [photo.generation_prompt || photo.file_name || photo.keywords, relDate(photo.upload_date)]
+                          .filter(Boolean).join(' · ')
                         return (
                           <button
                             key={photo.id}
                             onClick={() => handlePickPhoto(photo)}
+                            title={tileHint}
                             className="relative aspect-square rounded-lg overflow-hidden group transition-all hover:-translate-y-0.5"
                             style={{
                               border: isCurrent ? `2px solid ${primary}` : '1px solid rgba(255,255,255,0.06)',
@@ -946,6 +1039,22 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                               className="w-full h-full object-cover"
                               loading="lazy"
                             />
+                            {photo.upload_date && (
+                              <span
+                                className="absolute top-1 right-1 px-1 py-0.5 rounded text-[8px] font-medium"
+                                style={{ background: 'rgba(0,0,0,0.6)', color: '#cbd5e1', backdropFilter: 'blur(4px)' }}
+                              >
+                                {relDate(photo.upload_date)}
+                              </span>
+                            )}
+                            {photoIsAI && photo.generation_prompt && (
+                              <span
+                                className="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[7px] leading-tight text-left truncate"
+                                style={{ background: 'rgba(0,0,0,0.65)', color: '#e2e8f0', backdropFilter: 'blur(4px)' }}
+                              >
+                                {photo.generation_prompt}
+                              </span>
+                            )}
                             <span
                               className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider"
                               style={{
@@ -968,6 +1077,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                         )
                       })}
                     </div>
+                    )}
+                    </>
                   )}
                 </div>
               )}
