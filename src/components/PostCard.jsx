@@ -31,6 +31,26 @@ const WM_ZONES = [
   { value: 'bottom-right', label: 'Bot R', row: 2, col: 2 },
 ]
 
+// Downscale an image URL to `maxEdge` on its long side and return raw base64 (no data: prefix).
+// The downscale is required, not cosmetic: studio photos are full-resolution stock (measured
+// 5750x3840 / 1.91MB), which base64s to ~2.43MB — 40% of Netlify's 6MB sync-function body limit
+// on a single image. 1024px lands roughly 10x smaller and leaves headroom.
+async function downscaleToBase64(url, maxEdge = 1024) {
+  const blob = await (await fetch(url)).blob()
+  const bitmap = await createImageBitmap(blob)
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * scale))
+  const h = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h)
+  if (bitmap.close) bitmap.close()
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+  const base64 = dataUrl.split(',')[1] || ''
+  return { base64, mime: 'image/jpeg', w, h, approxBytes: Math.round(base64.length * 0.75) }
+}
+
 export default function PostCard({ post, index, platform, deliveryId, readOnly }) {
   const {
     brandColorPrimary, resolvedStudioId, email, studioName, studioType, brandVoice, aiPhotoPrompt,
@@ -261,12 +281,33 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     setRegenerating(true)
     setEditorMsg(null)
     try {
+      // Bind the CURRENTLY DISPLAYED image as the edit source. Both values are read here,
+      // BEFORE persistPhotoChange() below sets matched_photo_id: null — that ordering is the
+      // whole lineage chain. Without the source image the model has nothing to edit and
+      // generates from scratch, which is why "add our logo to the ball" produced a new scene.
+      const srcUrl = currentPhotoUrl || null
+      const srcId = post.matched_photo_id || null
+      let src = null
+      if (srcUrl) {
+        try {
+          src = await downscaleToBase64(srcUrl, 1024)
+        } catch (e) {
+          src = null // fall back to generate-from-scratch rather than block the user
+        }
+      }
+
       const res = await fetch('/.netlify/functions/proxy-webhook?target=ai-photo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Pinned deliberately. 'auto' lets Route Request match /logo|watermark|typography/
+          // and route to flux2_pro, which is text-to-image only and silently DROPS
+          // image_base64 — reintroducing the generate-from-scratch bug this fixes.
+          // 'auto' belongs on the GENERATE path, never on EDIT.
           platform: 'nano_banana_pro',
           prompt,
+          ...(src ? { edit_prompt: prompt, image_base64: src.base64, mime_type: src.mime } : {}),
+          ...(srcId ? { reference_photo_ids: [srcId] } : {}),
           width: 1024,
           height: 1024,
           studio_id: resolvedStudioId,
