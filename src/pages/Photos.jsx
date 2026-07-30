@@ -159,7 +159,13 @@ export default function Photos() {
         try {
           src = await downscaleToBase64(srcUrl, 1024)
         } catch (e) {
-          src = null // fall back to generate-from-scratch rather than block the user
+          // NEVER silent — see PostCard.handleRegenerate. A silent fallback here yields a
+          // generate-from-scratch that looks like a failed edit, which is indistinguishable
+          // from the model declining the prompt.
+          console.error('[FCA] reimagine source unreadable:', srcUrl, e)
+          throw new Error(
+            `Couldn't read this photo to reimagine it (${e.message || 'unknown error'}). Reload the page and try again.`
+          )
         }
       }
 

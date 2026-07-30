@@ -273,7 +273,14 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
         try {
           src = await downscaleToBase64(srcUrl, 1024)
         } catch (e) {
-          src = null // fall back to generate-from-scratch rather than block the user
+          // NEVER silent. Degrading to generate-from-scratch here produces a plausible
+          // WRONG result the user cannot distinguish from a real edit — which is the bug
+          // this whole change exists to fix. Fail loudly with a distinct message so
+          // "couldn't read the source image" never looks like "the model declined".
+          console.error('[FCA] edit source unreadable:', srcUrl, e)
+          throw new Error(
+            `Couldn't read the current image to edit it (${e.message || 'unknown error'}). Reload the page and try again.`
+          )
         }
       }
 
