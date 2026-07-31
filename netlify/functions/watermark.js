@@ -38,9 +38,10 @@ exports.handler = async (event) => {
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': process.env.DASHBOARD_ORIGIN || 'https://studio-dash.netlify.app',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    Vary: 'Origin',
   };
 }
 

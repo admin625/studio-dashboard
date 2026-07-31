@@ -7,9 +7,16 @@ exports.handler = async (event) => {
   }
 
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.error('[generate-content] N8N_WEBHOOK_URL env var is not set');
-    return respond(500, { error: 'N8N_WEBHOOK_URL is not configured. Set it in Netlify environment variables.' });
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (!webhookUrl || !supabaseUrl || !anonKey) {
+    const missing = [
+      !webhookUrl && 'N8N_WEBHOOK_URL',
+      !supabaseUrl && 'SUPABASE_URL',
+      !anonKey && 'SUPABASE_ANON_KEY',
+    ].filter(Boolean).join(', ');
+    console.error('[generate-content] missing env:', missing);
+    return respond(500, { error: 'Content generation is not configured.' });
   }
 
   let body;
@@ -17,6 +24,58 @@ exports.handler = async (event) => {
     body = JSON.parse(event.body);
   } catch {
     return respond(400, { error: 'Invalid JSON' });
+  }
+
+  // --- authenticate the caller, and prove they own the studio they named -----
+  // Without this the function is an open relay: it validated body SHAPE only,
+  // so anyone with a studio_id could spend Claude budget, write deliveries and
+  // email that studio's owner. studio_id is an unguessable UUID, but every
+  // instructor already holds one — including former instructors.
+  const authHeader = event.headers.authorization || event.headers.Authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!token) {
+    return respond(401, { error: 'Sign in again to generate content.' });
+  }
+
+  let callerEmail;
+  try {
+    const who = await fetch(supabaseUrl.replace(/\/+$/, '') + '/auth/v1/user', {
+      headers: { apikey: anonKey, Authorization: 'Bearer ' + token },
+    });
+    if (!who.ok) return respond(401, { error: 'Your session has expired. Reload and sign in again.' });
+    const user = await who.json();
+    callerEmail = (user && user.email) ? user.email.toLowerCase() : '';
+  } catch (err) {
+    console.error('[generate-content] session check failed:', err.message);
+    return respond(502, { error: 'Could not verify your session. Please try again.' });
+  }
+  if (!callerEmail) {
+    return respond(401, { error: 'Your session has expired. Reload and sign in again.' });
+  }
+
+  if (body.studio_id) {
+    // Read with the CALLER's token so RLS decides what they can see. If the
+    // studio they named is not among their own rows, they do not own it.
+    try {
+      const scope = await fetch(
+        supabaseUrl.replace(/\/+$/, '') +
+        '/rest/v1/clients?select=studio_id&email=eq.' + encodeURIComponent(callerEmail),
+        { headers: { apikey: anonKey, Authorization: 'Bearer ' + token } },
+      );
+      if (!scope.ok) {
+        console.error('[generate-content] studio scope lookup failed:', scope.status);
+        return respond(502, { error: 'Could not verify your studio. Please try again.' });
+      }
+      const rows = await scope.json();
+      const owned = Array.isArray(rows) ? rows.map((r) => r.studio_id).filter(Boolean) : [];
+      if (!owned.includes(body.studio_id)) {
+        console.error('[generate-content] studio mismatch for', callerEmail);
+        return respond(403, { error: 'You do not have access to that studio.' });
+      }
+    } catch (err) {
+      console.error('[generate-content] studio scope check failed:', err.message);
+      return respond(502, { error: 'Could not verify your studio. Please try again.' });
+    }
   }
 
   if (!body.email || typeof body.email !== 'string' || !body.email.includes('@')) {
@@ -62,9 +121,10 @@ exports.handler = async (event) => {
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Origin': process.env.DASHBOARD_ORIGIN || 'https://studio-dash.netlify.app',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    Vary: 'Origin',
   };
 }
 

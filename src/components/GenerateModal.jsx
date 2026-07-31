@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { supabase } from '../lib/supabase'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
@@ -212,9 +213,22 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 30000)
     try {
+      // The function verifies this token and checks the caller actually owns
+      // payload.studio_id. Without it every request is rejected with 401.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        clearTimeout(timeoutId)
+        setError('Your session has expired. Reload the page and sign in again.')
+        setSubmitting(false)
+        return
+      }
+
       const res = await fetch('/.netlify/functions/generate-content', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(payload),
         signal: controller.signal,
       })
