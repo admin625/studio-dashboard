@@ -8,3 +8,18 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 export { SUPABASE_URL }
+
+/**
+ * Headers for calls to our own Netlify functions, which verify the Supabase
+ * session and check the caller owns the studio named in the body.
+ * Returns null when there is no live session so callers can say so plainly
+ * rather than being rejected server-side with no explanation.
+ */
+export async function authedJsonHeaders() {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) return null
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session.access_token}`,
+  }
+}

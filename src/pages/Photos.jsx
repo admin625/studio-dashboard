@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, authedJsonHeaders } from '../lib/supabase'
 import { downscaleToBase64 } from '../lib/image'
 import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
@@ -169,9 +169,15 @@ export default function Photos() {
         }
       }
 
+      // Same NEVER-silent rule as the source-image read above.
+      const authHeaders = await authedJsonHeaders()
+      if (!authHeaders) {
+        throw new Error('Your session has expired. Reload the page and sign in again.')
+      }
+
       const res = await fetch('/.netlify/functions/proxy-webhook?target=ai-photo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           // Pinned: 'auto' would let Route Request send logo/text prompts to flux2_pro,
           // which is text-to-image only and silently drops image_base64. EDIT stays pinned.

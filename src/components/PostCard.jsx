@@ -3,7 +3,7 @@
  * Caption, hashtags, photo, metadata, edit/copy/download actions, inline photo editor.
  */
 import { useState, useRef, useEffect } from 'react'
-import { supabase, SUPABASE_URL } from '../lib/supabase'
+import { supabase, SUPABASE_URL, authedJsonHeaders } from '../lib/supabase'
 import { downscaleToBase64 } from '../lib/image'
 import { useApp } from '../context/AppContext'
 import {
@@ -329,9 +329,16 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
         }
       }
 
+      // Same NEVER-silent rule as the source-image read above: a missing session must
+      // fail with its own message, not look like the model declining the prompt.
+      const authHeaders = await authedJsonHeaders()
+      if (!authHeaders) {
+        throw new Error('Your session has expired. Reload the page and sign in again.')
+      }
+
       const res = await fetch('/.netlify/functions/proxy-webhook?target=ai-photo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           // Pinned deliberately. 'auto' lets Route Request match /logo|watermark|typography/
           // and route to flux2_pro, which is text-to-image only and silently DROPS
@@ -407,10 +414,15 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     setAiGenOpen(true)
   }
 
-  const startAiGeneration = () => {
+  const startAiGeneration = async () => {
     const prompt = (aiGenPrompt || '').trim()
     if (!prompt || !resolvedStudioId) {
       flashMsg({ type: 'error', text: 'Prompt required' })
+      return
+    }
+    const authHeaders = await authedJsonHeaders()
+    if (!authHeaders) {
+      flashMsg({ type: 'error', text: 'Your session has expired. Reload the page and sign in again.' })
       return
     }
     setAiGenStartedAt(Date.now())
@@ -421,7 +433,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     // 26s function-timeout is longer than we need here since we're not awaiting the response.
     fetch('/.netlify/functions/proxy-webhook?target=ai-photo', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         studio_id: resolvedStudioId,
         platform: 'nano_banana_pro',
