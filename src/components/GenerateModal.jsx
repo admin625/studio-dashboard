@@ -3,7 +3,7 @@
  * Fires to existing /.netlify/functions/generate-content endpoint.
  * Payload structure matches legacy exactly.
  */
-import { useState, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import {
@@ -28,6 +28,11 @@ const FREESTYLE_TEMPLATES = {
   seasonal: 'Build a [season/holiday] campaign. Tie our classes to [seasonal theme] with a special offer.',
 }
 
+// Fallback used only when a studio has genuinely never set a brand voice.
+// Named (not inline) so the re-sync effect below can tell "still the placeholder"
+// apart from "the owner typed this themselves" and never clobber a real edit.
+const BRAND_VOICE_FALLBACK = 'Energetic, motivating, and community-focused'
+
 export default function GenerateModal({ open, onClose, onSubmitted }) {
   const app = useApp()
   const navigate = useNavigate()
@@ -44,7 +49,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
   const [freestyle, setFreestyle] = useState(false)
   const [freestylePrompt, setFreestylePrompt] = useState('')
   const [sessionVibe, setSessionVibe] = useState(app.aiPhotoPrompt || app.brandVoice || '')
-  const [brandVoice, setBrandVoice] = useState(app.brandVoice || 'Energetic, motivating, and community-focused')
+  const [brandVoice, setBrandVoice] = useState(app.brandVoice || BRAND_VOICE_FALLBACK)
   const [targetAudience, setTargetAudience] = useState('Fitness enthusiasts and local community members')
   const [fitnessFocus, setFitnessFocus] = useState('General fitness, wellness, and community')
   const [primaryGoal, setPrimaryGoal] = useState('')
@@ -58,6 +63,22 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
   const [imageSlots, setImageSlots] = useState([{ id: 1, platforms: ['all'], direction: '' }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  // -- Profile re-sync (mount-capture guard) --
+  // brandVoice/sessionVibe are seeded from app.* at MOUNT. On the normal path that is safe:
+  // ProtectedRoute blocks render until authReady, and AuthProvider lands authReady + every
+  // studio field in ONE app.update(), so the values are present. They are NOT present when the
+  // studio_accounts fetch times out (5s) or errors -- AuthProvider still sets authReady:true and
+  // only flips studioLoadError. Without this effect the placeholder stays captured for the whole
+  // page session and a full week of content is generated from it, silently.
+  // Only overwrite while the field is still untouched, so an owner's own edit is never clobbered.
+  useEffect(() => {
+    if (app.brandVoice) {
+      setBrandVoice(prev => (!prev || prev === BRAND_VOICE_FALLBACK) ? app.brandVoice : prev)
+    }
+    const vibeSeed = app.aiPhotoPrompt || app.brandVoice
+    if (vibeSeed) setSessionVibe(prev => prev ? prev : vibeSeed)
+  }, [app.brandVoice, app.aiPhotoPrompt])
 
   const addSlot = () => {
     if (imageSlots.length >= 3) return
@@ -117,6 +138,15 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
     }
     if (freestyle && !freestylePrompt.trim()) {
       setError('Please describe what content you want to create.')
+      return
+    }
+
+    // HARD STOP: never degrade to placeholders. If the studio profile failed to load,
+    // brandVoice/photoSource/studioType are INITIAL_STATE defaults, not this studio's -- and
+    // generating anyway produces a week of plausible, publishable, wrong-voice content with no
+    // visible error. Refuse instead.
+    if (app.studioLoadError) {
+      setError("Couldn't load your studio profile, so generating now would use generic defaults instead of your brand voice. Reload the page and try again - if it keeps happening, contact support.")
       return
     }
 
