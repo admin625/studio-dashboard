@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FCA Studio Dashboard</title>
-    <link rel="icon" type="image/png" href="/assets/logo.png">
-    <link rel="apple-touch-icon" href="/assets/logo.png">
+    <!-- Served from public/, which Vite copies verbatim, so this URL is stable across
+         builds. The previous /assets/logo.png resolved to the SPA fallback (index.html),
+         so the favicon never loaded and there was no public logo URL for email templates. -->
+    <link rel="icon" type="image/png" href="/logo.png">
+    <link rel="apple-touch-icon" href="/logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&display=swap" rel="stylesheet">
