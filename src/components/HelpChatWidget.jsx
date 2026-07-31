@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { supabase } from '../lib/supabase'
 
-const WEBHOOK_URL = 'https://jmac.app.n8n.cloud/webhook/fca-help-chat'
+// Goes through our own function, not straight to n8n. The previous direct URL
+// shipped in the browser bundle, which made the workflow a public, unmetered
+// relay to the Claude API. The function verifies the session and holds the
+// shared secret; the upstream URL is server-side only.
+const CHAT_ENDPOINT = '/.netlify/functions/help-chat'
 
 const SUGGESTIONS = [
   'Writing prompts',
@@ -38,16 +43,38 @@ export default function HelpChatWidget({ currentPage }) {
     setLoading(true)
 
     try {
-      const res = await fetch(WEBHOOK_URL, {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: 'Your session has expired. Please reload the page and sign in again.' },
+        ])
+        return
+      }
+
+      const res = await fetch(CHAT_ENDPOINT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           message: userMsg.text,
           history: getHistory(),
           currentPage: currentPage || 'unknown',
         }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        // Surface the real reason rather than a generic failure — a 401 here
+        // means "sign in again", which is actionable, and silently swallowing
+        // it would look identical to the assistant having nothing to say.
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: data.error || `Something went wrong (${res.status}). Please try again.` },
+        ])
+        return
+      }
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', text: data.reply || 'No response received.' },

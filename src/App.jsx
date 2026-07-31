@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
-import { AppProvider } from './context/AppContext'
+import { AppProvider, useApp } from './context/AppContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthProvider from './components/AuthProvider'
 import Login from './pages/Login'
@@ -15,9 +15,15 @@ import AccountSettings from './pages/AccountSettings'
 import ProtectedRoute from './components/ProtectedRoute'
 import HelpChatWidget from './components/HelpChatWidget'
 
+// Authenticated surface only. Every topic the widget offers (writing prompts,
+// brand settings, AI photos, adding instructors) is post-login, and rendering it
+// on /login is what put its webhook URL in the public bundle. Gate mirrors
+// ProtectedRoute so the widget appears exactly where the app itself is usable.
 function HelpChat() {
+  const { authReady, user } = useApp()
   const location = useLocation()
   const page = location.pathname.replace(/^\//, '') || 'deliveries'
+  if (!authReady || !user) return null
   return <HelpChatWidget currentPage={page} />
 }
 
