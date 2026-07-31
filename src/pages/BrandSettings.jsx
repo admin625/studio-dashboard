@@ -43,6 +43,7 @@ const KNOWN_TYPES = STUDIO_TYPES.filter(t => t.value !== 'custom').map(t => t.va
 
 const FONTS = [
   { value: '', label: 'Default (System)' },
+  { value: 'Inter', label: 'Inter' },
   { value: 'Montserrat', label: 'Montserrat' },
   { value: 'Poppins', label: 'Poppins' },
   { value: 'Playfair Display', label: 'Playfair Display' },
