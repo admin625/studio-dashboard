@@ -1,0 +1,35 @@
+{
+  "date": "2026-03-18",
+  "window": "7d",
+  "metrics": {
+    "commits": 4,
+    "contributors": 1,
+    "prs_merged": 0,
+    "insertions": 223,
+    "deletions": 25,
+    "net_loc": 198,
+    "test_loc": 0,
+    "test_ratio": 0,
+    "active_days": 2,
+    "sessions": 2,
+    "deep_sessions": 0,
+    "avg_session_minutes": 11,
+    "loc_per_session_hour": 550,
+    "feat_pct": 1.0,
+    "fix_pct": 0,
+    "peak_hour": 10,
+    "ai_assisted_commits": 4
+  },
+  "authors": {
+    "John McDonald": {
+      "commits": 4,
+      "insertions": 223,
+      "deletions": 25,
+      "test_ratio": 0,
+      "top_area": "index.html"
+    }
+  },
+  "version_range": null,
+  "streak_days": 1,
+  "tweetable": "Week of Mar 11: 4 commits, 223 LOC added, 0% tests, 100% AI-assisted, peak: 7am PT | Streak: 1d"
+}

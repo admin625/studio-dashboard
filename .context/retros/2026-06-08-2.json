@@ -1,0 +1,39 @@
+{
+  "date": "2026-06-08",
+  "window": "7d",
+  "metrics": {
+    "commits": 5,
+    "contributors": 1,
+    "prs_merged": 0,
+    "insertions": 405,
+    "deletions": 6,
+    "net_loc": 399,
+    "test_loc": 0,
+    "test_ratio": 0,
+    "active_days": 1,
+    "sessions": 1,
+    "deep_sessions": 1,
+    "micro_sessions": 0,
+    "avg_session_minutes": 96,
+    "loc_per_session_hour": 250,
+    "feat_pct": 0.60,
+    "fix_pct": 0.20,
+    "chore_pct": 0.20,
+    "peak_hour": 16,
+    "ai_assisted_commits": 5
+  },
+  "authors": {
+    "admin625": { "commits": 5, "insertions": 405, "deletions": 6, "test_ratio": 0, "top_area": "src/components/" }
+  },
+  "version_range": null,
+  "streak_days_personal": 1,
+  "streak_days_team": 1,
+  "feature": "logo-watermark (feature + preview-clip fix) + beta-owner provisioning",
+  "infrastructure_work_outside_repo": {
+    "supabase_beta_owner_provisioned": "Michelle Elder / Vyve Cycle (auth.users + auth.identities + studio_accounts)",
+    "provisioning_verified_via": "bcrypt crypt() check + live GoTrue password-grant login",
+    "production_deploys": 1,
+    "changelog_appended": "fca-studio/2026-06-08.md (Follow-up 1 + Follow-up 2)"
+  },
+  "tweetable": "Jun 8 (cont'd): watermark edge-clip fix (object-contain, harness-verified 3 aspect x 5 zones) + provisioned beta owner #4 Michelle/Vyve Cycle, login-verified end-to-end. 5 commits, 0 tests. Streak: 1d"
+}

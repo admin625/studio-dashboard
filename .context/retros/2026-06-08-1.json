@@ -1,0 +1,38 @@
+{
+  "date": "2026-06-08",
+  "window": "7d",
+  "metrics": {
+    "commits": 3,
+    "contributors": 1,
+    "prs_merged": 0,
+    "insertions": 403,
+    "deletions": 5,
+    "net_loc": 398,
+    "test_loc": 0,
+    "test_ratio": 0,
+    "active_days": 1,
+    "sessions": 1,
+    "deep_sessions": 1,
+    "micro_sessions": 0,
+    "avg_session_minutes": 49,
+    "loc_per_session_hour": 500,
+    "feat_pct": 1.0,
+    "fix_pct": 0,
+    "peak_hour": 16,
+    "ai_assisted_commits": 3
+  },
+  "authors": {
+    "admin625": { "commits": 3, "insertions": 403, "deletions": 5, "test_ratio": 0, "top_area": "src/" }
+  },
+  "version_range": null,
+  "streak_days_personal": 1,
+  "streak_days_team": 1,
+  "feature": "logo-watermark (BrandSettings variant upload + PostCard apply controls)",
+  "infrastructure_work_outside_repo": {
+    "supabase_schema_verified": "studio_accounts watermark columns (already migrated)",
+    "live_service_contract_recovered": "logo-compositing /composite-image via openapi",
+    "production_deploys": 2,
+    "changelog_written": "fca-studio/2026-06-08.md"
+  },
+  "tweetable": "Jun 8: shipped the full logo-watermark feature in one ~50min session. 3 feat commits (403 LOC), BrandSettings variant upload + PostCard 5-zone apply controls, both live. 0 tests (the durable gap). Streak: 1d"
+}
