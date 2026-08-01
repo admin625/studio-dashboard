@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { useBrandSettings } from '../hooks/useBrandSettings'
+import { FONTS } from '../lib/brandFonts'
 import Layout from '../components/Layout'
 import {
   Leaf, Zap, Disc3, Shield, BarChart3, Pencil,
@@ -40,20 +41,6 @@ const STUDIO_TYPES = [
   { value: 'custom', label: 'SOMETHING\nELSE', sub: 'Tell us your style', Icon: Pencil },
 ]
 const KNOWN_TYPES = STUDIO_TYPES.filter(t => t.value !== 'custom').map(t => t.value)
-
-const FONTS = [
-  { value: '', label: 'Default (System)' },
-  { value: 'Inter', label: 'Inter' },
-  { value: 'Montserrat', label: 'Montserrat' },
-  { value: 'Poppins', label: 'Poppins' },
-  { value: 'Playfair Display', label: 'Playfair Display' },
-  { value: 'Raleway', label: 'Raleway' },
-  { value: 'Oswald', label: 'Oswald' },
-  { value: 'Lato', label: 'Lato' },
-  { value: 'Roboto', label: 'Roboto' },
-  { value: 'Open Sans', label: 'Open Sans' },
-  { value: 'Bebas Neue', label: 'Bebas Neue' },
-]
 
 const PHOTO_SOURCES = [
   { value: 'studio_only', Icon: Camera, label: 'STUDIO ONLY', sub: 'Your photos, always.' },
