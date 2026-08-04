@@ -19,6 +19,25 @@ const FAIL_STATES = { render_failed: 'Render failed', render_timeout: 'Render ti
 const isMidFlight = (r) =>
   (r.status === 'approved' && (!r.render_status || r.render_status === 'rendering' || r.render_status === 'delivering'))
 
+// Ordering. The old split was `active = render_status !== 'delivered'`, which put BOTH terminal
+// failure kinds in the same bucket as work-in-progress and rendered them above the delivered
+// list. A failed reel therefore outranked every successful one permanently, with no way to
+// clear it — on 2026-08-04 a delivered render sat unnoticed below two dead failure cards for
+// twenty minutes. Failures are the least actionable thing on the page and must sort LAST.
+//
+// Change GROUP_ORDER to reorder the page; nothing else needs to move.
+const GROUP_ORDER = ['pending', 'rendering', 'delivered', 'failed']
+const GROUP_HEADING = { pending: null, rendering: null, delivered: 'Delivered', failed: "Didn't work" }
+
+function reelGroup(r) {
+  if (r.render_status === 'delivered') return 'delivered'
+  if (r.status === 'validation_failed' || FAIL_STATES[r.render_status]) return 'failed'
+  if (isMidFlight(r)) return 'rendering'
+  return 'pending'
+}
+
+const byRecency = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+
 async function callReels(action, payload) {
   const { data } = await supabase.auth.getSession()
   const token = data?.session?.access_token
@@ -122,8 +141,11 @@ export default function Reels() {
     )
   }
 
-  const active = reels.filter((r) => r.render_status !== 'delivered')
-  const delivered = reels.filter((r) => r.render_status === 'delivered')
+  const groups = GROUP_ORDER.map((g) => ({
+    key: g,
+    heading: GROUP_HEADING[g],
+    reels: reels.filter((r) => reelGroup(r) === g).sort(byRecency),
+  })).filter((g) => g.reels.length > 0)
 
   return (
     <Layout>
@@ -149,7 +171,7 @@ export default function Reels() {
           </div>
         )}
 
-        {active.length === 0 && delivered.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="text-center py-20">
             <Film size={40} className="mx-auto mb-4" style={{ color: 'rgba(255,255,255,0.12)' }} />
             <p className="text-white text-base font-semibold mb-1">No reels yet</p>
@@ -158,24 +180,22 @@ export default function Reels() {
           </div>
         ) : (
           <>
-            {active.length > 0 && (
-              <div className="grid gap-4 mb-8">
-                {active.map((reel) => (
-                  <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={(ht) => approve(reel, ht)} onNewReel={() => setShowNew(true)} />
-                ))}
-              </div>
-            )}
-
-            {delivered.length > 0 && (
-              <div>
-                <h2 className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-3">Delivered</h2>
-                <div className="grid gap-2">
-                  {delivered.map((reel) => (
-                    <DeliveredRow key={reel.reel_id} reel={reel} />
-                  ))}
+            {groups.map((group) => (
+              <div key={group.key} className="mb-8 last:mb-0">
+                {group.heading && (
+                  <h2 className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-3">{group.heading}</h2>
+                )}
+                <div className={group.key === 'delivered' ? 'grid gap-2' : 'grid gap-4'}>
+                  {group.reels.map((reel) =>
+                    group.key === 'delivered' ? (
+                      <DeliveredRow key={reel.reel_id} reel={reel} />
+                    ) : (
+                      <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={(ht) => approve(reel, ht)} onNewReel={() => setShowNew(true)} />
+                    )
+                  )}
                 </div>
               </div>
-            )}
+            ))}
           </>
         )}
       </div>
