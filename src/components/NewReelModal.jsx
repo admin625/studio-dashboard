@@ -79,7 +79,6 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
       target_duration_s: duration,
       energy_profile: energy,
       source_clips: sourceClips,
-      allow_reuse_insufficient: false,
     }
     if (theme.trim()) manifest.theme = theme.trim()
     if (hookDirection.trim()) manifest.hook_direction = hookDirection.trim()

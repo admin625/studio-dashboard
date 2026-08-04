@@ -87,6 +87,19 @@ exports.handler = async (event) => {
         hook: x.edl && x.edl.overlays && x.edl.overlays[0] ? x.edl.overlays[0].text : null,
         clip_count: x.edl && Array.isArray(x.edl.timeline) ? x.edl.timeline.length : null,
         duration_s: x.edl && x.edl.output ? x.edl.output.target_duration_s : null,
+        // validation carries checks + flags. The UI needs it to say WHY an assembly failed:
+        // without it every validation_failed reel got one generic string, and that string
+        // advised "a shorter target length" — which is what CAUSES avoidable_clip_reuse.
+        // Flags embed payloads that came from the model or the vendor
+        // (opus_call_error:<Anthropic message>, inout_oob:<clip_id>, timeline_gap@seq3).
+        // The UI only prefix-matches to select hardcoded copy, so ship the KIND, not the
+        // payload — no model- or vendor-authored string crosses to the browser.
+        validation: x.edl && x.edl.validation ? {
+          checks: x.edl.validation.checks || null,
+          flags: Array.isArray(x.edl.validation.flags)
+            ? x.edl.validation.flags.map((f) => String(f).split(/[:@]/)[0])
+            : [],
+        } : null,
       })));
       return respond(200, { reels });
     }

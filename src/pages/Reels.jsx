@@ -184,6 +184,28 @@ export default function Reels() {
   )
 }
 
+// Why an assembly failed, in the owner's terms. Reads edl.validation.flags, passed through by
+// reels.js; flags are emitted by WF1 Self-Validate.
+//
+// This replaced a single hardcoded string used for EVERY validation_failed cause, which read
+// "too dense to assemble — try a calmer pacing or a shorter target length". That advice was
+// actively harmful: the reuse budget scales WITH the target, so shortening the target makes
+// avoidable_clip_reuse MORE likely. It recommended the action that causes the failure.
+function assemblyFailureCopy(reel) {
+  const flags = reel.validation && Array.isArray(reel.validation.flags) ? reel.validation.flags : []
+  const has = (prefix) => flags.some((f) => typeof f === 'string' && f.startsWith(prefix))
+
+  if (has('avoidable_clip_reuse'))
+    return 'This edit repeated the same footage more than it needed to. Add another clip, or try a longer target length.'
+  if (has('clip_no_probe') || has('inout_oob'))
+    return "We couldn't read one of your clips. Try re-uploading it, then create the reel again."
+  if (has('edl_json_parse_failed') || has('opus_call_error'))
+    return "We couldn't generate a plan for this reel. Try again — this one is usually temporary."
+  if (has('structure_invalid') || has('timeline_gap') || has('sum_ne_target'))
+    return "We couldn't assemble a valid edit from these clips. Try again."
+  return "We couldn't assemble this reel. Try again, or add another clip."
+}
+
 // Active (non-delivered) reel: Ready-to-review (editable hook + Generate Reel), Rendering, Failed, or
 // Couldn't-assemble (status='validation_failed' — WF1 could not produce a valid EDL, e.g. truncation).
 function ReelCard({ reel, primary, busy, onApprove, onNewReel }) {
@@ -226,7 +248,7 @@ function ReelCard({ reel, primary, busy, onApprove, onNewReel }) {
             <div>
               <div className="flex items-start gap-2 rounded-lg px-4 py-3 text-sm mb-3" style={{ background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}>
                 <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-                <span>This reel was too dense to assemble — try a calmer pacing or a shorter target length.</span>
+                <span>{assemblyFailureCopy(reel)}</span>
               </div>
               <button
                 onClick={onNewReel}
