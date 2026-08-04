@@ -4,12 +4,12 @@
  */
 import { useState, useRef, useEffect } from 'react'
 import { supabase, SUPABASE_URL, authedJsonHeaders } from '../lib/supabase'
-import { downscaleToBase64 } from '../lib/image'
+import { downscaleToBase64, probeLogoAlpha } from '../lib/image'
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
   Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp, Edit3, Wand2,
-  Stamp, RotateCcw,
+  Stamp, RotateCcw, AlertTriangle,
 } from 'lucide-react'
 
 const PLATFORM_LABEL = { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', tiktok: 'TikTok', all: 'All Platforms' }
@@ -35,7 +35,7 @@ const WM_ZONES = [
 export default function PostCard({ post, index, platform, deliveryId, readOnly }) {
   const {
     brandColorPrimary, resolvedStudioId, email, studioName, studioType, brandVoice, aiPhotoPrompt,
-    brandLogoLightUrl, brandLogoDarkUrl, watermarkDefaultZone, watermarkDefaultVariant, update,
+    brandLogoUrl, brandLogoLightUrl, brandLogoDarkUrl, watermarkDefaultZone, watermarkDefaultVariant, update,
   } = useApp()
   const primary = brandColorPrimary || '#667eea'
 
@@ -78,21 +78,38 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   // undefined = no override yet (use post values); null/string = explicit override after regenerate or pick
   const [overridePrompt, setOverridePrompt] = useState(undefined)
   const [editorMsg, setEditorMsg] = useState(null)
+  // Separate from editorMsg on purpose: the watermark can succeed AND the logo can be wrong for
+  // stamping. Folding this into editorMsg would let the "Watermark applied" flash clobber the
+  // warning a second later, which is the whole failure we are trying to stop happening silently.
+  const [logoWarning, setLogoWarning] = useState(null)
   const [promptExpanded, setPromptExpanded] = useState(false)
 
-  // Watermark state. A studio with at least one logo variant gets the toggle ON
-  // by default. Zone/variant pre-fill from the studio's last-used defaults; the
-  // last successful apply persists back to those defaults.
+  // Watermark state. A studio with ANY usable logo — a light/dark variant, or just the primary
+  // via the fallback below — gets the toggle ON by default. Zone/variant pre-fill from the
+  // studio's last-used defaults; the last successful apply persists back to those defaults.
   const hasLight = !!brandLogoLightUrl
   const hasDark = !!brandLogoDarkUrl
   const hasVariant = hasLight || hasDark
+  // FALLBACK to the primary logo when no light/dark variant exists.
+  //
+  // The watermark path only ever read logo_light_url / logo_dark_url, so a studio that uploaded
+  // its logo to the PRIMARY slot — the one the Brand page displays — had an inert watermark
+  // button and no way to tell why. From the owner's side the product visibly "has" the logo.
+  // That is how Katie ended up asking the image model to draw her logo in a prompt, which can
+  // only ever invent one.
+  //
+  // Fallback is REQUEST-TIME ONLY. Nothing is persisted: seeding the variant columns would copy
+  // a dark logo into the light slot, which is wrong for dark photos and lies about what she
+  // uploaded. Here we simply say "there is one logo, use it whichever way you pick."
+  const usingPrimaryFallback = !hasVariant && !!brandLogoUrl
+  const hasLogo = hasVariant || usingPrimaryFallback
   const wmTouched = useRef(false)
   // Bug B guard: the content_deliveries photo_url this card last knew for its own element.
   // Sent as the optimistic-concurrency guard on every write, and updated on each successful
   // persist. Stable for the card's lifetime — the parent holds the delivery in state and does
   // not silently refetch, so post.photo_url is the load-time DB value and won't reset the ref.
   const dbPhotoUrlRef = useRef(post.photo_url)
-  const [wmEnabled, setWmEnabled] = useState(hasVariant)
+  const [wmEnabled, setWmEnabled] = useState(hasLogo)
   const [wmZone, setWmZone] = useState(watermarkDefaultZone || 'bottom-right')
   const [wmVariant, setWmVariant] = useState(watermarkDefaultVariant || 'auto')
   const [wmApplying, setWmApplying] = useState(false)
@@ -153,12 +170,12 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
     return () => clearInterval(id)
   }, [aiGenerating, aiGenStartedAt, resolvedStudioId, aiGenPrompt])
 
-  // Default the watermark toggle ON once we know the studio has a logo variant
+  // Default the watermark toggle ON once we know the studio has any usable logo
   // (logos may load into AppContext after first render). Stops once the user
   // manually toggles, so we never override an explicit choice.
   useEffect(() => {
-    if (!wmTouched.current) setWmEnabled(hasVariant)
-  }, [hasVariant])
+    if (!wmTouched.current) setWmEnabled(hasLogo)
+  }, [hasLogo])
 
   // Keep the manual-variant choice valid for what the studio actually uploaded.
   useEffect(() => {
@@ -498,7 +515,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
   }
 
   const applyWatermark = async () => {
-    if (!hasVariant || !resolvedStudioId) return
+    if (!hasLogo || !resolvedStudioId) return
     // Composite from the original un-watermarked image, never from an already-
     // stamped result (avoids double logos when re-applying with a new zone).
     const source = wmAppliedUrl ? wmSourceUrl : currentPhotoUrl
@@ -506,8 +523,44 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
       flashMsg({ type: 'error', text: 'No image to watermark yet' })
       return
     }
+    // Request-time fallback only — see usingPrimaryFallback above. Offering the one logo in both
+    // slots keeps `variant: 'auto'` from resolving to a null slot and returning watermarked:false,
+    // which would read to the owner as "no logo" on a studio that plainly has one.
+    const logoLight = brandLogoLightUrl || (usingPrimaryFallback ? brandLogoUrl : null)
+    const logoDark = brandLogoDarkUrl || (usingPrimaryFallback ? brandLogoUrl : null)
+
     setWmApplying(true)
     setEditorMsg(null)
+
+    // Warn, never block. Probed on the URL ACTUALLY BEING SENT, not just the fallback source —
+    // that way it also catches a pre-existing JPEG sitting in a variant slot uploaded before that
+    // slot's accept= excluded JPEG. accept= gates new uploads and never backfills old rows.
+    try {
+      const probeUrl = (wmVariant === 'dark' ? logoDark : logoLight) || logoLight || logoDark
+      if (probeUrl) {
+        const a = await probeLogoAlpha(probeUrl)
+        // Additive, not exclusive. A logo can be BOTH opaque and too small, and those need
+        // different remedies — re-export with transparency vs source a larger file. Reporting
+        // only the first one sends the owner off to do half the fix and come back still broken.
+        const problems = []
+        if (a.ok && a.opaque) {
+          problems.push('no transparent background, so it will stamp as a solid block')
+        }
+        if (a.ok && a.w > 0 && a.w < 400) {
+          problems.push(`only ${a.w}×${a.h}px, so it will look soft on a 1024px photo`)
+        }
+        setLogoWarning(
+          problems.length
+            ? `This logo has ${problems.join(', and is ')}. A transparent PNG around 1000px wide will stamp cleanly.`
+            : null
+        )
+      }
+    } catch {
+      // A probe failure is UNDETERMINED, never a warning. Firing a false alarm on the owner's own
+      // correct file is worse than staying quiet.
+      setLogoWarning(null)
+    }
+
     try {
       const res = await fetch('/.netlify/functions/watermark', {
         method: 'POST',
@@ -515,8 +568,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
         body: JSON.stringify({
           image_url: source,
           studio_id: resolvedStudioId,
-          logo_light_url: brandLogoLightUrl || null,
-          logo_dark_url: brandLogoDarkUrl || null,
+          logo_light_url: logoLight,
+          logo_dark_url: logoDark,
           zone: wmZone,
           variant: wmVariant,
         }),
@@ -734,8 +787,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                 </button>
               </div>
 
-              {/* ── Logo watermark ── (only when the studio has uploaded a variant) */}
-              {hasVariant && (
+              {/* ── Logo watermark ── (any uploaded logo: variant, or primary via fallback) */}
+              {hasLogo && (
                 <div className="mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -792,6 +845,14 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
 
                       {/* Variant selector + actions */}
                       <div className="flex-1">
+                        {/* With only a primary logo there is ONE asset — offering a light/dark
+                            choice would imply two exist and invite a selection that resolves to
+                            the same file either way. */}
+                        {usingPrimaryFallback ? (
+                          <p className="text-[10px] text-slate-500 mb-3">
+                            Using your uploaded logo. Add light and dark versions on the Brand page to have FCA pick the right one per photo.
+                          </p>
+                        ) : (<>
                         <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-2">Logo version</p>
                         <div className="inline-flex rounded-lg overflow-hidden mb-3" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
                           {[
@@ -819,6 +880,22 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
                         </div>
                         {wmVariant === 'auto' && hasLight && hasDark && (
                           <p className="text-[10px] text-slate-500 mb-3 -mt-1">Picks light or dark automatically based on the photo behind the logo.</p>
+                        )}
+                        </>)}
+                        {/* Non-blocking. The composite still runs — this explains the result
+                            rather than preventing it. Persists past the success flash. */}
+                        {logoWarning && (
+                          <div
+                            className="flex items-start gap-1.5 px-2.5 py-2 rounded-lg text-[11px] mb-3"
+                            style={{
+                              background: 'rgba(245,158,11,0.1)',
+                              color: '#f59e0b',
+                              border: '1px solid rgba(245,158,11,0.2)',
+                            }}
+                          >
+                            <AlertTriangle size={12} className="mt-px shrink-0" />
+                            <span>{logoWarning}</span>
+                          </div>
                         )}
                         <div className="flex flex-wrap gap-2">
                           <button
