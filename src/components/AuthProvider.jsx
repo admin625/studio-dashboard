@@ -51,26 +51,28 @@ function decodeJwtClaim(token, key) {
   }
 }
 
-// Hardcoded admin accounts — bypass all Supabase role AND studio lookups
+// Hardcoded admin accounts — bypass the ROLE/SCOPE lookup only.
+//
+// ⚠️ DO NOT reintroduce a `studioData` key here. It used to bake brand fields in and skip the
+// studio_accounts query entirely, which meant the admin session rendered a correct-looking role
+// and studio name from literals while brand_font, brand_voice, brand_color_secondary,
+// studio_type, is_beta and all three logo URLs showed blank — every one of them populated in the
+// database the whole time.
+//
+// That was a data-loss path, not a display bug. BrandSettings seeds its form state from this
+// context and saves what it displays, and its own guard (authReady + studioLoadError) is
+// satisfied by construction when the values are baked — so the guard that exists precisely to
+// stop defaults overwriting stored values could not see the blanks coming through it.
+//
+// The bypass exists to skip the slow, timeout-prone role lookup. studioId is known right here,
+// so the normal studio_accounts query works fine and admin now reads real brand data like every
+// other account.
 const ADMIN_ACCOUNTS = {
   'admin@fiorsaoirse.com': {
     role: 'studio_owner',
     studioId: '085fde09-d7f7-486f-89d6-d65fc1838ab0',
     clientId: 'f896e176-ee81-4a7f-9414-500caba002fd',
     scopeType: 'studio',
-    studioData: {
-      studio_name: 'Mac Test Studio v2',
-      photo_source: 'ai_only',
-      ai_photo_prompt: '',
-      brand_color: '#667eea',
-      brand_color_secondary: '',
-      brand_font: '',
-      brand_voice: '',
-      logo_url: '',
-      is_beta: true,
-      studio_type: '',
-      last_content_types: [],
-    },
   },
 }
 
@@ -139,29 +141,9 @@ export default function AuthProvider({ children }) {
         studioLoadError: false,
       }
 
-      // Admin accounts have studioData baked in — skip the Supabase query entirely
-      const adminData = ADMIN_ACCOUNTS[user.email]
-      if (adminData?.studioData) {
-        const s = adminData.studioData
-        Object.assign(updates, {
-          studioName: s.studio_name || '',
-          photoSource: s.photo_source || 'studio_only',
-          aiPhotoPrompt: s.ai_photo_prompt || '',
-          brandColorPrimary: s.brand_color || '',
-          brandColorSecondary: s.brand_color_secondary || '',
-          brandFont: s.brand_font || '',
-          brandVoice: s.brand_voice || '',
-          brandLogoUrl: s.logo_url || '',
-          brandLogoLightUrl: s.logo_light_url || '',
-          brandLogoDarkUrl: s.logo_dark_url || '',
-          watermarkDefaultZone: s.watermark_default_zone || 'bottom-right',
-          watermarkDefaultVariant: s.watermark_default_variant || 'auto',
-          isBeta: s.is_beta || false,
-          studioType: s.studio_type || '',
-          lastContentTypes: s.last_content_types || [],
-        })
-        applyBrandColors(s.brand_color, s.brand_color_secondary)
-      } else if (ri?.studioId) {
+      // Every studio session — admin included — loads its brand from studio_accounts. There is
+      // no baked-data branch: see the note on ADMIN_ACCOUNTS above for why it was removed.
+      if (ri?.studioId) {
         try {
           const { data: s, error: qErr } = await withTimeout(
             supabase.from('studio_accounts')
