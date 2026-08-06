@@ -32,7 +32,10 @@ const FREESTYLE_TEMPLATES = {
 // Fallback used only when a studio has genuinely never set a brand voice.
 // Named (not inline) so the re-sync effect below can tell "still the placeholder"
 // apart from "the owner typed this themselves" and never clobber a real edit.
-const BRAND_VOICE_FALLBACK = 'Energetic, motivating, and community-focused'
+// No BRAND_VOICE_FALLBACK. A placeholder that can reach the payload is indistinguishable
+// from a real brand voice by the time it is in the prompt, and 7 of 10 studios have
+// brand_voice NULL, so the placeholder was not an edge case — it was the common path.
+// An empty field is visibly empty and is blocked at submit instead.
 
 export default function GenerateModal({ open, onClose, onSubmitted }) {
   const app = useApp()
@@ -50,7 +53,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
   const [freestyle, setFreestyle] = useState(false)
   const [freestylePrompt, setFreestylePrompt] = useState('')
   const [sessionVibe, setSessionVibe] = useState(app.aiPhotoPrompt || app.brandVoice || '')
-  const [brandVoice, setBrandVoice] = useState(app.brandVoice || BRAND_VOICE_FALLBACK)
+  const [brandVoice, setBrandVoice] = useState(app.brandVoice || '')
   const [targetAudience, setTargetAudience] = useState('Fitness enthusiasts and local community members')
   const [fitnessFocus, setFitnessFocus] = useState('General fitness, wellness, and community')
   const [primaryGoal, setPrimaryGoal] = useState('')
@@ -75,7 +78,7 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
   // Only overwrite while the field is still untouched, so an owner's own edit is never clobbered.
   useEffect(() => {
     if (app.brandVoice) {
-      setBrandVoice(prev => (!prev || prev === BRAND_VOICE_FALLBACK) ? app.brandVoice : prev)
+      setBrandVoice(prev => prev ? prev : app.brandVoice)
     }
     const vibeSeed = app.aiPhotoPrompt || app.brandVoice
     if (vibeSeed) setSessionVibe(prev => prev ? prev : vibeSeed)
@@ -148,6 +151,17 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
     // visible error. Refuse instead.
     if (app.studioLoadError) {
       setError("Couldn't load your studio profile, so generating now would use generic defaults instead of your brand voice. Reload the page and try again - if it keeps happening, contact support.")
+      return
+    }
+
+    // Second path to the same outcome, and NOT a race: the profile loads fine but brand_voice
+    // is empty in the DB. studioLoadError is false, so the guard above never fires, and the
+    // generation goes out in a voice that is not this studio's. Verbatim brand voice is the
+    // proven differentiator, so refuse rather than produce plausible generic content silently.
+    // Recoverable two ways, and the copy says both: set it once in Brand Settings (durable),
+    // or type one here for this generation. NOT a "reload and try again" - nothing is loading.
+    if (!brandVoice.trim()) {
+      setError("Your studio doesn't have a brand voice set yet, and generating without one produces generic content that won't sound like you. Add one in Brand Settings, or type one below for this generation.")
       return
     }
 
