@@ -23,6 +23,8 @@
  * Track B: source clips (reel-sources) + renders (reel-renders) are private, studio-scoped. Fetchable URLs are
  * minted at use (WF1 sign-to-probe, WF2 sign-at-render, and here sign-at-load) — never baked into the DB.
  */
+const { requireStudioAccess } = require('./_authz');
+
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fidhmvuurygpknhshpml.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WF2_URL = process.env.WF2_WEBHOOK_URL || 'https://jmac.app.n8n.cloud/webhook/wf2-render';
@@ -109,7 +111,9 @@ exports.handler = async (event) => {
 
   try {
     if (body.action === 'list') {
-      if (!body.studio_id) return respond(400, { error: 'studio_id is required' });
+      // studio_id arrives from the caller. A valid session is NOT evidence it is their studio.
+      const gate = await requireStudioAccess(event, body.studio_id, 'member');
+      if (!gate.ok) return respond(gate.status, { error: gate.error });
       const r = await rest('reel_edls?studio_id=eq.' + encodeURIComponent(body.studio_id) +
         '&select=reel_id,studio_id,status,edl,render_status,render_url,render_id,render_submitted_at,created_at,updated_at&order=created_at.desc');
       const rows = await r.json();
@@ -152,6 +156,9 @@ exports.handler = async (event) => {
       const rows = await r.json();
       const row = Array.isArray(rows) ? rows[0] : null;
       if (!row) return respond(404, { error: 'Reel not found' });
+      // Gate on the studio the REEL belongs to, not one the caller names.
+      const gate = await requireStudioAccess(event, row.studio_id, 'member');
+      if (!gate.ok) return respond(gate.status, { error: gate.error });
       const studioName = await studioNameFor(rest, row.studio_id);
       const url = await signRenderUrl(row.render_url, downloadFilename(studioName, row.created_at));
       return respond(200, { render_url: url });
@@ -160,6 +167,18 @@ exports.handler = async (event) => {
     if (body.action === 'approve') {
       if (!body.reel_id) return respond(400, { error: 'reel_id is required' });
       if (!WF2_SECRET) return respond(500, { error: 'WF2_WEBHOOK_SECRET is not configured. Set it in Netlify environment variables.' });
+
+      // Authorize BEFORE the state check, so a non-member cannot use the 409-vs-403 difference
+      // to learn whether another studio's reel exists or what state it is in.
+      const own = await rest('reel_edls?reel_id=eq.' + encodeURIComponent(body.reel_id) + '&select=studio_id&limit=1');
+      const ownRows = await own.json();
+      const ownRow = Array.isArray(ownRows) ? ownRows[0] : null;
+      if (!ownRow) return respond(404, { error: 'Reel not found' });
+      // 'member', not 'owner': approve IS the generate step, and the agreed scope gives
+      // instructors view + generate + edit for their own studio. It does spend money on a
+      // render, so if that should be owner-only this is the single word to change.
+      const gate = await requireStudioAccess(event, ownRow.studio_id, 'member');
+      if (!gate.ok) return respond(gate.status, { error: gate.error });
 
       // Fetch the pending EDL so we can fold the reviewer's final hook in as the moat signal.
       const cur = await rest('reel_edls?reel_id=eq.' + encodeURIComponent(body.reel_id) + '&status=eq.pending_approval&select=edl&limit=1');
