@@ -211,12 +211,57 @@ export default function Reels() {
 // "too dense to assemble — try a calmer pacing or a shorter target length". That advice was
 // actively harmful: the reuse budget scales WITH the target, so shortening the target makes
 // avoidable_clip_reuse MORE likely. It recommended the action that causes the failure.
+// Seconds, in the owner's terms: whole numbers once we're past 10s, one decimal below that.
+function fmtSecs(n) {
+  if (!Number.isFinite(n) || n < 0) return null
+  return n >= 10 ? `${Math.round(n)}s` : `${(Math.round(n * 10) / 10).toFixed(1)}s`
+}
+
+// How much footage the owner actually supplied, against the target she asked for.
+//
+// WF1 does not report footage directly, but it reports forced_reuse_budget_s, which it computes
+// as max(0, target - distinctSourceDurationSum). So whenever that budget is ABOVE zero it is
+// exactly the shortfall, and footage = target - shortfall. When it is zero we only know footage
+// >= target, which is why the sufficient-footage branch below never quotes a number it can't
+// stand behind. Deriving it here avoids a WF1 write; if checks ever carries source_footage_s
+// directly, prefer that and delete this.
+// Below this, a "shortfall" is rounding noise, not something she can act on. Quoting it
+// produces "Add roughly 0.0s more", which reads like advice and isn't.
+const MIN_MEANINGFUL_SHORTFALL_S = 0.5
+
+function footageVsTarget(reel) {
+  const checks = (reel.validation && reel.validation.checks) || {}
+  const target = Number(reel.duration_s)
+  const shortfall = Number(checks.forced_reuse_budget_s)
+  // `target > 0` rather than isFinite: reels.js sends duration_s: null when edl.output is
+  // missing, and Number(null) is 0, which IS finite. That sailed through as a 0s target and
+  // rendered the literal string "null" at the customer.
+  if (!(target > 0)) return null
+  if (!Number.isFinite(shortfall) || shortfall < 0) return null
+  // shortfall > target would mean footage < 0, which the validator's max(0, target - footage)
+  // cannot produce — but the two numbers arrive from different places, so don't assume.
+  const actionable = shortfall >= MIN_MEANINGFUL_SHORTFALL_S && shortfall <= target
+  return { target, shortfall, footage: actionable ? target - shortfall : null }
+}
+
 function assemblyFailureCopy(reel) {
   const flags = reel.validation && Array.isArray(reel.validation.flags) ? reel.validation.flags : []
   const has = (prefix) => flags.some((f) => typeof f === 'string' && f.startsWith(prefix))
+  const fvt = footageVsTarget(reel)
 
-  if (has('avoidable_clip_reuse'))
-    return 'This edit repeated the same footage more than it needed to. Add another clip, or try a longer target length.'
+  if (has('avoidable_clip_reuse')) {
+    // Two different failures wear this one flag, and they need opposite advice.
+    // Shortfall > 0: she genuinely does not have enough footage for the target she picked.
+    // Shortfall = 0: she had plenty and the plan repeated clips anyway — telling her to add
+    // more footage there is wrong, and is what the previous single string did to everyone.
+    // Round the ask UP to a whole second: she should add at least enough, and "add roughly
+    // 6.4s" is a false precision she can't act on with a phone camera anyway.
+    if (fvt && fvt.footage != null)
+      return `You've added about ${fmtSecs(fvt.footage)} of footage for a ${fmtSecs(fvt.target)} reel, so the edit had to repeat clips to fill the gap. Add roughly ${Math.max(1, Math.ceil(fvt.shortfall))}s more and try again.`
+    if (fvt)
+      return `You have enough footage for a ${fmtSecs(fvt.target)} reel, but this edit repeated some of it anyway. Try again — a fresh plan usually fixes it.`
+    return 'This edit repeated the same footage more than it needed to. Try again, or add another clip.'
+  }
   if (has('clip_no_probe') || has('inout_oob'))
     return "We couldn't read one of your clips. Try re-uploading it, then create the reel again."
   if (has('edl_json_parse_failed') || has('opus_call_error'))
