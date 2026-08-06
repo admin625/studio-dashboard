@@ -16,7 +16,7 @@
  * the one field that is supposed to carry the studio's own identity — the same mistake as the
  * BRAND_VOICE_FALLBACK placeholder, which shipped a marketing cliche as 7 studios' brand voice.
  */
-const { requireStudioAccess } = require('./_authz');
+const { requireStudioAccess } = require('./_authz.cjs');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fidhmvuurygpknhshpml.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
