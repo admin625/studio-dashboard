@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase, SUPABASE_URL, authedJsonHeaders } from '../lib/supabase'
 import { downscaleToBase64, probeLogoAlpha } from '../lib/image'
+import { withDownloadParam } from '../lib/downloadUrl'
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
@@ -1291,7 +1292,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly }
           </button>
         )}
         {currentPhotoUrl && (
-          <a href={currentPhotoUrl} download target="_blank" rel="noopener noreferrer"
+          <a href={withDownloadParam(currentPhotoUrl)} download target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:-translate-y-0.5"
             style={{ background: 'rgba(255,255,255,0.04)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', textDecoration: 'none' }}>
             <Download size={12} /> Image
