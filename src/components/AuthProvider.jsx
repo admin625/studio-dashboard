@@ -7,6 +7,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { retryWithTimeout } from '../lib/retryWithTimeout'
+import { classifyStudioLoadError, describeStudioLoadFailure, STUDIO_LOAD_TIMEOUT, STUDIO_LOAD_NO_ROW } from '../lib/studioLoadDiagnostics'
 import { useApp } from '../context/AppContext'
 
 // Default brand colors — match :root in index.css
@@ -149,6 +150,8 @@ export default function AuthProvider({ children }) {
       // no baked-data branch: see the note on ADMIN_ACCOUNTS above for why it was removed.
       if (ri?.studioId) {
         updates.studioLoaded = false
+        const studioLoadStartedAt = Date.now()
+        let studioAttempts = 1
         try {
           // Retry once with a higher ceiling rather than one longer wait: a longer
           // single timeout trades a fast wrong answer for a slow one, while a second
@@ -160,9 +163,10 @@ export default function AuthProvider({ children }) {
             {
               ceilings: [5000, 8000],
               label: 'studio_accounts',
-              onRetry: (err) => {
+              onRetry: (err, attempt, attemptMs) => {
+                studioAttempts = attempt + 1
                 updates.studioLoadRetried = true
-                console.warn('[FCA] studio_accounts attempt 1 failed, retrying at 8000ms:', err.message)
+                console.warn(`[FCA] studio_accounts attempt ${attempt} gave up after ${attemptMs}ms (ceiling 5000ms) — retrying with an 8000ms ceiling. No server response yet; the first query may still be running.`)
               },
             }
           )
@@ -187,13 +191,33 @@ export default function AuthProvider({ children }) {
             })
             applyBrandColors(s.brand_color, s.brand_color_secondary)
             updates.studioLoaded = true
+            // Log the SUCCESS latency too. Without it there is no distribution to
+            // judge the 5000ms ceiling against, and any argument about the right
+            // timeout is guesswork about a number nobody has ever seen.
+            updates.studioLoadMs = Date.now() - studioLoadStartedAt
+            console.info(`[FCA] studio_accounts OK in ${updates.studioLoadMs}ms (attempts=${studioAttempts})`)
           } else {
-            // Query succeeded but returned no row — RLS likely blocked or wrong id
+            // Defensive: .single() normally reports zero rows as PGRST116 rather
+            // than data:null, so this branch is unusual — classify it the same way.
+            const elapsedMs = Date.now() - studioLoadStartedAt
             updates.studioLoadError = true
+            updates.studioLoadFailure = { kind: STUDIO_LOAD_NO_ROW, attempts: studioAttempts, elapsedMs, code: null }
+            console.error(describeStudioLoadFailure(STUDIO_LOAD_NO_ROW, { attempts: studioAttempts, elapsedMs }))
           }
         } catch (e) {
-          console.warn('[FCA] studio_accounts load failed after 2 attempts:', e.message)
+          // A client abort and a real database failure used to print the same
+          // string, so neither could be counted. They are now separate kinds with
+          // separate messages, and the attempt count is what actually happened —
+          // a PostgREST error is thrown after ONE attempt and must not be
+          // reported as "after 2 attempts".
+          const kind = classifyStudioLoadError(e)
+          const elapsedMs = e?.elapsedMs ?? (Date.now() - studioLoadStartedAt)
+          const attempts = e?.attempts ?? studioAttempts
           updates.studioLoadError = true
+          updates.studioLoadFailure = { kind, attempts, elapsedMs, code: e?.code ?? null }
+          const line = describeStudioLoadFailure(kind, { attempts, elapsedMs, code: e?.code, message: e?.message })
+          if (kind === STUDIO_LOAD_TIMEOUT) console.warn(line)
+          else console.error(line)
         }
       }
 

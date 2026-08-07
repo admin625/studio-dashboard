@@ -54,6 +54,48 @@ describe('retryWithTimeout', () => {
     expect(thunk).toHaveBeenCalledTimes(2)
   })
 
+  it('annotates the thrown error with attempts ACTUALLY made and elapsed time', async () => {
+    const thunk = vi.fn(never)
+    try {
+      await retryWithTimeout(thunk, { ceilings: [20, 30], backoffMs: 0, label: 'studio_accounts' })
+      throw new Error('should have thrown')
+    } catch (err) {
+      expect(err.attempts).toBe(2)
+      expect(err.elapsedMs).toBeGreaterThanOrEqual(45)
+      // attemptMs is the LAST attempt only, so it must be positive and never
+      // exceed the total. Don't pin it to the ceiling - timer granularity can
+      // land it a millisecond under.
+      expect(err.attemptMs).toBeGreaterThan(0)
+      expect(err.attemptMs).toBeLessThanOrEqual(err.elapsedMs)
+    }
+  })
+
+  it('reports ONE attempt when the thunk rejects without a retry configured', async () => {
+    // Guards the false-claim bug: a single-ceiling run must never be described
+    // as having retried.
+    const thunk = vi.fn().mockRejectedValue(Object.assign(new Error('nope'), { code: 'PGRST116' }))
+    await expect(
+      retryWithTimeout(thunk, { ceilings: [50], backoffMs: 0, label: 'studio_accounts' })
+    ).rejects.toMatchObject({ attempts: 1, code: 'PGRST116' })
+    expect(thunk).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes the attempt number and elapsed ms to onRetry', async () => {
+    const onRetry = vi.fn()
+    await retryWithTimeout(slow(60, { data: 'ok' }), { ceilings: [30, 200], backoffMs: 0, label: 't', onRetry })
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    const [, attempt, attemptMs] = onRetry.mock.calls[0]
+    expect(attempt).toBe(1)
+    expect(attemptMs).toBeGreaterThanOrEqual(30)
+  })
+
+  it('does not throw when the rejection value is a primitive', async () => {
+    const thunk = vi.fn().mockRejectedValue('plain string rejection')
+    await expect(
+      retryWithTimeout(thunk, { ceilings: [20], backoffMs: 0, label: 't' })
+    ).rejects.toBe('plain string rejection')
+  })
+
   it('waits the backoff between attempts', async () => {
     const thunk = vi.fn()
       .mockRejectedValueOnce(new Error('cold'))

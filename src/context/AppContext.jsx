@@ -19,6 +19,13 @@ const INITIAL_STATE = {
   // True when the studio_accounts read needed its second attempt. Surfaced so
   // the retry is observable in app state, not only in console output.
   studioLoadRetried: false,
+  // Wall-clock ms for a SUCCESSFUL studio_accounts read. This is the number that
+  // makes the 5000ms ceiling arguable from data rather than from instinct.
+  studioLoadMs: null,
+  // { kind, attempts, elapsedMs, code } on failure — see lib/studioLoadDiagnostics.
+  // Kind matters: a client timeout, an RLS-denied zero-row read, and a real
+  // database error demand three different responses and used to be one string.
+  studioLoadFailure: null,
   // Studio settings
   photoSource: 'studio_only',
   aiPhotoPrompt: '',
