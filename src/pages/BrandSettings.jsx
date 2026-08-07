@@ -133,29 +133,38 @@ function ExampleCard({ example, onUse, brandColor }) {
    MAIN PAGE
 ══════════════════════════════════════════════════════════ */
 export default function BrandSettings() {
-  const { authReady, studioLoadError } = useApp()
+  const { authReady, studioLoaded, studioLoadError } = useApp()
 
-  // Gate the entire form on studio-data hydration. AuthProvider sets the brand
-  // fields and authReady in the same context update, so authReady === true
-  // guarantees the stored brand values are present. Mounting BrandSettingsForm
+  // Gate the entire form on studio-data hydration. Mounting BrandSettingsForm
   // (and therefore allowing a Save) before that would let the form's defaults
   // overwrite real stored values — e.g. writing black over a studio's secondary
   // color (the pre-hydration race fixed 2026-07-04).
-  if (!authReady) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center py-32">
-          <Loader2 size={22} className="animate-spin" style={{ color: '#94A3B8' }} />
-        </div>
-      </Layout>
-    )
-  }
+  //
+  // This used to gate on authReady alone, on the reasoning that AuthProvider
+  // sets the brand fields and authReady in the same context update. That
+  // reasoning ignored the 10s safety valve, which sets authReady by itself with
+  // no brand fields attached — so authReady was a proxy for hydration, not
+  // hydration itself, and the valve firing reopened the exact race this guard
+  // was written to close. studioLoaded is the property; gate on it.
+  //
+  // Order matters: the error branch must come FIRST. A failed load leaves
+  // studioLoaded false as well as studioLoadError true, so checking hydration
+  // first would swallow the explanatory copy behind a spinner that never stops.
   if (studioLoadError) {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center gap-2 py-32 text-center">
           <p className="text-sm font-semibold text-[#475569]">Couldn't load your brand settings.</p>
           <p className="text-xs text-[#94A3B8]">Refresh to try again — we won't show the form until your saved brand loads, so nothing gets overwritten.</p>
+        </div>
+      </Layout>
+    )
+  }
+  if (!authReady || !studioLoaded) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-32">
+          <Loader2 size={22} className="animate-spin" style={{ color: '#94A3B8' }} />
         </div>
       </Layout>
     )

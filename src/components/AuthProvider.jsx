@@ -6,6 +6,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { retryWithTimeout } from '../lib/retryWithTimeout'
 import { useApp } from '../context/AppContext'
 
 // Default brand colors — match :root in index.css
@@ -139,17 +140,31 @@ export default function AuthProvider({ children }) {
         resolvedClientId: ri?.clientId || null,
         authReady: true,
         studioLoadError: false,
+        // No studio to load is a loaded state. Overwritten below for studio sessions.
+        studioLoaded: true,
+        studioLoadRetried: false,
       }
 
       // Every studio session — admin included — loads its brand from studio_accounts. There is
       // no baked-data branch: see the note on ADMIN_ACCOUNTS above for why it was removed.
       if (ri?.studioId) {
+        updates.studioLoaded = false
         try {
-          const { data: s, error: qErr } = await withTimeout(
-            supabase.from('studio_accounts')
+          // Retry once with a higher ceiling rather than one longer wait: a longer
+          // single timeout trades a fast wrong answer for a slow one, while a second
+          // attempt addresses a cold connection directly. Ceilings 5s then 8s.
+          const { data: s, error: qErr } = await retryWithTimeout(
+            () => supabase.from('studio_accounts')
               .select('studio_name, photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, logo_light_url, logo_dark_url, watermark_default_zone, watermark_default_variant, is_beta, studio_type, last_content_types')
               .eq('id', ri.studioId).single(),
-            5000, 'studio_accounts'
+            {
+              ceilings: [5000, 8000],
+              label: 'studio_accounts',
+              onRetry: (err) => {
+                updates.studioLoadRetried = true
+                console.warn('[FCA] studio_accounts attempt 1 failed, retrying at 8000ms:', err.message)
+              },
+            }
           )
           if (qErr) throw qErr
           if (s) {
@@ -171,12 +186,13 @@ export default function AuthProvider({ children }) {
               lastContentTypes: s.last_content_types || [],
             })
             applyBrandColors(s.brand_color, s.brand_color_secondary)
+            updates.studioLoaded = true
           } else {
             // Query succeeded but returned no row — RLS likely blocked or wrong id
             updates.studioLoadError = true
           }
         } catch (e) {
-          console.warn('[FCA] studio_accounts load failed:', e.message)
+          console.warn('[FCA] studio_accounts load failed after 2 attempts:', e.message)
           updates.studioLoadError = true
         }
       }
@@ -194,7 +210,11 @@ export default function AuthProvider({ children }) {
 
     let mounted = true
 
-    // Safety valve: if nothing sets authReady within 10s, force it
+    // Safety valve: if nothing sets authReady within 10s, force it so the app
+    // renders instead of hanging. It deliberately does NOT set studioLoaded —
+    // the brand fields are still absent when it fires, and with the retry the
+    // studio_accounts read can legitimately still be in flight at 10s. Any
+    // surface that writes brand data must gate on studioLoaded for that reason.
     const safetyTimer = setTimeout(() => {
       console.warn('[FCA] SAFETY VALVE: authReady forced after 10s timeout')
       app.update({ authReady: true })

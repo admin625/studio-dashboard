@@ -11,6 +11,14 @@ const INITIAL_STATE = {
   resolvedClientId: null,
   authReady: false,
   studioLoadError: false,
+  // studioLoaded is the PROPERTY (this session's brand data is in state).
+  // authReady is only a proxy for it, and a broken one: the 10s safety valve
+  // sets authReady on its own, with no brand fields attached. Anything that can
+  // WRITE brand data must gate on studioLoaded, never on authReady.
+  studioLoaded: false,
+  // True when the studio_accounts read needed its second attempt. Surfaced so
+  // the retry is observable in app state, not only in console output.
+  studioLoadRetried: false,
   // Studio settings
   photoSource: 'studio_only',
   aiPhotoPrompt: '',
