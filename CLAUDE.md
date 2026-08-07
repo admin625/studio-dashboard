@@ -1,221 +1,218 @@
 # FCA Studio Dashboard — Project CLAUDE.md
 
 > Read this at the start of every session. Do not skip it.
+>
+> **Rewritten 2026-08-07.** The previous version described a vanilla-JS single-file SPA with no
+> build step and no server-side secrets. None of that has been true for some time — it is a Vite +
+> React app with eight Netlify Functions holding service-role and API keys. If you find a claim
+> here that the code contradicts, the code wins; fix this file in the same session.
 
 ## What This Is
-FCA (Fitness Content Agent) is an AI-powered social media content platform for boutique fitness studios. FCA Studio is $599/mo standard, with quarterly ($1,617/3mo, ~10% savings) and annual ($5,750/yr, ~20% savings) commitment options. The first 100 founding studios pay $299/mo, locked in for life — quarterly $807/3mo and annual $2,870/yr also available at founding rates. Founding pricing is automatic at signup based on availability; no coupon code required. The agent generates platform-specific social media posts, matches or generates photos, creates video reels, and delivers everything to a dashboard where owners and instructors review, edit, and approve content.
 
-This repo (`admin625/studio-dashboard`) is the seller-facing dashboard — the primary UI for studio owners and instructors. It is a single-file vanilla JS SPA deployed on Netlify. All content generation happens in n8n workflows that write to Supabase; this dashboard reads and displays that data.
+FCA (Fitness Content Agent) is an AI-powered social content platform for boutique fitness studios.
+This repo (`admin625/studio-dashboard`) is the seller-facing dashboard — the primary UI for studio
+owners and instructors. Content generation happens in n8n workflows that write to Supabase; this
+dashboard reads, displays, and edits that data, and triggers generation via a webhook proxy.
 
-**Target users:** Boutique fitness studio owners (yoga, pilates, barre, cycling, HIIT, CrossFit, boxing, dance) and their instructors.
+**Target users:** boutique fitness studio owners (yoga, pilates, barre, cycling, HIIT, CrossFit,
+boxing, dance) and their instructors.
+
+> ⚠️ **This repository is PUBLIC.** Anything committed here is world-readable, and it has leaked a
+> webhook signing secret before. Never commit a secret, and never render a secret into the client
+> bundle — see *Secrets* below.
 
 ## Current Build State
-Live at https://studio-dash.netlify.app
-All core features built and deployed. One active paying client (Katie / TLK).
 
-## Tech Stack
-- **Frontend:** Vanilla JS SPA — single `index.html` (~2,450 lines, HTML + CSS + JS inline)
-- **Database:** Supabase (`fidhmvuurygpknhshpml`) — us-east-1
-- **Hosting:** Netlify (studio-dash.netlify.app)
-- **Content generation:** n8n Cloud (jmac.app.n8n.cloud) → Claude API → Supabase
-- **AI photos:** Flux 2 Pro via BFL API (n8n)
-> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
-- **Video reels:** Creatomate API (n8n)
-- **AI text:** Anthropic Claude (via n8n, not called from dashboard directly)
-- **Auth:** Supabase Auth (email/password, password reset)
-- **Repo:** admin625/studio-dashboard
+Live at **https://app.fiorsaoirse.com** (Netlify site `studio-dash`, ID `1e0a46ea-f313-4ff0-acdf-65ae6bd3bd58`).
+The `.netlify.app` subdomain and the custom domain are the same one site and one deploy — they
+cannot diverge. Environment variables belong on the **studio-dash** site.
 
-## ⚠️ Reel Architecture Status (2026-05-14)
+## Tech Stack — verified against the repo 2026-08-07
 
-Creatomate-based reel pipeline DEPRECATED. New composite architecture decided 2026-05-14:
-- Rendering: Shotstack (replaces Creatomate; handles variable-length user clips)
-- Captions: Submagic API
-- Edit decision list: Claude API (Anthropic)
-- Orchestration: n8n (three-workflow pattern, mirrors AI Photo gen)
-- Storage: new `reel-raw-clips` Supabase bucket (lifecycle: 30 days)
-- Feature-flagged: `reel_editor_enabled` scoped per studio, Katie-only initial beta
-- NOT a separate product or Supabase project — feature inside FCA
+- **Frontend:** React 19 + React Router 7, built with **Vite 8**. Tailwind CSS 4 via
+  `@tailwindcss/vite`. Icons from `lucide-react`.
+- **There IS a build step.** `npm run build` → `vite build` → `dist/`. Publish directory is `dist`,
+  not the repo root.
+- **Tests:** Vitest (`npm test` → `vitest run`).
+- **Backend:** Netlify Functions in `netlify/functions/` (esbuild bundler, Node 20).
+- **Database:** Supabase `fidhmvuurygpknhshpml` (us-east-1).
+- **Content generation:** n8n Cloud (`jmac.app.n8n.cloud`) → Claude API → Supabase.
+- **Deploy:** continuous deployment from `main`. Push → Netlify builds → publishes `dist/` and
+  bundles the functions.
 
-Formal architecture spec to be drafted post-FCA-launch (target: post-Monday 2026-05-18). Until spec exists, do NOT implement against any reel-related section in this file. If reel work is requested before the spec is published, surface to Mac for direction.
-
-Sections marked ⚠️ DEPRECATED 2026-05-14 below are preserved for historical context and JARVIS compile continuity.
-
-## Key Files
 ```
-index.html          — Entire SPA (HTML + CSS + JS inline, ~2,450 lines)
-assets/             — Static assets (logos, images)
-netlify.toml        — Netlify config (publish: root, SPA redirect)
-scripts/            — Utility scripts
-CLAUDE.md           — This file
+src/
+  main.jsx, App.jsx          — entry + routes
+  components/                — AuthProvider, ProtectedRoute, Layout, ErrorBoundary,
+                               DeliveryList, PostCard, PhotoGallery, GenerateModal,
+                               NewReelModal, HelpChatWidget
+  pages/                     — Login, AuthCallback, ForgotPassword, Dashboard, DeliveryView,
+                               BrandSettings, Photos, Reels, ReelUpload, AccountSettings, Scaffold
+  context/AppContext.jsx     — single app-wide state object (INITIAL_STATE + update/reset)
+  hooks/                     — useAuth, useBrandSettings
+  lib/                       — supabase, withTimeout, retryWithTimeout, brandFonts, image
+netlify/functions/           — see table below
+netlify.toml                 — build config, function timeouts, SPA redirect
+index.html                   — 21-line Vite entry point (NOT the app)
+legacy/index.html            — the retired ~2,450-line vanilla-JS SPA. Historical only. Do not edit.
+scripts/                     — one-off ops scripts (setup-fca-auth-users.js)
+workflows/                   — README only; n8n workflow notes
 ```
-No build step. No framework. No bundler. Publish directory is root (`.`).
 
-## Environment Variables
-Supabase credentials are initialized directly in `index.html`:
-```javascript
-const SUPABASE_URL = '...'   // https://fidhmvuurygpknhshpml.supabase.co
-const SUPABASE_ANON = '...'  // anon key (client-safe)
-```
-No server-side secrets in this repo. All sensitive API calls (Claude, BFL, Creatomate) happen in n8n workflows, not in the dashboard.
+### Routes
 
-## Supabase Schema (project: fidhmvuurygpknhshpml)
+`/login` · `/auth/callback` · `/forgot-password` are public. Everything else is wrapped in
+`ProtectedRoute`: `/deliveries` (default) · `/delivery/:id` · `/photos` · `/reels` ·
+`/reels/upload` · `/brand` · `/settings/account`. Unknown paths redirect to `/deliveries`.
 
-### Tables
+`/delivery/:id` is keyed by `id` so the component fully remounts per delivery — React Router reuses
+the instance across param changes, which otherwise bleeds prior delivery state into the next one.
 
-**content_deliveries** — generated content batches
-- id, created_at, studio_id, client_id, instructor_email
-- instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content (JSONB — array of post objects per platform)
-- platform_content (JSONB — unified format used by newer code paths)
-> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
-- video_url, video_status ('pending', 'rendering', 'ready', 'error'), video_render_id, video_error
-- reel_script (JSONB — full reel scene data)
+### Netlify Functions
 
-**studio_accounts** — studio settings and subscription
-- id, studio_name, owner_email, owner_name
-- plan_type ('studio_basic'), max_instructors (default 15)
-- stripe_customer_id, stripe_subscription_id, subscription_status ('active'), subscription_id, paid_seats, subscription_started_at
-- brand_color (default '#FF6B35')
-- photo_source ('studio_only', 'ai_assist', 'ai_only' — default 'studio_only')
-- ai_photo_prompt (text, nullable — per-studio direction for AI photo generation)
-- ai_photos_enabled (legacy boolean, replaced by photo_source)
-- referral_code, referral_credited_at
-- created_at, updated_at
+| Function | Notes |
+|---|---|
+| `_authz.cjs` | Shared authz gate. `requireStudioAccess(event, studioId, level)` — `level` is **required, no default** |
+| `reels.cjs` | Reel CRUD |
+| `derive-photo-style.cjs` | Drafts `ai_photo_prompt` from a studio's own photos |
+| `generate-content.js` | Generation entry point |
+| `proxy-webhook.js` | Fronts n8n webhooks. 26s timeout (set in `netlify.toml`) |
+| `help-chat.js` | Help chat backend |
+| `reel-create-background.js` | Background function for reel creation |
+| `watermark.js` | Logo watermarking |
 
-**studio_photos** — uploaded photo library
-- id, studio_id, photo_url, file_name, keywords, tags (instructor emails for matching)
-- Used by Smart Photo Matching in n8n
+> 🚨 **A function that `require`s a LOCAL file must be named `.cjs`.** `package.json` sets
+> `"type": "module"`, so as soon as a function requires a local module, Netlify bundles it as ESM
+> and `exports.handler` stops registering → `Runtime.HandlerNotFound`. This took `reels` down for
+> ~2 hours on 2026-08-06. Functions are named by basename, so renaming `.js` → `.cjs` does not
+> change the function URL. Verifying that esbuild can *resolve* an import does **not** verify that
+> the deployed artifact *exports a handler* — check the deployed function, not the bundle graph.
 
-**studio_instructors** — instructor profiles
-- id, studio_id, email, name, is_studio_instructor (boolean for role detection)
+## Secrets
 
-**clients** — studio client/account records
-- id, studio_id, email, name
+**Client (bundled, world-readable):** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. Anything
+prefixed `VITE_` is compiled into the JS bundle. Never put a non-public value behind that prefix.
 
-**reel_music_library** — background music for video reels
-- 20 Kevin MacLeod tracks (CC BY 4.0), 5 per mood category
-- Fields: title, artist, url, mood, duration, bpm
+**Server-side (Netlify Functions env, never bundled):** `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `HELP_CHAT_WEBHOOK_SECRET`,
+`LOGO_COMPOSITE_SERVICE_URL`, `LOGO_COMPOSITE_SHARED_SECRET`, `DASHBOARD_ORIGIN`.
 
-### RPC Functions
-- `get_delivery_summaries(studio_id)` — returns delivery list with content counts without transferring 36MB of JSONB content. Fallback: direct query with LIMIT 50.
-- `claim_founder_slot(...)` — server-side founding cohort gating. Determines whether a new signup qualifies for the founding rate ($299/mo) or pays standard ($599/mo). First-100 cap enforced atomically. Called at checkout — never bypass with coupon codes.
-
-### RLS
-Enabled on all tables. Queries are scoped by authenticated user's studio_id.
+The old claim "no server-side secrets in this repo" is false and was load-bearing in the wrong
+direction — treat every function as secret-holding.
 
 ## Auth Model
-Two roles, determined at login by querying `studio_instructors` and `studio_accounts`:
-- **studio_owner** — sees everything: all deliveries, settings panel, photo source selector, AI photo prompt, freestyle mode toggle, generate content button
-- **studio_instructor** — sees only their own deliveries, can edit captions/photos, no access to settings or freestyle mode
 
-Role stored in `AppState.role`. Owner-only sections gated by `AppState.role === 'studio_owner'`.
+Supabase Auth, email-anchored, with RLS on every table.
 
-## n8n Workflows (jmac.app.n8n.cloud)
+**Role resolution (`AuthProvider.jsx`), in order:**
 
-| Workflow | ID | Status | Trigger |
-|----------|-----|--------|---------|
-| Main Content Generator | `pTTpsIlhtOYHqvXd` | Active | Dashboard webhook |
-| FCA AI Photo Generator | `nJ9eWDmfPA0TH8og` | Active | `/webhook/fca-ai-photo` |
-| FCA Video Reel Generator | `t1xDbyCiad2oVJTM` | DEPRECATED 2026-05-14 | `/webhook/fca-video-reel` |
-| DEACTIVATED duplicate | `tqOVZd7JPERcsidM` | Inactive | (was causing webhook conflicts, deactivated 2026-03-04) |
+1. **Admin bypass** — `ADMIN_ACCOUNTS` maps an email to `role`/`studioId`/`clientId`/`scopeType`.
+   It skips the *role lookup only*. ⚠️ Do **not** reintroduce a `studioData` key here: it used to
+   bake brand fields in and skip the `studio_accounts` query, so the admin session rendered a
+   correct-looking role and studio name from literals while `brand_font`, `brand_voice`,
+   `brand_color_secondary`, `studio_type`, `is_beta` and all three logo URLs came through blank —
+   every one of them populated in the database the whole time. That is a data-loss path, not a
+   display bug, because BrandSettings saves what it displays.
+2. **JWT fast path** — `app_metadata.role` plus the `fca_studio_id` claim injected by the
+   server-side `custom_access_token_hook`. Resolves synchronously; cannot be left null by a slow
+   query.
+3. **Table lookup fallback** — `studio_instructors` then `clients`, for individual-scope and
+   legacy sessions with no claim.
 
-*Video Reel Generator (`t1xDbyCiad2oVJTM`): retired. Carousel Generator (`tFc4DO5gJkAB3hvW`) status TBD pending Mac decision.*
+Roles: `studio_owner` (everything) and `studio_instructor` (own deliveries only; no settings).
+The JWT carries `studio_owner` / `instructor`; the app gates on `studio_owner` /
+`studio_instructor` — `normalizeRole()` bridges the two.
 
-### Main Content Generator (36 nodes) — Full Flow
-```
-Webhook Trigger → Parse Form Data → Code in JavaScript (reset photo tracking)
-  → Workflow Configuration → If → Merge with Get Client Data
-  → Check Valid Studio → Check Trial Limits → Is Allowed?
-    → allowed: Get Studio Instructors → Get Studio Photos → Build Premium Prompt
-      → Generate Content with Claude → Parse Posts to Array → Smart Photo Matching
-      → Split Posts by Platform → Save to Content Deliveries
-        → Send Success Email + Update Trial Activity + Increment Posts Used
-        → Prepare Reel AI Input → Generate Reel Script (Claude) → Parse & Enrich Reel
-          → Get Reel Music → Assemble Reel Trigger → Trigger Video Reel V2 + Save Reel Script
-      → Check Low Scores → Trigger AI Photo (for match_score < 10)
-    → not allowed: Send Limit Reached Email
-  → invalid: Send Rejection Email
-```
+> ⚠️ All three resolvers compare email **exactly, with no `lower()`**. One capital letter is a
+> silent lockout. A studio owner must also have a `clients` row.
 
-### Photo Source Routing (added 2026-03-18)
-Dashboard sends `photo_source` and `ai_photo_prompt` in the generation payload:
-- `studio_only` → Smart Photo Matching runs, Check Low Scores returns [] (no AI ever)
-- `ai_assist` → Smart Photo Matching runs, low scores trigger AI Photo (default behavior)
-- `ai_only` → Smart Photo Matching skips entirely, all posts get needs_ai_image=true, all trigger AI Photo
+### Timeouts and the hydration gate
 
-`ai_photo_prompt` overrides the default fitness prompt in both Check Low Scores and Format Image Prompt nodes when present.
+Every Supabase read in `AuthProvider` is wrapped in `withTimeout` (5s), which races a promise but
+does **not** abort the underlying request. `studio_accounts` additionally uses
+`retryWithTimeout` — one retry at a higher ceiling (5s → 8s, 250 ms backoff). It takes a **thunk**,
+not a promise, because a Supabase query builder is a thenable that executes on `await`; re-awaiting
+one object is not a second attempt.
 
-> ⚠️ DEPRECATED 2026-05-14 — Renderer v3 (Creatomate) retired. Composite architecture pending. The block below is preserved for historical context only. Do not implement.
+A 10s safety valve force-sets `authReady` if nothing else has. **It sets `authReady` alone, with no
+brand fields.** So `authReady` is a proxy for hydration, not hydration itself. Anything that can
+*write* brand data must gate on **`studioLoaded`**, never on `authReady` — `BrandSettings` does,
+error branch first so a failed load explains itself instead of spinning forever.
 
-### Video Reel Renderer (v3, 2026-03-09)
-- 1080x1920, 30fps, dynamic 7-9 scenes, 18-20s target duration
-- Text in bottom 25%, gradient overlay (transparent top → 60% black bottom)
-- Images: y:30% focal point, cover fit, per-scene animations
-- CTA scene: 3-4s with brand color button + studio name + logo
-- Music OFF by default (include_music field) — studios add Instagram audio post-publish
-- reel_music_library: 20 Kevin MacLeod tracks (CC BY 4.0), 5 per mood
+⚠️ Every failure path here ends in `console.warn`/`console.error`. There is no beacon, no row, no
+counter — the real-world failure rate is **unknowable as built**, not merely unmeasured. Do not
+describe it as rare. `studioLoadRetried` makes a retry visible in app state; nothing persists it.
 
-## Dashboard Features
-- Login with Supabase Auth (owner + instructor roles, password reset)
-- Delivery list view with summary counts (via `get_delivery_summaries` RPC, fallback direct query)
-- Delivery detail view with per-platform post cards and format badges (feed post, story, thread)
-- Inline caption and hashtag editing (saves to platform_content JSONB)
-- Photo swap via photo editor with auto-save ("Saved" state feedback)
-> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
-- Video reel player with status indicators (spinner while rendering, player when ready, error display)
-- Generate Content modal:
-  - Standard mode: brand voice, target audience, fitness focus, goal, mood, CTA, hashtags, themes, promotions
-  - Freestyle mode (owner only): single textarea + 4 quick-start templates (event, instructor, transformation, seasonal)
-  - Instagram sub-format selector (Feed Post, Story, Thread)
-  - Per-generation photo direction field (pre-fills from studio setting, overridable)
-  - Platforms + post count always visible in both modes
-- Studio settings (owner only): photo source 3-way selector, AI photo prompt textarea with debounced auto-save, brand color
-- Progress bar and step counter on delivery detail
+## Supabase (`fidhmvuurygpknhshpml`)
 
-## Stripe Integration
-- **FCA Studio (standard):** $599/mo, $1,617/3mo (~10% savings), $5,750/yr (~20% savings)
-- **FCA Studio (founding cohort, first 100 only):** $299/mo, $807/3mo, $2,870/yr — locked in for life
-- **All-in pricing per HQ:** no per-seat add-on. The $299/$599 prices include all instructor seats.
-- **Founding cohort routing:** gated server-side via the `claim_founder_slot` RPC, NOT a coupon code. Founding rate is automatic at signup based on availability — no code required, no manual coupon assignment.
-- Stripe customer ID and subscription ID stored on studio_accounts
-- Subscription status checked on login
+Tables this repo reads or writes: `studio_photos`, `studio_accounts`, `content_deliveries`,
+`studio_instructors`, `clients`.
 
-## API Auth Patterns
-- **BFL (Flux 2 Pro):** `x-key` header — NOT Bearer
-> ⚠️ DEPRECATED 2026-05-14 — Creatomate reel pipeline retired. New composite architecture (Shotstack + Submagic + Claude EDL) pending formal spec. Do not implement against this section until spec published.
-- **Creatomate:** `Authorization: Bearer` prefix
-- **Anthropic Claude:** via n8n (not called from dashboard)
+RPCs called from this repo: `get_delivery_summaries(studio_id)` (delivery list without pulling
+tens of MB of JSONB; falls back to a direct query) and `update_delivery_post_field`.
 
-## Active Clients
-- Katie / TLK — brand_color: #5D7A7E (slate teal)
+RLS is on everywhere and scopes by studio. **`service_role` switches RLS off by design**, so every
+new function that uses it re-inherits the bypass and must hand-roll tenancy. Ask of any new
+function: *why does this hold the master key?* If it can read as the caller, it should.
 
-## Git Config
-```
-email: gurumcd@gmail.com
-name: admin625
-```
+## n8n Workflows (`jmac.app.n8n.cloud`)
+
+| Workflow | ID | Status |
+|---|---|---|
+| Main Content Generator | `pTTpsIlhtOYHqvXd` | Active |
+| FCA AI Photo Generator | `nJ9eWDmfPA0TH8og` | Active |
+| FCA Video Reel Generator | `t1xDbyCiad2oVJTM` | **Inactive but still called** — 404s every run |
+
+⚠️ **Re-check API-write safety immediately before every n8n API write; never cache the assessment.**
+Most of the fleet carries out-of-schema `settings` keys (`availableInMCP`, `binaryMode`) that make a
+PUT either 400 or silently drop stored settings. `pTTpsIlhtOYHqvXd` is currently **UI-only**.
+UI edits are two steps — save, then publish — then assert `versionId == activeVersionId`. A save
+alone leaves the old version running while `active: true` says otherwise.
+
+## Reels
+
+Creatomate is **retired**. Current pipeline: Shotstack (render) + Claude (edit decision list) +
+Submagic (captions), orchestrated in n8n. Phase 3 cards and the 12% watermark shipped 2026-08-06.
+
+⚠️ Shotstack posts **two different webhook types to one URL** — stills are blocked on
+disambiguating them. Cards are gated on a logo that can carry alpha; a JPEG logo has no alpha and
+watermarks as an opaque block.
+
+## Pricing
+
+Carried forward from the previous CLAUDE.md; not re-verified against Stripe in this rewrite.
+
+- FCA Studio standard: $599/mo · $1,617/3mo · $5,750/yr
+- Founding cohort (first 100, locked for life): $299/mo · $807/3mo · $2,870/yr
+- All-in — no per-seat add-on. Founding rate is gated **server-side via `claim_founder_slot`**,
+  automatic at signup. Not a coupon code; never bypass it with one.
 
 ## What Claude Code Must Never Do
-- **Never touch Supabase project `mtjqsjpgwiaacybyklkt`** (HeardChef) or `ruoovanjsycohnhugeku` (Amazon PPC) or `uceoibajdgabumsofzvx` (Lead Gen)
-- **Never delete or deactivate active n8n workflows** — especially `pTTpsIlhtOYHqvXd` (Main Content Generator)
-- **Never modify webhook URLs** on active workflows — they are live and receiving production traffic
-- **Never remove RLS policies** — all tables are scoped by studio_id
-- **Never hardcode API keys in index.html** — all sensitive calls go through n8n
-- **Never introduce a build step** — this is a zero-dependency vanilla JS SPA and must stay that way
-- **Never mix FCA tables with other product tables** — HeardChef tables were removed 2026-03-14, keep it clean
 
-## n8n IF Node Fix Pattern
-IF nodes imported from JSON may be missing `conditions.options` with `caseSensitive` and `typeValidation`. Fix by adding:
-```json
-"options": { "caseSensitive": true, "typeValidation": "strict", "version": 2, "leftValue": "" }
-```
-Auto-sanitization in n8n MCP handles this when any update is made via MCP.
+- **Never commit a secret to this repo — it is public.** Never put a non-public value behind `VITE_`.
+- **Never name a Netlify function `.js` if it requires a local module.** Use `.cjs`.
+- **Never gate a brand-data write on `authReady`.** Use `studioLoaded`.
+- **Never reintroduce `studioData` into `ADMIN_ACCOUNTS`.**
+- **Never delete or deactivate active n8n workflows**, especially `pTTpsIlhtOYHqvXd`.
+- **Never modify webhook URLs** on active workflows — they take production traffic.
+- **Never remove RLS policies.**
+- **Never touch Supabase projects** `mtjqsjpgwiaacybyklkt` (HeardChef), `ruoovanjsycohnhugeku`
+  (Amazon PPC), or `uceoibajdgabumsofzvx` (Lead Gen).
+- **Never edit `legacy/`.** It is the retired SPA, kept for reference only.
+
+## Working Conventions
+
+- Run `npm test` and `npm run build` before pushing. Run `/review` before any `git push`.
+- Playwright browser installs are unreliable on this Windows machine — prefer manual verification
+  or the deployed-artifact checks below over automated browser QA.
+- **Verify the artifact, not the intention.** After a deploy, fetch the built bundle from
+  `app.fiorsaoirse.com` and grep for a string unique to the change. A 200 proves shape, never values.
 
 ## Session History
+
 | Date | Changes |
-|------|---------|
-| 2026-03-04 | Video player, delivery RPC, auth rollback to stable baseline, deactivated duplicate workflow |
-| 2026-03-09 | Freestyle mode, FREESTYLE_OWNERS_ONLY flag, delivery query optimization, video reel renderer v3 |
-| 2026-03-14 | Inline editing for captions/hashtags, Instagram sub-format selector, format badges, HeardChef tables removed |
-| 2026-03-18 | Photo source 3-way selector, AI photo prompt, Generate button fix, Save button fix, toggle/dropdown contrast, n8n workflow updated for photo_source routing |
-| 2026-05-05 | CLAUDE.md pricing updated to canonical $299/$599 founding cohort routing (no per-seat add-on, server-side gating via `claim_founder_slot` RPC). |
-| 2026-07-04 | BrandSettings secondary-color persistence fix (gate form on authReady hydration, drop black `#0A0B0D` sentinel for `''` unset). Corrected stale Supabase project ref `kidgcrqxrfcbsaeguwop` → `fidhmvuurygpknhshpml` (live app DB per `src/lib/supabase.js`). |
+|---|---|
+| 2026-07-04 | BrandSettings secondary-colour persistence fix; corrected stale Supabase project ref |
+| 2026-07-30 | Edit capture (`post_revisions`) live; health monitor armed |
+| 2026-08-06 | Reel Phase 3 cards + watermark shipped; `.cjs` hotfix after ~2h `reels` outage |
+| 2026-08-07 | `retryWithTimeout` on the `studio_accounts` read; `studioLoaded` hydration gate replaces `authReady` in BrandSettings; **this file rewritten** — prior version described an architecture that no longer existed |
