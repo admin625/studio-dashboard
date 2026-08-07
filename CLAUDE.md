@@ -251,4 +251,4 @@ Carried forward from the previous CLAUDE.md; not re-verified against Stripe in t
 | 2026-07-04 | BrandSettings secondary-colour persistence fix; corrected stale Supabase project ref |
 | 2026-07-30 | Edit capture (`post_revisions`) live; health monitor armed |
 | 2026-08-06 | Reel Phase 3 cards + watermark shipped; `.cjs` hotfix after ~2h `reels` outage |
-| 2026-08-07 | `retryWithTimeout` on the `studio_accounts` read; `studioLoaded` hydration gate replaces `authReady` in BrandSettings; **this file rewritten** — prior version described an architecture that no longer existed |
+| 2026-08-07 | `retryWithTimeout` on the `studio_accounts` read (5s → 8s); `studioLoaded` hydration gate replaces `authReady` in BrandSettings; failure-kind instrumentation (`studioLoadMs`, `studioLoadFailure`) so a client abort, an RLS-denied zero-row read and a real DB error stop sharing one log string; query timings measured; **this file rewritten** — prior version described an architecture that no longer existed |
