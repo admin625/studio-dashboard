@@ -146,7 +146,14 @@ describe it as rare. `studioLoadRetried` makes a retry visible in app state; not
 ## Supabase (`fidhmvuurygpknhshpml`)
 
 Tables this repo reads or writes: `studio_photos`, `studio_accounts`, `content_deliveries`,
-`studio_instructors`, `clients`.
+`studio_instructors`, `clients`, plus the reels tables (`reel_edls`, `reel_hook_captures`,
+`reel_music_library` — see *Reels*).
+
+⚠️ **`reel_edls` is RLS deny-by-default**, so it is reachable only through the `service_role`
+`reels.cjs` function. Everything else is readable by the browser under `authenticated` policies.
+Measured 2026-08-07: the `studio_accounts` read is a **0.105 ms** seq scan (10 rows, 2 buffers) and
+the SELECT policy's own lookups add **0.223 ms**. Nothing on this database is slow — if a query
+appears to take seconds, the time is in connection setup or the network, not in Postgres.
 
 RPCs called from this repo: `get_delivery_summaries(studio_id)` (delivery list without pulling
 tens of MB of JSONB; falls back to a direct query) and `update_delivery_post_field`.
@@ -171,12 +178,41 @@ alone leaves the old version running while `active: true` says otherwise.
 
 ## Reels
 
-Creatomate is **retired**. Current pipeline: Shotstack (render) + Claude (edit decision list) +
-Submagic (captions), orchestrated in n8n. Phase 3 cards and the 12% watermark shipped 2026-08-06.
+Creatomate is gone. Current pipeline: **Claude** produces the edit decision list → **Shotstack**
+renders → **Submagic** captions, orchestrated in n8n. Phase 3 cards and the 12% watermark shipped
+2026-08-06.
 
-⚠️ Shotstack posts **two different webhook types to one URL** — stills are blocked on
-disambiguating them. Cards are gated on a logo that can carry alpha; a JPEG logo has no alpha and
-watermarks as an opaque block.
+### Data model
+
+| Table | Shape |
+|---|---|
+| `reel_edls` | `reel_id`, `studio_id`, `status`, `edl` (jsonb), `render_status`, `render_url`, `render_error`, `render_id`, `render_submitted_at`, `created_at`, `updated_at` |
+| `reel_hook_captures` | `capture_id`, `reel_id`, `studio_id`, `overlay_index`, `proposed_text`, `final_text`, `hook_edited`, `captured_at` |
+| `reel_music_library` | Kevin MacLeod tracks (CC BY 4.0) by mood |
+
+`reel_hook_captures` stores proposed vs final hook text with an `hook_edited` flag — the same
+proposal-vs-published delta that `post_revisions` captures for captions. It is the voice-fidelity
+signal for reels; don't treat it as an audit log and don't prune it.
+
+### Why `reels.cjs` exists
+
+**`public.reel_edls` is RLS deny-by-default** — no policy grants `authenticated` anything, so the
+browser cannot read its own reels. `netlify/functions/reels.cjs` is a `service_role` function that
+serves the Reels list and the approve/deliver actions. `service_role` bypasses RLS entirely, so
+that function hand-rolls its tenancy: it re-reads `studio_id` off the row and compares before
+mutating. Any new read/write path against `reel_edls` must do the same, via
+`_authz.cjs requireStudioAccess(event, studioId, level)`.
+
+### Creation is asynchronous by design
+
+`NewReelModal` → `reel-create-background.js` returns **202 immediately** rather than blocking on a
+sync-function timeout. n8n WF1 then persists a `pending_approval` row, which the Reels list
+surfaces by polling. A reel that never appears means WF1 didn't write the row — look there, not at
+the function.
+
+⚠️ Shotstack posts **two different webhook types to one URL**; stills are blocked on disambiguating
+them. Cards are gated on a logo that can carry alpha — a JPEG logo has no alpha and watermarks as
+an opaque block.
 
 ## Pricing
 
