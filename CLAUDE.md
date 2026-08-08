@@ -74,12 +74,21 @@ the instance across param changes, which otherwise bleeds prior delivery state i
 |---|---|
 | `_authz.cjs` | Shared authz gate. `requireStudioAccess(event, studioId, level)` — `level` is **required, no default** |
 | `reels.cjs` | Reel CRUD |
-| `derive-photo-style.cjs` | Drafts `ai_photo_prompt` from a studio's own photos |
+| `derive-photo-style.cjs` | Drafts `ai_photo_prompt` from a studio's own photos. 26s timeout |
+| `derive-photo-keywords.cjs` | Derives `studio_photos.keywords` (the CANDIDATE side of photo matching) from each photo. Owner-level. **Dry run by default** — writing needs `dry_run:false`; re-deriving needs `redo:true`. Never overwrites `keywords_source='human'`. 26s timeout |
 | `generate-content.js` | Generation entry point |
 | `proxy-webhook.js` | Fronts n8n webhooks. 26s timeout (set in `netlify.toml`) |
 | `help-chat.js` | Help chat backend |
 | `reel-create-background.js` | Background function for reel creation |
 | `watermark.js` | Logo watermarking |
+
+> 🚨 **Every file in `netlify/functions/` becomes a deployable function, and a function name must
+> be alphanumeric + hyphen + underscore only.** One dot fails the **entire** deploy — not just that
+> file — with `Incorrect function names`. A `*.test.js` beside its function did exactly that on
+> 2026-08-08 (deploy `6a775dc9`). Function tests live in `test/`, never in `netlify/functions/`.
+> A failed deploy never publishes, so the symptom is the *previous* commit still being served and
+> the new endpoint returning 404 — which reads exactly like "CD isn't running". It isn't. Check
+> `netlify api listSiteDeploys` for `state: error` before concluding anything about CD.
 
 > 🚨 **A function that `require`s a LOCAL file must be named `.cjs`.** `package.json` sets
 > `"type": "module"`, so as soon as a function requires a local module, Netlify bundles it as ESM
