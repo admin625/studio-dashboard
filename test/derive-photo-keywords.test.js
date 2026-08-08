@@ -1,11 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
 
-// The function is .cjs (it requires _authz.cjs locally, and a local require in a "type":"module"
-// package must stay CommonJS or Netlify drops exports.handler). Load it through createRequire so
-// the test exercises the exact module Netlify bundles, not a re-implementation.
+// WHY THIS FILE IS NOT NEXT TO THE FUNCTION IT TESTS
+// --------------------------------------------------
+// Netlify treats EVERY file in netlify/functions/ as a deployable function, and a function name
+// must be alphanumeric + hyphen + underscore only. A file named `*.test.js` therefore produces:
+//
+//   "Incorrect function names. Name should consist of only alphanumeric characters,
+//    hyphen & underscores"
+//
+// ...which fails the ENTIRE deploy, not just that one file. Verified 2026-08-08: deploy
+// 6a775dc9 errored for exactly this reason. Keep function tests in test/, never in
+// netlify/functions/.
+//
+// The function is .cjs (it requires _authz.cjs locally, and a local require inside a
+// "type":"module" package must stay CommonJS or Netlify drops exports.handler). createRequire
+// loads the exact module Netlify bundles rather than a re-implementation.
 const require = createRequire(import.meta.url)
-const { splitTerms } = require('./derive-photo-keywords.cjs')
+const { splitTerms } = require('../netlify/functions/derive-photo-keywords.cjs')
 
 describe('splitTerms — the model-output trust boundary', () => {
   it('keeps a clean comma-delimited list intact', () => {
