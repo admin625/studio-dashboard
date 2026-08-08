@@ -19,7 +19,17 @@
  */
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'heic']
 
-/** Slug a string for use in a filename: lowercase, ASCII, hyphen-joined. */
+/**
+ * Slug a string for use in a filename: lowercase, ASCII, hyphen-joined, capped.
+ *
+ * ⚠️ These rules MUST match `downloadFilename()` in netlify/functions/reels.cjs.
+ * Reels and photos are the same product and must not download under two
+ * conventions. They are two implementations because that one is CJS running in a
+ * Netlify function and this one is ESM bundled by Vite — a shared module would
+ * make the function require a local file across the module-format boundary, which
+ * is the exact shape that took reels down with Runtime.HandlerNotFound. Until
+ * that is done properly, changing either copy means changing both.
+ */
 function slug(s) {
   return String(s || '')
     .toLowerCase()
@@ -27,6 +37,7 @@ function slug(s) {
     .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
 }
 
 /**
@@ -55,10 +66,19 @@ function extFromUrl(url) {
  * so it would collapse siblings into one name for most deliveries. Position always
  * exists. Same reasoning as keying an aggregate on array ordinality.
  */
-export function photoDownloadName({ studioName, platform, index, url, date } = {}) {
-  const studio = slug(studioName) || 'fca-studio'
-  const d = (date instanceof Date && !isNaN(date) ? date : new Date()).toISOString().slice(0, 10)
-  const parts = [studio, d]
+export function photoDownloadName({ studioName, platform, index, url, createdAt } = {}) {
+  const studio = slug(studioName) || 'studio'
+
+  // Truthiness check BEFORE constructing the Date: `new Date(null)` is epoch 0, a
+  // perfectly valid date, so an isNaN guard alone silently ships "1970-01-01".
+  // A missing date yields the literal 'undated' — visible, not quietly today's.
+  const d = createdAt ? new Date(createdAt) : null
+  const day = d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : 'undated'
+
+  // 'photo' mirrors '-reel-' in reels.cjs, so the two read as one product.
+  // platform + position follow because a delivery holds several photos and a reel
+  // holds one; reels need no disambiguation and photos do.
+  const parts = [studio, 'photo', day]
   const plat = slug(platform)
   if (plat) parts.push(plat)
   if (Number.isFinite(index)) parts.push(String(index + 1))

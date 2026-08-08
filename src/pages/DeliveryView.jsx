@@ -189,6 +189,7 @@ export default function DeliveryView() {
               index={idx}
               platform={activeTab}
               deliveryId={id}
+              createdAt={delivery.created_at}
               readOnly={readOnly}
             />
           ))}
