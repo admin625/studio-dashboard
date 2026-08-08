@@ -17,6 +17,17 @@
 [functions."proxy-webhook"]
   timeout = 26
 
+# Ten concurrent vision calls. Each is ~3-5s and they overlap, but the default 10s window is not
+# enough headroom for a full batch plus the Supabase read.
+[functions."derive-photo-keywords"]
+  timeout = 26
+
+# One vision call carrying up to 10 images does not fit in the 10s default. This function was
+# blocked on ANTHROPIC_API_KEY, which was set 2026-08-07 — and it would still have timed out.
+# Clearing the known blocker did not make it work.
+[functions."derive-photo-style"]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
