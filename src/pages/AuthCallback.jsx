@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { takePendingPath } from '../lib/deepLink'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
@@ -16,7 +17,11 @@ export default function AuthCallback() {
         navigate('/login?error=magic_link_expired', { replace: true })
         return
       }
-      navigate('/deliveries', { replace: true })
+      // A magic link is a fresh document, so React Router's history state is
+      // gone by the time we get here — sessionStorage is the only carrier that
+      // survives the trip out to the mail client and back. Allowlist-validated
+      // inside takePendingPath; no pending destination yields /deliveries.
+      navigate(takePendingPath(), { replace: true })
     }
     handle()
   }, [navigate])

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
+import { deliveryPathFromQuery } from './lib/deepLink'
 import { AppProvider, useApp } from './context/AppContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthProvider from './components/AuthProvider'
@@ -33,6 +34,16 @@ function HelpChat() {
 function DeliveryRoute() {
   const { id } = useParams()
   return <DeliveryView key={id} />
+}
+
+// Delivery emails link to `/?id=<delivery_id>`, the retired SPA's route shape.
+// Honour it here so already-sent emails work; `?id=` absent or unparseable keeps
+// the previous behaviour exactly. See lib/deepLink.js for why this lives in the
+// app rather than in the email template.
+function RootRedirect() {
+  const location = useLocation()
+  const deep = deliveryPathFromQuery(location.search)
+  return <Navigate to={deep || '/deliveries'} replace />
 }
 
 export default function App() {
@@ -102,7 +113,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/" element={<Navigate to="/deliveries" replace />} />
+              <Route path="/" element={<RootRedirect />} />
               <Route path="*" element={<Navigate to="/deliveries" replace />} />
             </Routes>
           </AuthProvider>

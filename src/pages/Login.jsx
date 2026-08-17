@@ -1,25 +1,36 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
+import { safeRedirect, takePendingPath } from '../lib/deepLink'
 
 export default function Login() {
   const { login } = useAuth()
   const { user, authReady } = useApp()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Redirect to dashboard if already authenticated
+  // Redirect once authenticated. Destination is whatever ProtectedRoute recorded
+  // on the way in — history state for the in-app hop, sessionStorage as the
+  // cross-document fallback — and is allowlist-validated before we navigate.
+  // No pending destination means /deliveries, exactly as before.
   useEffect(() => {
     if (authReady && user) {
-      navigate('/deliveries', { replace: true })
+      // Always take (and therefore clear) the stash, even when history state
+      // wins — otherwise a stale destination survives to bounce a later login
+      // somewhere the user did not ask to go.
+      const pending = takePendingPath()
+      const fromState = location.state && location.state.from
+      const dest = fromState ? safeRedirect(fromState) : pending
+      navigate(dest, { replace: true })
     }
-  }, [authReady, user, navigate])
+  }, [authReady, user, navigate, location.state])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
