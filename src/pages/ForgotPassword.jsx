@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { nextPathFromQuery } from '../lib/deepLink'
 
 export default function ForgotPassword() {
   const { loginWithMagicLink, loading } = useAuth()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState(null)
@@ -13,7 +15,8 @@ export default function ForgotPassword() {
     e?.preventDefault?.()
     if (!email) return
     setError(null)
-    const { ok, error } = await loginWithMagicLink(email)
+    // Carry the destination the studio was originally headed for into the email.
+    const { ok, error } = await loginWithMagicLink(email, nextPathFromQuery(location.search))
     if (ok) setSubmitted(true)
     else setError(error)
   }

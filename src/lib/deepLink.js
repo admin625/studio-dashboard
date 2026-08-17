@@ -1,5 +1,5 @@
 /**
- * Email deep-link handling, and the allowlist that guards the login round trip.
+ * Email deep-link handling, and the allowlist that guards every post-login hop.
  *
  * WHY THIS EXISTS: delivery emails emit `/?id=<delivery_id>` — the route shape of
  * the retired vanilla SPA, which read it with URLSearchParams. The React rewrite
@@ -8,29 +8,38 @@
  * instead of their delivery. Neither side errored, which is why it went unseen.
  *
  * Fixed in the app rather than in the email template because weeks of already-sent
- * emails carry this URL shape. Only an app-side fix repairs those; changing the
- * template would repair future sends alone.
+ * emails carry this URL shape. Only an app-side fix repairs those.
  *
- * ONE definition of the allowlist, imported by ProtectedRoute, Login and
- * AuthCallback. Three copies would drift — the repo already carries that hazard
- * with slug() in downloadUrl.js vs reels.cjs, and that pair at least has a stated
- * reason (module-format boundary). These three are all Vite-bundled ESM, so there
- * is no reason to duplicate.
+ * THE DESTINATION RIDES IN THE URL, END TO END. An earlier version stashed it in
+ * sessionStorage. That could not work for magic links: mail clients open a new
+ * tab, sessionStorage is per-tab, and the stash was unreadable on the one path
+ * that matters most — magic link is the primary sign-in method for studios. The
+ * email itself demonstrated the better carrier, since `redirect_to` already
+ * survives the whole GoTrue round trip intact. Verified 2026-08-17: a
+ * query-bearing callback matches the `https://app.fiorsaoirse.com/**` allowlist
+ * entry and `next` round-trips unmodified.
+ *
+ * ONE definition of the allowlist, imported by ProtectedRoute, Login,
+ * ForgotPassword and AuthCallback. Three or four copies would drift, and drift in
+ * a security check is how a hole opens quietly.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Where anyone lands with no valid pending destination. */
+/** Where anyone lands with no valid destination. */
 export const DEFAULT_PATH = '/deliveries'
 
-/** Key for the cross-document hop. See stashPendingPath below for why storage. */
-const PENDING_KEY = 'fca_post_login_path'
+/** The query parameter that carries the destination on every hop. */
+const NEXT_PARAM = 'next'
 
 /**
  * Static in-app destinations a login round trip may return to. Mirrors the
  * authenticated routes in App.jsx. `/login`, `/auth/callback` and
  * `/forgot-password` are deliberately absent — returning to them post-login is
  * either a loop or meaningless.
+ *
+ * ⚠️ Adding an authenticated route to App.jsx means adding it here too, or a
+ * post-login return to it silently falls back to DEFAULT_PATH.
  */
 const STATIC_PATHS = new Set([
   '/deliveries',
@@ -44,18 +53,21 @@ const STATIC_PATHS = new Set([
 /**
  * Is this a destination we are willing to navigate to after login?
  *
- * ALLOWLIST, not sanitisation. The value reaches us from history state or session
- * storage, so it is attacker-influencable in principle; the safe posture is to
- * enumerate what is permitted rather than to try to strip what is not. Anything
- * unrecognised falls back to DEFAULT_PATH.
+ * A PATH, NEVER A URL. Do not "add support for full URLs" — accepting an absolute
+ * or protocol-relative URL here is exactly the open redirect this function exists
+ * to prevent. If a future feature needs to send someone off-site, that belongs in
+ * a separate, explicitly-named function with its own allowlist of hosts.
  *
- * Rejects absolute and protocol-relative URLs explicitly. `//evil.example` is a
- * valid protocol-relative URL that a naive `startsWith('/')` check accepts and a
- * browser resolves to a different origin — the classic open-redirect shape.
+ * ALLOWLIST, not sanitisation. Enumerate what is permitted rather than trying to
+ * strip what is not; anything unrecognised falls back to DEFAULT_PATH.
+ *
+ * Rejects protocol-relative URLs explicitly. `//evil.example` is a valid URL that
+ * a naive `startsWith('/')` check accepts and a browser resolves to a different
+ * origin — the classic open-redirect shape.
  */
 export function isAllowedPath(path) {
   if (typeof path !== 'string' || path.length === 0) return false
-  if (!path.startsWith('/')) return false   // relative or absolute URL
+  if (!path.startsWith('/')) return false   // relative, or an absolute URL with a scheme
   if (path.startsWith('//')) return false   // protocol-relative -> off-origin
   if (path.includes('\\')) return false     // backslash normalises to / in some parsers
 
@@ -80,10 +92,10 @@ export function safeRedirect(path) {
 /**
  * `/?id=<uuid>` -> `/delivery/<uuid>`, or null when there is nothing to do.
  *
- * UUID-validated before use because the value is interpolated into a URL path.
- * An unvalidated id would mount DeliveryView against garbage and surface a raw
- * PostgREST error; falling through to the list is today's behaviour and is the
- * right failure mode for a link we cannot make sense of.
+ * UUID-validated because the value is interpolated into a URL path. An
+ * unvalidated id would mount DeliveryView against garbage and surface a raw
+ * PostgREST error; falling through to the list is the right failure mode for a
+ * link we cannot make sense of.
  */
 export function deliveryPathFromQuery(search) {
   let id
@@ -98,34 +110,61 @@ export function deliveryPathFromQuery(search) {
 }
 
 /**
- * Persist the intended destination across the login hop.
+ * Read the destination off a query string. THIS IS THE SECURITY BOUNDARY.
  *
- * React Router's `location.state` rides the History API, which survives in-app
- * navigation but NOT a fresh document load. A magic link leaves the app entirely
- * and returns to /auth/callback as a new document, so state alone would drop the
- * destination on exactly the path most email users take. sessionStorage survives
- * that, within the same tab.
+ * `POST /auth/v1/otp` is reachable with the PUBLIC anon key, so anyone can mint a
+ * genuine magic link for any existing studio owner carrying an arbitrary
+ * `redirect_to` — including `/auth/callback?next=https://evil.example`. The victim
+ * gets a real Supabase link, authenticates for real, and is then redirected
+ * wherever `next` says.
  *
- * Storage can throw (Safari private mode, disabled storage). A failure here must
- * degrade to "land on the deliveries list", never to a broken login.
+ * Which means validating when we WRITE the parameter is worthless: an attacker
+ * never uses our write path. Read-side validation is the entire defense, and it
+ * has to run at every point that consumes `next` — AuthCallback, Login,
+ * ForgotPassword — with no exceptions and no "this one is internal" carve-outs.
+ *
+ * Fail-safe by construction: always returns a usable path, never null, so a caller
+ * cannot forget a fallback and navigate somewhere undefined.
  */
-export function stashPendingPath(path) {
-  if (!isAllowedPath(path)) return
+export function nextPathFromQuery(search) {
+  let raw
   try {
-    window.sessionStorage.setItem(PENDING_KEY, path)
+    raw = new URLSearchParams(search || '').get(NEXT_PARAM)
   } catch {
-    /* no-op: falls back to DEFAULT_PATH */
+    return DEFAULT_PATH
   }
+  return safeRedirect(raw)
 }
 
-/** Read and clear the pending destination. Always returns an allowlisted path. */
-export function takePendingPath() {
-  let stored = null
-  try {
-    stored = window.sessionStorage.getItem(PENDING_KEY)
-    window.sessionStorage.removeItem(PENDING_KEY)
-  } catch {
-    /* no-op */
-  }
-  return safeRedirect(stored)
+/**
+ * Attach the destination to an in-app hop: ProtectedRoute -> /login, and
+ * /login -> /forgot-password. Without the second hop the destination dies when a
+ * studio chooses the magic-link route, which is the majority path.
+ *
+ * Validated before it is written. That is not the defense — see
+ * nextPathFromQuery — but there is no reason to emit a value we would refuse to
+ * read back. Omits the parameter entirely for the default so ordinary logins keep
+ * clean URLs.
+ */
+export function withNext(basePath, destination) {
+  const dest = safeRedirect(destination)
+  if (dest === DEFAULT_PATH) return basePath
+  const params = new URLSearchParams()
+  params.set(NEXT_PARAM, dest)
+  return `${basePath}?${params.toString()}`
+}
+
+/**
+ * Build the `emailRedirectTo` for a magic-link request.
+ *
+ * GoTrue carries this through the round trip and hands it back as the browser's
+ * landing URL, which is how the destination survives a mail client opening a new
+ * tab. URL + searchParams for encoding, never string concatenation — a hand-built
+ * query string is how a `/` ends up read as a path separator somewhere downstream.
+ */
+export function buildCallbackUrl(origin, destination) {
+  const url = new URL('/auth/callback', origin)
+  const dest = safeRedirect(destination)
+  if (dest !== DEFAULT_PATH) url.searchParams.set(NEXT_PARAM, dest)
+  return url.toString()
 }

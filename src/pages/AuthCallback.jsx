@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { takePendingPath } from '../lib/deepLink'
+import { nextPathFromQuery } from '../lib/deepLink'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     const handle = async () => {
@@ -17,14 +18,14 @@ export default function AuthCallback() {
         navigate('/login?error=magic_link_expired', { replace: true })
         return
       }
-      // A magic link is a fresh document, so React Router's history state is
-      // gone by the time we get here — sessionStorage is the only carrier that
-      // survives the trip out to the mail client and back. Allowlist-validated
-      // inside takePendingPath; no pending destination yields /deliveries.
-      navigate(takePendingPath(), { replace: true })
+      // THE security-critical read. GoTrue hands back whatever redirect_to it was
+      // given, and POST /auth/v1/otp is reachable with the public anon key -- so a
+      // crafted link can arrive here carrying any ?next= at all, on a session that
+      // authenticated for real. nextPathFromQuery allowlists it; nothing else does.
+      navigate(nextPathFromQuery(location.search), { replace: true })
     }
     handle()
-  }, [navigate])
+  }, [navigate, location.search])
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#0A0B0D' }}>

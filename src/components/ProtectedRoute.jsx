@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
-import { stashPendingPath } from '../lib/deepLink'
+import { withNext } from '../lib/deepLink'
 
 export default function ProtectedRoute({ children }) {
   const { authReady, user } = useApp()
@@ -19,27 +19,12 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (!user) {
-    // Remember where they were headed so login can return them there. Previously
-    // this destination was simply lost, so an email deep link died at the login
-    // boundary even once /?id= was honoured — the deep link would work only for
-    // sessions that happened to already be signed in.
-    //
-    // Written BOTH ways deliberately. `state` covers the in-app hop to /login;
-    // sessionStorage additionally survives a magic link, which leaves the app and
-    // returns to /auth/callback as a fresh document where history state is gone.
-    // Both are allowlist-validated on the way out, never trusted on the way in.
-    //
-    // ACCEPTED TRADE-OFF: this is a side effect during render, not in an effect.
-    // Flagged in review 2026-08-17 and deliberately not restructured. It is
-    // idempotent — the same path written twice — so StrictMode's double-invoke is
-    // harmless; the residual risk is that a speculative render which never commits
-    // still writes, which this app's routes cannot currently produce (no Suspense
-    // or transitions here). Moving it into an effect would change ordering on the
-    // auth path, and this repo's auth surface is where the hydration-gate and
-    // admin-bypass problems came from. Not worth that blast radius for a write with
-    // no visible failure mode. Revisit if these routes ever gain Suspense.
-    stashPendingPath(location.pathname)
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    // Carry the intended destination in the URL. Previously it was lost entirely,
+    // so an email deep link died at the login boundary; then it was stashed in
+    // sessionStorage, which could not survive a magic link opening in a new tab.
+    // The URL is the only carrier that survives every hop, including out to a mail
+    // client and back. Validated on read at each consumer — see lib/deepLink.js.
+    return <Navigate to={withNext('/login', location.pathname)} replace />
   }
 
   return children

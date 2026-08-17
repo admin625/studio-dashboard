@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
-import { safeRedirect, takePendingPath } from '../lib/deepLink'
+import { nextPathFromQuery, withNext } from '../lib/deepLink'
 
 export default function Login() {
   const { login } = useAuth()
@@ -16,21 +16,15 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Redirect once authenticated. Destination is whatever ProtectedRoute recorded
-  // on the way in — history state for the in-app hop, sessionStorage as the
-  // cross-document fallback — and is allowlist-validated before we navigate.
-  // No pending destination means /deliveries, exactly as before.
+  // Redirect once authenticated, to whatever ProtectedRoute put in ?next=.
+  // No next means /deliveries, exactly as before.
   useEffect(() => {
     if (authReady && user) {
-      // Always take (and therefore clear) the stash, even when history state
-      // wins — otherwise a stale destination survives to bounce a later login
-      // somewhere the user did not ask to go.
-      const pending = takePendingPath()
-      const fromState = location.state && location.state.from
-      const dest = fromState ? safeRedirect(fromState) : pending
-      navigate(dest, { replace: true })
+      // Destination rides in our own query string. Allowlist-validated on read;
+      // nextPathFromQuery never returns null, so there is no fallback to forget.
+      navigate(nextPathFromQuery(location.search), { replace: true })
     }
-  }, [authReady, user, navigate, location.state])
+  }, [authReady, user, navigate, location.search])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -136,7 +130,7 @@ export default function Login() {
 
         <p className="text-center mt-6 text-xs text-slate-500">
           Forgot password?{' '}
-          <Link to="/forgot-password" className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
+          <Link to={withNext('/forgot-password', nextPathFromQuery(location.search))} className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
             Reset it here
           </Link>
         </p>
