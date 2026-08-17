@@ -52,7 +52,8 @@ src/
   hooks/                     — useAuth, useBrandSettings
   lib/                       — supabase, withTimeout, retryWithTimeout, brandFonts, image,
                                downloadUrl (photo download names + ?download param),
-                               deepLink (email deep link + post-login route allowlist)
+                               deepLink (email deep link, `?next=` carrier, post-login
+                               route allowlist — a security boundary, see Routes)
 netlify/functions/           — see table below
 netlify.toml                 — build config, function timeouts, SPA redirect
 index.html                   — 21-line Vite entry point (NOT the app)
@@ -79,24 +80,49 @@ template because already-sent emails carry this URL and only an app-side fix rep
 The id is UUID-validated before it is interpolated into a path; anything else falls through
 to `/deliveries`, the previous behaviour.
 
-**The intended destination survives login.** `ProtectedRoute` records it two ways — history
-state for the in-app hop to `/login`, and `sessionStorage` for a magic link, which leaves the
-app entirely and returns to `/auth/callback` as a fresh document where history state is gone.
-`Login` and `AuthCallback` both validate against the allowlist in `lib/deepLink.js` before
-navigating; arbitrary stored state is never followed. Without this the deep link would work
-only for sessions that happened to already be signed in — the dominant case is a logged-out
-click from an email. ⚠️ If you add an authenticated route, add it to `STATIC_PATHS` or a
-post-login return to it silently falls back to `/deliveries`.
+**The intended destination survives login, and it rides in the URL — `?next=`.** Without it the
+deep link would work only for sessions already signed in, and the dominant case is a logged-out
+click from an email.
 
-Two accepted trade-offs on that path, both deliberate, neither a live defect:
-- `sessionStorage` has **no TTL**, so an abandoned login leaves a stale destination for the
-  lifetime of the tab. A login an hour later in that same tab lands on the old delivery.
-- `stashPendingPath()` is called **during render**, not in an effect. It is idempotent, so
-  the StrictMode double-invoke is harmless, but a speculative render that never commits can
-  still write. Accepted rather than restructured because moving it into an effect changes
-  ordering on the auth path, and this repo's auth surface is where the hydration-gate and
-  admin-bypass problems came from. Not worth the blast radius for a write with no visible
-  failure mode.
+The carrier is `?next=<path>` on every hop, with no storage anywhere:
+
+```
+ProtectedRoute → /login?next= → /forgot-password?next= → emailRedirectTo → /auth/callback?next=
+```
+
+⚠️ **`/login` → `/forgot-password` is part of the chain, not a detour.** `loginWithMagicLink` is
+not called from `Login.jsx` — it lives on `ForgotPassword.jsx`, so the magic-link path *always*
+goes through that hop. A link between those two pages that drops the parameter kills the
+destination silently on the majority path. It shipped that way for a few hours on 2026-08-17 and
+was caught by tracing the call graph, not by reading the plan. Build every in-app hop with
+`withNext()`.
+
+**An earlier version stashed the destination in `sessionStorage`. Do not reintroduce it.**
+`sessionStorage` is per-tab and mail clients open links in a new tab, so the stash was unreadable
+on the one path that matters most. It could not work for magic links even in principle. The email
+itself demonstrated the better carrier: `redirect_to` already survives the whole GoTrue round trip.
+Removing the stash also removed its two known defects — an untimed stale destination and a
+render-phase write — so neither is a live trade-off any more.
+
+🚨 **Read-side validation is the entire defense, and it is not optional at any consumption point.**
+`POST /auth/v1/otp` is reachable with the **public anon key**, so anyone can mint a genuine magic
+link for any existing studio owner carrying an arbitrary `redirect_to` — including
+`/auth/callback?next=https://evil.example`. The victim authenticates for real and is then sent
+wherever `next` says. **Validating when we write the parameter is worthless — an attacker never
+uses our write path.** Every point that *reads* `next` must go through `nextPathFromQuery()`, which
+allowlists it: `AuthCallback`, `Login`, `ForgotPassword`. No exceptions, and no "this one is
+internal" carve-outs. `nextPathFromQuery` never returns null, so there is no fallback to forget.
+
+The allowlist lives in exactly one place, `lib/deepLink.js`. Three or four copies would drift, and
+drift in a security check is how a hole opens quietly. It takes a **path, never a URL** — do not
+"add support for full URLs", that is the open redirect it exists to prevent.
+
+⚠️ **If you add an authenticated route, add it to `STATIC_PATHS`** or a post-login return to it
+silently falls back to `/deliveries`.
+
+Covered by `test/deepLink.test.js` (77 cases). The hostile-input set is a single shared `HOSTILE`
+array reused across every carrier, so a new carrier cannot be added with a weaker rejection set.
+Keep it that way — that property is structural, not a matter of remembering.
 
 ### Netlify Functions
 
@@ -142,6 +168,33 @@ direction — treat every function as secret-holding.
 ## Auth Model
 
 Supabase Auth, email-anchored, with RLS on every table.
+
+### Origins — the app does not get the last word on where a magic link lands
+
+🚨 **GoTrue honours `emailRedirectTo` only when it matches the Redirect URLs allowlist. On no
+match it silently falls back to Site URL — no error, on either side.** So this repo can request
+the correct host and be overridden by a dashboard setting it cannot see. That is exactly what
+happened: Site URL and all five allowlist entries were `studio-dash.netlify.app` while the app
+asked for `app.fiorsaoirse.com`, and because **sessions are origin-scoped**, every studio signing
+in by magic link ended up authenticated on the netlify subdomain and still logged out on the
+custom domain. Magic link is the only self-serve auth email in the product.
+
+Fixed 2026-08-17 in the Supabase dashboard, not in this repo:
+
+| Setting | Value |
+|---|---|
+| Site URL | `https://app.fiorsaoirse.com` (rollback: `https://studio-dash.netlify.app`) |
+| Redirect URLs | `app.fiorsaoirse.com/auth/callback` + `app.fiorsaoirse.com/**`, **plus all five original netlify entries incl. `deploy-preview-*`** |
+
+`/**` is what lets a query-bearing callback through, which is why `?next=` needs no allowlist
+entry of its own. Verified by round trip, not assumed.
+
+⚠️ **Two origins still work, with independent sessions.** Collapsing them needs a Netlify 301 and
+forces a one-time re-auth for everyone — a separate decision, deliberately not bundled. ⚠️ **The
+delivery email still emits `studio-dash.netlify.app/?id=`**, so a studio clicking it lands on the
+deprecated origin and re-authenticates there. That fix is an n8n edit on `pTTpsIlhtOYHqvXd`, not
+a change here. ⚠️ Supabase dashboard config fields can store invisible trailing whitespace that
+propagates as `%20` — check with End/Shift+End, never by eye.
 
 **Role resolution (`AuthProvider.jsx`), in order:**
 
@@ -268,6 +321,11 @@ Carried forward from the previous CLAUDE.md; not re-verified against Stripe in t
 - **Never name a Netlify function `.js` if it requires a local module.** Use `.cjs`.
 - **Never gate a brand-data write on `authReady`.** Use `studioLoaded`.
 - **Never reintroduce `studioData` into `ADMIN_ACCOUNTS`.**
+- **Never navigate to a `next` value that has not been through `nextPathFromQuery()`**, and never
+  treat write-time validation as a substitute — the attacker mints the link, not us.
+- **Never carry the post-login destination in `sessionStorage`, `localStorage`, or history state.**
+  The URL is the only carrier that survives a mail client. Removed 2026-08-17; do not restore it.
+- **Never add an in-app hop toward `/login` or `/forgot-password` without `withNext()`.**
 - **Never delete or deactivate active n8n workflows**, especially `pTTpsIlhtOYHqvXd`.
 - **Never modify webhook URLs** on active workflows — they take production traffic.
 - **Never remove RLS policies.**
@@ -291,4 +349,4 @@ Carried forward from the previous CLAUDE.md; not re-verified against Stripe in t
 | 2026-07-30 | Edit capture (`post_revisions`) live; health monitor armed |
 | 2026-08-06 | Reel Phase 3 cards + watermark shipped; `.cjs` hotfix after ~2h `reels` outage |
 | 2026-08-07 | `retryWithTimeout` on the `studio_accounts` read (5s → 8s); `studioLoaded` hydration gate replaces `authReady` in BrandSettings; failure-kind instrumentation (`studioLoadMs`, `studioLoadFailure`) so a client abort, an RLS-denied zero-row read and a real DB error stop sharing one log string; query timings measured; **this file rewritten** — prior version described an architecture that no longer existed |
-| 2026-08-17 | Email deep link `/?id=` honoured and preserved through login (`lib/deepLink.js`, route allowlist); `test/deepLink.test.js` added — the allowlist is a security boundary and shipped without committed tests, corrected same day. Routes and `src/lib` inventory in this file were stale and are now current |
+| 2026-08-17 | **Session 1** — email deep link `/?id=` honoured and preserved through login (`lib/deepLink.js`, route allowlist), `884582a`; `test/deepLink.test.js` added at `1b58a8e` — the allowlist is a security boundary and shipped without committed tests, corrected same day. **Session 2** — destination moved off `sessionStorage` onto `?next=`, URL-borne end to end including the `/login` → `/forgot-password` hop where it would otherwise have died silently on the majority path (`aa812b5`, 77 tests, mutation-tested). **Supabase auth URL config fixed outside this repo** — Site URL and the Redirect URLs allowlist held only `studio-dash.netlify.app`, so every magic-link user authenticated on the wrong origin and stayed logged out on the custom domain; see *Auth Model → Origins*. This file's `sessionStorage` design description was stale within hours of being written and is now current |
