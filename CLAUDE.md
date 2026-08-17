@@ -50,7 +50,9 @@ src/
                                BrandSettings, Photos, Reels, ReelUpload, AccountSettings, Scaffold
   context/AppContext.jsx     — single app-wide state object (INITIAL_STATE + update/reset)
   hooks/                     — useAuth, useBrandSettings
-  lib/                       — supabase, withTimeout, retryWithTimeout, brandFonts, image
+  lib/                       — supabase, withTimeout, retryWithTimeout, brandFonts, image,
+                               downloadUrl (photo download names + ?download param),
+                               deepLink (email deep link + post-login route allowlist)
 netlify/functions/           — see table below
 netlify.toml                 — build config, function timeouts, SPA redirect
 index.html                   — 21-line Vite entry point (NOT the app)
@@ -67,6 +69,34 @@ workflows/                   — README only; n8n workflow notes
 
 `/delivery/:id` is keyed by `id` so the component fully remounts per delivery — React Router reuses
 the instance across param changes, which otherwise bleeds prior delivery state into the next one.
+
+**`/` honours `?id=<delivery_id>` and routes to `/delivery/:id`.** Delivery emails emit
+`/?id=<delivery_id>` — the route shape of the retired vanilla SPA, which read it via
+`URLSearchParams`. The React rewrite never read a query param, so from the rewrite until
+2026-08-17 every studio arriving by email was silently dropped on the deliveries list.
+Neither side errored, which is why it went unseen. Fixed in the app rather than the email
+template because already-sent emails carry this URL and only an app-side fix repairs those.
+The id is UUID-validated before it is interpolated into a path; anything else falls through
+to `/deliveries`, the previous behaviour.
+
+**The intended destination survives login.** `ProtectedRoute` records it two ways — history
+state for the in-app hop to `/login`, and `sessionStorage` for a magic link, which leaves the
+app entirely and returns to `/auth/callback` as a fresh document where history state is gone.
+`Login` and `AuthCallback` both validate against the allowlist in `lib/deepLink.js` before
+navigating; arbitrary stored state is never followed. Without this the deep link would work
+only for sessions that happened to already be signed in — the dominant case is a logged-out
+click from an email. ⚠️ If you add an authenticated route, add it to `STATIC_PATHS` or a
+post-login return to it silently falls back to `/deliveries`.
+
+Two accepted trade-offs on that path, both deliberate, neither a live defect:
+- `sessionStorage` has **no TTL**, so an abandoned login leaves a stale destination for the
+  lifetime of the tab. A login an hour later in that same tab lands on the old delivery.
+- `stashPendingPath()` is called **during render**, not in an effect. It is idempotent, so
+  the StrictMode double-invoke is harmless, but a speculative render that never commits can
+  still write. Accepted rather than restructured because moving it into an effect changes
+  ordering on the auth path, and this repo's auth surface is where the hydration-gate and
+  admin-bypass problems came from. Not worth the blast radius for a write with no visible
+  failure mode.
 
 ### Netlify Functions
 
@@ -261,3 +291,4 @@ Carried forward from the previous CLAUDE.md; not re-verified against Stripe in t
 | 2026-07-30 | Edit capture (`post_revisions`) live; health monitor armed |
 | 2026-08-06 | Reel Phase 3 cards + watermark shipped; `.cjs` hotfix after ~2h `reels` outage |
 | 2026-08-07 | `retryWithTimeout` on the `studio_accounts` read (5s → 8s); `studioLoaded` hydration gate replaces `authReady` in BrandSettings; failure-kind instrumentation (`studioLoadMs`, `studioLoadFailure`) so a client abort, an RLS-denied zero-row read and a real DB error stop sharing one log string; query timings measured; **this file rewritten** — prior version described an architecture that no longer existed |
+| 2026-08-17 | Email deep link `/?id=` honoured and preserved through login (`lib/deepLink.js`, route allowlist); `test/deepLink.test.js` added — the allowlist is a security boundary and shipped without committed tests, corrected same day. Routes and `src/lib` inventory in this file were stale and are now current |
