@@ -11,6 +11,7 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
+import { newAttemptId, emit, emitFailure } from '../lib/uploadTelemetry'
 import { Loader2, X, Sparkles, UploadCloud } from 'lucide-react'
 
 const PLATFORMS = [
@@ -48,13 +49,42 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
   }, [])
 
   const submit = useCallback(async () => {
-    if (busy || !studioId || !files.length) return
+    // D4 — instrument at submit ENTRY, before the first condition evaluates.
+    // The guard below returns before upload, before the 202, and before the Reels
+    // create-poll starts, so anything hung off the poll cannot observe it. The only
+    // claim that covers branches nobody has enumerated yet is "the button was
+    // pressed and the path terminated here", and it has to be stamped first.
+    const attemptId = newAttemptId()
+    const t0 = Date.now()
+    emit(attemptId, 'upload_started', {
+      studio_id: studioId || null,
+      clip_count: files.length,
+      elapsed_ms: 0,
+    })
+
+    if (busy || !studioId || !files.length) {
+      // Not a user-visible failure — a no-op guard. It is recorded anyway because
+      // "she pressed the button and nothing happened" is indistinguishable from a
+      // dead create path unless this row exists.
+      void emitFailure(attemptId, {
+        studio_id: studioId || null,
+        clip_count: files.length,
+        stage: 'submit_guard',
+        elapsed_ms: Date.now() - t0,
+        error: {
+          message: 'submit returned before upload began',
+          reason: busy ? 'already_busy' : !studioId ? 'no_studio_id' : 'no_files_selected',
+        },
+      })
+      return
+    }
     setError(null)
     const reelId = crypto.randomUUID()
 
     // 1) Upload clips to the studio's private library (RLS-scoped by studio).
     setPhase('uploading')
     const sourceClips = []
+    let bytesSent = 0
     for (let i = 0; i < files.length; i++) {
       const clipId = crypto.randomUUID()
       const path = `${studioId}/${reelId}/${String(i + 1).padStart(2, '0')}-${sanitize(files[i].name)}`
@@ -62,10 +92,44 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
         .from('reel-sources')
         .upload(path, files[i], { upsert: false, contentType: files[i].type || undefined })
       if (upErr) {
+        // Customer-visible state FIRST. emitFailure serially awaits an insert, a possible
+        // session refresh, and a fetch — each of which hangs on exactly the degraded
+        // network that caused this failure. Awaiting it would leave her watching a
+        // spinner for seconds after the outcome is already known.
         setError(`Upload failed for ${files[i].name}: ${upErr.message}`)
         setPhase('')
+        // Capture the whole error object, unswallowed. `upErr.message` alone is what
+        // the customer sees; the status code and body are what make it diagnosable.
+        void emitFailure(attemptId, {
+          studio_id: studioId,
+          reel_id: reelId,
+          stage: 'storage_upload',
+          clip_index: i + 1,
+          clip_count: files.length,
+          file_name: files[i].name,
+          file_size_bytes: files[i].size,
+          mime_type: files[i].type || null,
+          bytes_sent: bytesSent,
+          elapsed_ms: Date.now() - t0,
+        }, upErr)
         return
       }
+      bytesSent += files[i].size
+      // Progress is per-clip, not per-byte: supabase-js v2 storage exposes no
+      // progress callback, and per-byte would mean replacing this call with a raw
+      // XHR against the storage REST endpoint — a much larger change to a live
+      // create path. Per-clip is throttled by construction.
+      emit(attemptId, 'upload_progress', {
+        studio_id: studioId,
+        reel_id: reelId,
+        clip_index: i + 1,
+        clip_count: files.length,
+        file_name: files[i].name,
+        file_size_bytes: files[i].size,
+        mime_type: files[i].type || null,
+        bytes_sent: bytesSent,
+        elapsed_ms: Date.now() - t0,
+      })
       sourceClips.push({ clip_id: clipId, storage_path: path, uploaded_order: i + 1 })
     }
 
@@ -98,11 +162,31 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || ('HTTP ' + res.status))
       }
+      // Clips are in storage and WF1 has been dispatched. This is NOT "the reel
+      // was created" — WF1 may still never persist a reel_edls row, which is the
+      // orphan case. That gap is what makes this row worth having: an attempt with
+      // upload_completed and no matching reel_edls row is the orphan, detectable.
+      emit(attemptId, 'upload_completed', {
+        studio_id: studioId,
+        reel_id: reelId,
+        clip_count: files.length,
+        bytes_sent: bytesSent,
+        elapsed_ms: Date.now() - t0,
+      })
       setPhase('')
       onCreated && onCreated(reelId)
     } catch (e) {
+      // Customer-visible state first, telemetry after. See the storage_upload branch.
       setError(e.message)
       setPhase('')
+      void emitFailure(attemptId, {
+        studio_id: studioId,
+        reel_id: reelId,
+        stage: 'wf1_dispatch',
+        clip_count: files.length,
+        bytes_sent: bytesSent,
+        elapsed_ms: Date.now() - t0,
+      }, e)
     }
   }, [busy, studioId, files, theme, platform, duration, energy, hookDirection, onCreated])
 
