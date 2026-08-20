@@ -82,10 +82,25 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
     const reelId = crypto.randomUUID()
 
     // 1) Upload clips to the studio's private library (RLS-scoped by studio).
+    //
+    // The loop is wrapped because supabase-js does NOT return every failure as
+    // { error }. storage-js handleOperation ends:
+    //     if (isStorageError(error)) return { data: null, error }
+    //     throw error
+    // so an HTTP error response (403, 409, 413 size rejection) arrives as `upErr`
+    // and is handled below — but anything that is not a StorageError is RETHROWN.
+    // A dropped connection mid-upload, an AbortError, or a CORS failure surfaces as
+    // a bare TypeError, escapes this function entirely, and leaves the modal stuck on
+    // "Uploading clips…" with no message and no telemetry: the exact silent failure
+    // this feature exists to end. A mid-upload network drop is also one of the leading
+    // candidates for the 08-17 attempts that never reached storage.
     setPhase('uploading')
     const sourceClips = []
     let bytesSent = 0
+    let clipIndex = 0
+    try {
     for (let i = 0; i < files.length; i++) {
+      clipIndex = i + 1
       const clipId = crypto.randomUUID()
       const path = `${studioId}/${reelId}/${String(i + 1).padStart(2, '0')}-${sanitize(files[i].name)}`
       const { error: upErr } = await supabase.storage
@@ -131,6 +146,29 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
         elapsed_ms: Date.now() - t0,
       })
       sourceClips.push({ clip_id: clipId, storage_path: path, uploaded_order: i + 1 })
+    }
+    } catch (e) {
+      // Non-StorageError thrown out of supabase-js (see the note above the loop).
+      // Before this branch existed the modal simply hung here forever.
+      const f = files[clipIndex - 1]
+      setError(
+        `Upload failed for ${f ? f.name : 'your clips'}: ${e?.message || 'the connection dropped'}. ` +
+        'Check your connection and try again.'
+      )
+      setPhase('')
+      void emitFailure(attemptId, {
+        studio_id: studioId,
+        reel_id: reelId,
+        stage: 'storage_upload_threw',
+        clip_index: clipIndex,
+        clip_count: files.length,
+        file_name: f ? f.name : null,
+        file_size_bytes: f ? f.size : null,
+        mime_type: f ? (f.type || null) : null,
+        bytes_sent: bytesSent,
+        elapsed_ms: Date.now() - t0,
+      }, e)
+      return
     }
 
     // 2) Assemble manifest + fire WF1 (server-side, x-wf1-secret held there).
