@@ -1,7 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
+import {
+  newAttemptId, emit, emitFailure, armAbandonBeacon,
+  nameHash, pwaMode, STAGE, OK, APP_VERSION,
+} from '../lib/uploadTelemetry'
 
 /**
  * ReelUpload — B2 STEP 2: authenticated studio upload surface for the Reel Editor.
@@ -14,11 +18,24 @@ import { useApp } from '../context/AppContext'
  * fallback to the DB-resolved studio id in AppContext (e.g. admin sessions, which the
  * hook intentionally does not claim).
  *
- * Unlinked/private-beta route (`/reels/upload`). STEP 3 adds parameter capture + manifest
- * assembly + the WF1 trigger; this step is the upload surface only.
+ * Unlinked/private-beta route (`/reels/upload`). It does NOT fire WF1 — manifest assembly
+ * and the trigger live in NewReelModal. That asymmetry is why this surface needs its own
+ * telemetry: uploads land here that never become reels, and until 2b nothing recorded them.
+ *
+ * ⚠️ KNOWN GAP, DELIBERATELY NOT FIXED HERE (out of 2b scope):
+ * the session effect below is `getSession().then(({ data }) => …)` with no rejection
+ * handler. If that promise REJECTS, onFulfilled never runs, the rejection escapes as an
+ * unhandled promise rejection, and the page renders "Loading…" forever. There is no
+ * reachable point inside the existing control flow from which to emit session_checked=fail
+ * for that case — emitting would require adding the `.catch` that constitutes the fix. So
+ * the rejection branch is STRUCTURALLY UNINSTRUMENTABLE as written, and is recorded as an
+ * uncovered window rather than papered over. The null-session branch IS reachable and is
+ * instrumented.
  */
 
 const FOREIGN_TEST_STUDIO = '00000000-0000-0000-0000-000000000000'
+const SURFACE = 'ReelUpload'
+const BUCKET = 'reel-sources'
 
 function decodeJwtClaim(token, key) {
   try {
@@ -45,6 +62,12 @@ export default function ReelUpload() {
   const [busy, setBusy] = useState(false)
   const [rlsTest, setRlsTest] = useState(null) // { own, cross }
 
+  const attemptRef = useRef(null)
+  const progressRef = useRef({ clip_index: null, clip_count: 0, storage_path: null, t0: null })
+  const disarmRef = useRef(null)
+
+  useEffect(() => () => { if (disarmRef.current) disarmRef.current() }, [])
+
   // Authoritative session guard: getSession() reflects the actual stored session.
   // No active session => redirect to login (the surface must not render without one).
   // This is stricter than ProtectedRoute's cached user check, which can pass on a
@@ -54,10 +77,30 @@ export default function ReelUpload() {
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return
       const session = data?.session
-      if (!session) { navigate('/login', { replace: true }); return }
-      setClaimStudioId(decodeJwtClaim(session.access_token, 'fca_studio_id'))
+      if (!session) {
+        // Reachable, and the common failure. The rejection branch above it is not.
+        void emitFailure(newAttemptId(), STAGE.SESSION_CHECKED, {
+          studio_id: null,
+          error_code: 'no_session',
+          error_message: 'getSession resolved with no session on /reels/upload',
+          payload: { surface: SURFACE, app_version: APP_VERSION, pwa_mode: pwaMode() },
+        })
+        navigate('/login', { replace: true })
+        return
+      }
+      const claimed = decodeJwtClaim(session.access_token, 'fca_studio_id')
+      setClaimStudioId(claimed)
       setClaimChecked(true)
       setSessionOk(true)
+      void emit(newAttemptId(), STAGE.SESSION_CHECKED, OK, {
+        studio_id: claimed || null,
+        payload: {
+          surface: SURFACE,
+          app_version: APP_VERSION,
+          pwa_mode: pwaMode(),
+          studio_id_source: claimed ? 'fca_studio_id_claim' : 'claim_absent',
+        },
+      })
     })
     setReelId(crypto.randomUUID())
     return () => { active = false }
@@ -70,22 +113,101 @@ export default function ReelUpload() {
   const onPick = useCallback((e) => {
     const picked = Array.from(e.target.files || [])
     setRows(picked.map(f => ({ file: f, name: f.name, status: 'pending', path: null, error: null })))
-  }, [])
+    if (!picked.length) return
+
+    const attemptId = newAttemptId()
+    attemptRef.current = attemptId
+    progressRef.current = { clip_index: null, clip_count: picked.length, storage_path: null, t0: Date.now() }
+
+    picked.forEach((f, i) => {
+      void emit(attemptId, STAGE.FILE_SELECTED, OK, {
+        studio_id: studioId || null,
+        reel_id: reelId || null,
+        clip_index: i + 1,
+        clip_count: picked.length,
+        file_size_bytes: f.size,
+        mime_type: f.type || null,
+        storage_bucket: BUCKET,
+        payload: {
+          surface: SURFACE,
+          name_hash: nameHash(f.name),
+          mime: f.type || null,
+          ua: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+          app_version: APP_VERSION,
+          pwa_mode: pwaMode(),
+        },
+      })
+    })
+  }, [studioId, reelId])
 
   const upload = useCallback(async () => {
     if (!studioId || !rows.length || busy) return
     setBusy(true)
+    const attemptId = attemptRef.current || newAttemptId()
+    attemptRef.current = attemptId
     const rid = reelId || crypto.randomUUID()
+    const t0 = progressRef.current.t0 || Date.now()
+
+    disarmRef.current = armAbandonBeacon(attemptId, () => ({
+      studio_id: studioId,
+      reel_id: rid,
+      clip_index: progressRef.current.clip_index,
+      clip_count: progressRef.current.clip_count,
+      storage_bucket: BUCKET,
+      storage_path: progressRef.current.storage_path,
+      elapsed_ms: Date.now() - t0,
+      error_code: 'pagehide',
+      error_message: 'page hidden with an upload in flight',
+      payload: { surface: SURFACE },
+    }))
+
     for (let i = 0; i < rows.length; i++) {
       setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'uploading' } : r))
       const path = `${studioId}/${rid}/${String(i + 1).padStart(2, '0')}-${sanitize(rows[i].name)}`
+      progressRef.current = { ...progressRef.current, clip_index: i + 1, storage_path: path }
+      const clipT0 = Date.now()
+
+      void emit(attemptId, STAGE.TRANSMIT_STARTED, OK, {
+        studio_id: studioId, reel_id: rid,
+        clip_index: i + 1, clip_count: rows.length,
+        file_size_bytes: rows[i].file?.size ?? null,
+        mime_type: rows[i].file?.type || null,
+        storage_bucket: BUCKET, storage_path: path,
+        elapsed_ms: Date.now() - t0,
+        payload: { surface: SURFACE, name_hash: nameHash(rows[i].name) },
+      })
+
       const { error } = await supabase.storage
-        .from('reel-sources')
+        .from(BUCKET)
         .upload(path, rows[i].file, { upsert: false, contentType: rows[i].file.type || undefined })
+
+      if (error) {
+        void emitFailure(attemptId, STAGE.TRANSMIT_COMPLETED, {
+          studio_id: studioId, reel_id: rid,
+          clip_index: i + 1, clip_count: rows.length,
+          file_size_bytes: rows[i].file?.size ?? null,
+          mime_type: rows[i].file?.type || null,
+          storage_bucket: BUCKET, storage_path: path,
+          elapsed_ms: Date.now() - clipT0,
+          payload: { surface: SURFACE, attempt_elapsed_ms: Date.now() - t0 },
+        }, error)
+      } else {
+        void emit(attemptId, STAGE.TRANSMIT_COMPLETED, OK, {
+          studio_id: studioId, reel_id: rid,
+          clip_index: i + 1, clip_count: rows.length,
+          file_size_bytes: rows[i].file?.size ?? null,
+          mime_type: rows[i].file?.type || null,
+          storage_bucket: BUCKET, storage_path: path,
+          elapsed_ms: Date.now() - clipT0,
+          payload: { surface: SURFACE, attempt_elapsed_ms: Date.now() - t0 },
+        })
+      }
+
       setRows(prev => prev.map((r, idx) => idx === i
         ? { ...r, status: error ? 'error' : 'done', path: error ? null : path, error: error ? error.message : null }
         : r))
     }
+    if (disarmRef.current) { disarmRef.current(); disarmRef.current = null }
     setBusy(false)
   }, [studioId, rows, reelId, busy])
 
@@ -98,8 +220,8 @@ export default function ReelUpload() {
     // Stable probe path (upsert) so repeated tests overwrite one object rather than littering.
     const ownPath = `${studioId}/_rls_probe/probe.txt`
     const crossPath = `${FOREIGN_TEST_STUDIO}/_rls_probe/probe.txt`
-    const own = await supabase.storage.from('reel-sources').upload(ownPath, probe, { upsert: true })
-    const cross = await supabase.storage.from('reel-sources').upload(crossPath, probe, { upsert: true })
+    const own = await supabase.storage.from(BUCKET).upload(ownPath, probe, { upsert: true })
+    const cross = await supabase.storage.from(BUCKET).upload(crossPath, probe, { upsert: true })
     setRlsTest({
       own: own.error ? `unexpected: ${own.error.message}` : 'ALLOWED (own studio) ✓',
       cross: cross.error ? 'BLOCKED (cross studio) ✓' : 'UNEXPECTED: cross-studio write succeeded ✗',
