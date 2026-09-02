@@ -1,0 +1,4 @@
+#!/bin/sh
+# Delegates to secret-scan.cjs. The .cjs extension is load-bearing: package.json
+# declares "type":"module", so an extensionless node script loads as ESM and require() throws.
+exec node "$(dirname "$0")/secret-scan.cjs"
