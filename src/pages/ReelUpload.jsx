@@ -22,7 +22,7 @@ import {
  * and the trigger live in NewReelModal. That asymmetry is why this surface needs its own
  * telemetry: uploads land here that never become reels, and until 2b nothing recorded them.
  *
- * ⚠️ KNOWN GAP, DELIBERATELY NOT FIXED HERE (out of 2b scope):
+ * ⚠️ KNOWN GAP, DELIBERATELY NOT FIXED HERE (out of scope):
  * the session effect below is `getSession().then(({ data }) => …)` with no rejection
  * handler. If that promise REJECTS, onFulfilled never runs, the rejection escapes as an
  * unhandled promise rejection, and the page renders "Loading…" forever. There is no
@@ -65,6 +65,7 @@ export default function ReelUpload() {
   const attemptRef = useRef(null)
   const progressRef = useRef({ clip_index: null, clip_count: 0, storage_path: null, t0: null })
   const disarmRef = useRef(null)
+  const sessionEmittedRef = useRef(false)
 
   useEffect(() => () => { if (disarmRef.current) disarmRef.current() }, [])
 
@@ -79,36 +80,62 @@ export default function ReelUpload() {
       const session = data?.session
       if (!session) {
         // Reachable, and the common failure. The rejection branch above it is not.
+        sessionEmittedRef.current = true
         void emitFailure(newAttemptId(), STAGE.SESSION_CHECKED, {
-          studio_id: null,
+          // Attribution: the claim is absent by definition here (there is no session), so
+          // the DB-resolved id from AppContext is the only studio context available.
+          studio_id: app.resolvedStudioId || null,
           error_code: 'no_session',
           error_message: 'getSession resolved with no session on /reels/upload',
-          payload: { surface: SURFACE, app_version: APP_VERSION, pwa_mode: pwaMode() },
+          payload: {
+            surface: SURFACE, app_version: APP_VERSION, pwa_mode: pwaMode(),
+            studio_id_source: app.resolvedStudioId ? 'appcontext_resolved' : 'none',
+          },
         })
         navigate('/login', { replace: true })
         return
       }
-      const claimed = decodeJwtClaim(session.access_token, 'fca_studio_id')
-      setClaimStudioId(claimed)
+      setClaimStudioId(decodeJwtClaim(session.access_token, 'fca_studio_id'))
       setClaimChecked(true)
       setSessionOk(true)
-      void emit(newAttemptId(), STAGE.SESSION_CHECKED, OK, {
-        studio_id: claimed || null,
-        payload: {
-          surface: SURFACE,
-          app_version: APP_VERSION,
-          pwa_mode: pwaMode(),
-          studio_id_source: claimed ? 'fca_studio_id_claim' : 'claim_absent',
-        },
-      })
     })
     setReelId(crypto.randomUUID())
     return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate])
 
   // Prefer the token claim (app-layer hook use); fall back to the DB-resolved studio id.
   const studioId = claimStudioId || app.resolvedStudioId || null
   const studioIdSource = claimStudioId ? 'fca_studio_id JWT claim' : (app.resolvedStudioId ? 'AppContext (DB-resolved)' : 'none')
+
+  // session_checked=ok is emitted from its OWN effect, not from the getSession callback.
+  //
+  // Why: on 2026-09-02 at 17:11:28Z this surface wrote a session_checked row with
+  // studio_id NULL and studio_id_source "claim_absent" — while the page itself was
+  // displaying the studio correctly. The callback read only the JWT claim, but this
+  // session had no `fca_studio_id` claim and resolved through AppContext instead. The row
+  // landed (the INSERT policy permits a NULL studio_id) and was invisible to every
+  // per-studio query, which is the worst of both outcomes: recorded, and unfindable.
+  //
+  // AppContext resolution is asynchronous and frequently lands AFTER getSession returns, so
+  // reading it inside that callback would still race. This effect re-runs as studio context
+  // arrives and the ref makes it fire exactly once.
+  useEffect(() => {
+    if (!sessionOk || sessionEmittedRef.current) return
+    if (!claimStudioId && !app.resolvedStudioId && !app.authReady) return // still resolving
+    sessionEmittedRef.current = true
+    void emit(newAttemptId(), STAGE.SESSION_CHECKED, OK, {
+      studio_id: claimStudioId || app.resolvedStudioId || null,
+      payload: {
+        surface: SURFACE,
+        app_version: APP_VERSION,
+        pwa_mode: pwaMode(),
+        studio_id_source: claimStudioId
+          ? 'fca_studio_id_claim'
+          : (app.resolvedStudioId ? 'appcontext_resolved' : 'unresolved'),
+      },
+    })
+  }, [sessionOk, claimStudioId, app.resolvedStudioId, app.authReady])
 
   const onPick = useCallback((e) => {
     const picked = Array.from(e.target.files || [])
