@@ -19,6 +19,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
+  MAX_CLIP_BYTES, mb, oversizeMessage,
 } from '../lib/uploadTelemetry'
 import { Loader2, X, Sparkles, UploadCloud } from 'lucide-react'
 
@@ -74,6 +75,36 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
     const attemptId = newAttemptId()
     attemptRef.current = attemptId
     progressRef.current = { reel_id: null, clip_index: null, clip_count: picked.length, storage_path: null, t0: Date.now() }
+
+    // Client-side size gate, BEFORE transmit_started. Measured 2026-09-02: a 482 MB clip
+    // transmitted for 64.4 SECONDS on mobile before the server returned 400. The bucket limit
+    // stays authoritative server-side — this only stops the customer paying for the upload
+    // twice over in time and cellular data to learn something we already know.
+    const over = picked.filter((f) => f.size > MAX_CLIP_BYTES)
+    if (over.length) {
+      setFiles([])
+      setError(oversizeMessage(over))
+      over.forEach((f) => {
+        void emitFailure(attemptId, STAGE.FILE_SELECTED, {
+          studio_id: studioId || null,
+          clip_index: picked.indexOf(f) + 1,
+          clip_count: picked.length,
+          file_size_bytes: f.size,
+          mime_type: f.type || null,
+          storage_bucket: BUCKET,
+          error_code: 'oversize',
+          error_message: `clip is ${mb(f.size)} MB, limit is ${mb(MAX_CLIP_BYTES)} MB`,
+          payload: {
+            surface: SURFACE,
+            name_hash: nameHash(f.name),
+            limit_bytes: MAX_CLIP_BYTES,
+            over_by_bytes: f.size - MAX_CLIP_BYTES,
+            blocked_client_side: true,
+          },
+        })
+      })
+      return
+    }
 
     // One row per selected clip: the size distribution at selection is what makes an
     // oversize rejection later legible, and it is captured before any transmission.

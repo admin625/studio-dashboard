@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
+  MAX_CLIP_BYTES, mb, oversizeMessage,
 } from '../lib/uploadTelemetry'
 
 /**
@@ -22,15 +23,16 @@ import {
  * and the trigger live in NewReelModal. That asymmetry is why this surface needs its own
  * telemetry: uploads land here that never become reels, and until 2b nothing recorded them.
  *
- * ⚠️ KNOWN GAP, DELIBERATELY NOT FIXED HERE (out of scope):
- * the session effect below is `getSession().then(({ data }) => …)` with no rejection
- * handler. If that promise REJECTS, onFulfilled never runs, the rejection escapes as an
- * unhandled promise rejection, and the page renders "Loading…" forever. There is no
- * reachable point inside the existing control flow from which to emit session_checked=fail
- * for that case — emitting would require adding the `.catch` that constitutes the fix. So
- * the rejection branch is STRUCTURALLY UNINSTRUMENTABLE as written, and is recorded as an
- * uncovered window rather than papered over. The null-session branch IS reachable and is
- * instrumented.
+ * ✅ THE getSession() REJECTION GAP IS CLOSED (WO-4 item 3, 2026-09-03).
+ * It used to be `getSession().then(...)` with no rejection handler: a rejected promise
+ * skipped onFulfilled, escaped as an unhandled rejection, and left the page rendering
+ * "Loading…" forever with no error, no log and no telemetry. 2b recorded it as structurally
+ * uninstrumentable because emitting required adding the very `.catch` that constitutes the
+ * fix. That catch now exists — it emits `session_checked` fail with
+ * `error_code: 'getsession_rejected'` and renders an error state with a reload affordance.
+ * It deliberately does NOT redirect to /login: a rejection is not evidence of a missing
+ * session, and bouncing a signed-in studio out on a transient network fault is worse than
+ * telling her what happened. All three session outcomes are now instrumented and visible.
  */
 
 const FOREIGN_TEST_STUDIO = '00000000-0000-0000-0000-000000000000'
@@ -61,6 +63,8 @@ export default function ReelUpload() {
   const [rows, setRows] = useState([]) // { name, status: 'pending'|'uploading'|'done'|'error', path, error }
   const [busy, setBusy] = useState(false)
   const [rlsTest, setRlsTest] = useState(null) // { own, cross }
+  const [pickError, setPickError] = useState(null)
+  const [sessionError, setSessionError] = useState(null)
 
   const attemptRef = useRef(null)
   const progressRef = useRef({ clip_index: null, clip_count: 0, storage_path: null, t0: null })
@@ -99,6 +103,35 @@ export default function ReelUpload() {
       setClaimChecked(true)
       setSessionOk(true)
     })
+      .catch((err) => {
+        // THE GAP THIS CLOSES: without a rejection handler, a rejected getSession() skipped
+        // onFulfilled entirely, escaped as an unhandled promise rejection, and left the page
+        // rendering "Loading…" forever with no error, no log and no telemetry. It was
+        // recorded as structurally uninstrumentable in 2b because emitting required adding
+        // exactly this catch. WO-4 item 3.
+        if (!active) return
+        sessionEmittedRef.current = true
+        void emitFailure(newAttemptId(), STAGE.SESSION_CHECKED, {
+          studio_id: app.resolvedStudioId || null,
+          // Labelled 'getsession_failed', not 'getsession_rejected': .then().catch() is
+          // chained, so this also fires if the SUCCESS handler above throws. Both are real
+          // failures worth recording and neither should strand the page, but calling a
+          // handler throw a "rejection" would put a wrong cause in the one column we built
+          // to carry cause. `covers` says exactly what the code can and cannot distinguish.
+          error_code: 'getsession_failed',
+          error_message: 'getSession() rejected, or the session handler threw, on /reels/upload',
+          payload: {
+            surface: SURFACE, app_version: APP_VERSION, pwa_mode: pwaMode(),
+            studio_id_source: app.resolvedStudioId ? 'appcontext_resolved' : 'none',
+            covers: 'rejection_or_handler_throw',
+          },
+        }, err)
+        // Do NOT redirect to /login: a rejection is not evidence of a missing session, and
+        // bouncing a signed-in studio to the login page on a transient network fault is a
+        // worse outcome than showing her what happened.
+        setSessionError(err?.message || 'We could not confirm your session.')
+        setClaimChecked(true)
+      })
     setReelId(crypto.randomUUID())
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,6 +178,36 @@ export default function ReelUpload() {
     const attemptId = newAttemptId()
     attemptRef.current = attemptId
     progressRef.current = { clip_index: null, clip_count: picked.length, storage_path: null, t0: Date.now() }
+
+    // Client-side size gate, BEFORE transmit_started. See MAX_CLIP_BYTES: the server stays
+    // authoritative, this only stops a 64-second cellular upload that ends in a 400.
+    const over = picked.filter((f) => f.size > MAX_CLIP_BYTES)
+    if (over.length) {
+      setRows([])
+      setPickError(oversizeMessage(over))
+      over.forEach((f) => {
+        void emitFailure(attemptId, STAGE.FILE_SELECTED, {
+          studio_id: studioId || null,
+          reel_id: reelId || null,
+          clip_index: picked.indexOf(f) + 1,
+          clip_count: picked.length,
+          file_size_bytes: f.size,
+          mime_type: f.type || null,
+          storage_bucket: BUCKET,
+          error_code: 'oversize',
+          error_message: `clip is ${mb(f.size)} MB, limit is ${mb(MAX_CLIP_BYTES)} MB`,
+          payload: {
+            surface: SURFACE,
+            name_hash: nameHash(f.name),
+            limit_bytes: MAX_CLIP_BYTES,
+            over_by_bytes: f.size - MAX_CLIP_BYTES,
+            blocked_client_side: true,
+          },
+        })
+      })
+      return
+    }
+    setPickError(null)
 
     picked.forEach((f, i) => {
       void emit(attemptId, STAGE.FILE_SELECTED, OK, {
@@ -260,6 +323,25 @@ export default function ReelUpload() {
 
   // Render nothing but a loader until the session is confirmed. If there is no
   // session the effect above redirects to /login, so the uploader never renders unauthenticated.
+  // A rejected getSession() renders an error state, never a permanent "Loading…".
+  if (sessionError) {
+    return (
+      <div style={{ maxWidth: 640, margin: '48px auto', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
+        <h2>Reel upload</h2>
+        <p style={{ color: '#b00' }}>We could not confirm your session: {sessionError}</p>
+        <p style={{ color: '#666', fontSize: 14 }}>
+          This is usually a network blip. Reload the page, and if it keeps happening,{' '}
+          <a href="/login">sign in again</a>.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{ background: '#667eea', color: '#fff', border: 0, borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}
+        >
+          Reload
+        </button>
+      </div>
+    )
+  }
   if (!app.authReady || !sessionOk) return <div style={{ padding: 24 }}>Loading…</div>
   if (!app.isBeta) {
     return (
@@ -283,6 +365,10 @@ export default function ReelUpload() {
 
       {!studioId && claimChecked && (
         <p style={{ color: '#b00' }}>No studio context on this session — upload unavailable.</p>
+      )}
+
+      {pickError && (
+        <p style={{ color: '#b00', margin: '8px 0' }}>{pickError}</p>
       )}
 
       <input type="file" accept="video/*" multiple onChange={onPick} disabled={busy || !studioId} />

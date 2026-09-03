@@ -59,6 +59,36 @@ export const FAIL = 'fail'
 
 export const APP_VERSION = '2b.1'
 
+/**
+ * Per-clip ceiling, mirroring the `reel-sources` bucket's `file_size_limit` (300 MiB).
+ *
+ * THE SERVER REMAINS AUTHORITATIVE. This constant is a courtesy, not a control: it is in a
+ * public bundle and a determined caller ignores it. Its only job is to stop the customer
+ * spending 64 seconds of cellular data (measured, 2026-09-02, 482 MB) to be told something
+ * we could have told her at the picker. If the bucket limit ever changes, this drifts and
+ * the server still refuses correctly — the failure mode of drift is a redundant warning,
+ * not an accepted oversize file.
+ */
+export const MAX_CLIP_BYTES = 314572800
+
+/** Bytes to MiB, one decimal. Matches how the storage limit is expressed. */
+export function mb(bytes) {
+  return (Number(bytes) / 1048576).toFixed(1)
+}
+
+/** Customer-facing text. Names the actual file and both numbers, because "file too large"
+ *  without the limit is an error message that cannot be acted on. */
+export function oversizeMessage(files) {
+  const limit = mb(MAX_CLIP_BYTES)
+  if (files.length === 1) {
+    return `“${files[0].name}” is ${mb(files[0].size)} MB. The limit is ${limit} MB per clip — ` +
+      'please trim it or pick a shorter clip.'
+  }
+  const names = files.map((f) => `“${f.name}” (${mb(f.size)} MB)`).join(', ')
+  return `${files.length} clips are over the ${limit} MB per-clip limit: ${names}. ` +
+    'Please trim them or pick shorter clips.'
+}
+
 /** Stamped at FIRST FILE SELECT, not at submit. An attempt that is abandoned before submit
  *  is still an attempt, and it is the one class we could never see. */
 export function newAttemptId() {
@@ -106,6 +136,16 @@ export function scrub(value) {
     .replace(/\bsk-ant-[A-Za-z0-9_-]{12,}/g, (m) => m.slice(0, 8) + '…')
     .replace(/([?&](token|apikey|api_key|access_token|signature|sig|X-Amz-Signature)=)[^&\s]+/gi,
       (_, p) => p + '…')
+    // Generic high-entropy run, LAST so the specific rules above claim their shapes first.
+    // 32 is the threshold because that is the shortest thing we actually need to catch: a
+    // 32-char hex digest, and a bare signature riding in a query parameter we did not name
+    // above. Ordinary prose does not produce 32 contiguous base64 characters — the longest
+    // English word is ~28 — and every identifier we deliberately keep survives it: a UUID's
+    // longest unbroken run is 12 (hyphens break it), storage paths break on `/` and `-`,
+    // and nameHash() is 8 hex plus a dot. Over-masking a telemetry payload is the safe
+    // direction; under-masking puts a credential in a database column forever.
+    // The already-masked outputs above are all under 32 chars, so this cannot double-mask.
+    .replace(/[A-Za-z0-9+/]{32,}={0,2}/g, (m) => m.slice(0, 8) + '…')
 }
 
 /**
