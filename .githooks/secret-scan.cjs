@@ -52,6 +52,29 @@ const SQL_WORDS = new RegExp(
 
 const GENERIC = /[A-Za-z0-9+/=_-]{40,}/g
 
+/**
+ * Path-shaped exclusion for the generic rule.
+ *
+ * WHY: the generic character class includes `_` and `-`, so an ordinary repo path such as
+ *   Decisions/ambassador/ambassador-attribution-v1
+ * is a 46-char match, and the entropy test passes because it mixes case and ends in a digit.
+ * That blocked a legitimate migration on 2026-09-03 — the second false positive in two days,
+ * after the test-fixture block. A gate that cries wolf gets bypassed, so the rule needs to
+ * know what a path looks like.
+ *
+ * DELIBERATELY NOT "contains a slash". Base64 contains `/` too, so exempting every match with
+ * a slash would punch a hole straight through the generic rule — the one backstop for an
+ * UNPREFIXED high-entropy blob (an AWS secret key, a bare signature). Instead the whole match
+ * must be path-SHAPED: word/dot/hyphen segments joined by slashes, nothing else. `+` and `=`
+ * are not in the segment class, so a base64 blob cannot satisfy it.
+ *
+ * And the exemption never applies to anything carrying a credential prefix, so
+ * `path/to/sb_secret_<40>` is still blocked — belt and braces, since the prefixed rules
+ * above catch that independently.
+ */
+const PATH_SHAPED = /^[\w.-]+(?:\/[\w.-]+)+$/
+const CRED_PREFIX = /(?:^|[^A-Za-z0-9])(?:eyJ|sb_|sk-ant-|sk_|rk_|pk_|whsec_|nfp_|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|AKIA|xox)/
+
 function looksLikeEntropy(tok) {
   if (/^[0-9a-f]{40,}$/i.test(tok)) return true // long pure hex
   return /[a-z]/.test(tok) && /[A-Z]/.test(tok) && /[0-9]/.test(tok)
@@ -94,6 +117,7 @@ for (const line of diff.split('\n')) {
     const raw = g[0]
     const stripped = raw.replace(SQL_WORDS, '').replace(/[^A-Za-z0-9+/=_-]/g, '')
     if (stripped.length < 40) continue          // SQL-keyword allowlist
+    if (PATH_SHAPED.test(raw) && !CRED_PREFIX.test(raw)) continue  // repo path, not a secret
     if (!looksLikeEntropy(stripped)) continue   // prose / SCREAMING_CASE
     findings.push({ file, rule: 'high-entropy 40+ char run', tok: raw })
   }
