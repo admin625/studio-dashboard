@@ -42,6 +42,19 @@ function sanitize(name) {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)
 }
 
+// Local twin of ReelUpload's decoder. Duplicated deliberately for a tight diff; the two
+// should converge into uploadTelemetry.js, which both files already import. Recorded as a
+// follow-on rather than done silently here.
+function decodeJwtClaim(token, key) {
+  try {
+    const part = token.split('.')[1]
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'))
+    return JSON.parse(json)[key] ?? null
+  } catch {
+    return null
+  }
+}
+
 export default function NewReelModal({ studioId, primary, onClose, onCreated }) {
   const app = useApp()
   const [theme, setTheme] = useState('')
@@ -169,6 +182,50 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
     }))
     const disarm = () => { if (disarmRef.current) { disarmRef.current(); disarmRef.current = null } }
 
+    // session_checked fires BEFORE the upload loop (WO-4b). It used to sit at the manifest
+    // stage, AFTER the loop — so on Katie's 2026-09-03 attempt the upload failed at 559.7s and
+    // submit() returned before it ever ran. The one signal that proves whether Supabase Auth
+    // actually invokes custom_access_token_hook was therefore unobtainable from precisely the
+    // attempts most worth diagnosing: the failed ones. A probe that only fires on success
+    // cannot diagnose failure.
+    let token = null
+    try {
+      const { data } = await supabase.auth.getSession()
+      token = data?.session?.access_token || null
+      const claimed = token ? decodeJwtClaim(token, 'fca_studio_id') : null
+      if (!token) {
+        void emitFailure(attemptId, STAGE.SESSION_CHECKED, {
+          studio_id: studioId, reel_id: reelId,
+          elapsed_ms: Date.now() - t0,
+          error_code: 'no_session',
+          error_message: 'getSession resolved with no session',
+          payload: { surface: SURFACE, studio_id_source: 'none' },
+        })
+      } else {
+        void emit(attemptId, STAGE.SESSION_CHECKED, OK, {
+          studio_id: studioId, reel_id: reelId,
+          elapsed_ms: Date.now() - t0,
+          payload: {
+            surface: SURFACE,
+            // THE AUTH-HOOK ENABLEMENT PROOF. fca_studio_id_claim means Supabase Auth really
+            // invokes the hook. appcontext_resolved means it does not, and every studio is
+            // silently on the slow DB path. Mac's own account cannot answer this — the hook
+            // returns early for admin@fiorsaoirse.com by design — so only a non-admin owner's
+            // session settles it.
+            studio_id_source: claimed ? 'fca_studio_id_claim' : 'appcontext_resolved',
+            claim_present: !!claimed,
+          },
+        })
+      }
+    } catch (se) {
+      void emitFailure(attemptId, STAGE.SESSION_CHECKED, {
+        studio_id: studioId, reel_id: reelId,
+        elapsed_ms: Date.now() - t0,
+        error_code: 'getsession_threw',
+        payload: { surface: SURFACE },
+      }, se)
+    }
+
     setPhase('uploading')
     const sourceClips = []
     let bytesSent = 0
@@ -270,36 +327,6 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
     if (hookDirection.trim()) manifest.hook_direction = hookDirection.trim()
 
     try {
-      // session_checked covers BOTH failure shapes: getSession() rejecting, and getSession()
-      // resolving with no session. The second is the common one and does not throw.
-      let token = null
-      try {
-        const { data } = await supabase.auth.getSession()
-        token = data?.session?.access_token || null
-        if (!token) {
-          void emitFailure(attemptId, STAGE.SESSION_CHECKED, {
-            studio_id: studioId, reel_id: reelId,
-            elapsed_ms: Date.now() - t0,
-            error_code: 'no_session',
-            error_message: 'getSession resolved with no session',
-            payload: { surface: SURFACE },
-          })
-        } else {
-          void emit(attemptId, STAGE.SESSION_CHECKED, OK, {
-            studio_id: studioId, reel_id: reelId,
-            elapsed_ms: Date.now() - t0,
-            payload: { surface: SURFACE },
-          })
-        }
-      } catch (se) {
-        void emitFailure(attemptId, STAGE.SESSION_CHECKED, {
-          studio_id: studioId, reel_id: reelId,
-          elapsed_ms: Date.now() - t0,
-          error_code: 'getsession_threw',
-          payload: { surface: SURFACE },
-        }, se)
-      }
-
       // Background function: WF1 is slow (sign->probe->Opus->persist), so firing it must not
       // block on a sync timeout. It returns 202 immediately; WF1 persists the reel_edls row,
       // which surfaces in the Reels list via the create-poll below.

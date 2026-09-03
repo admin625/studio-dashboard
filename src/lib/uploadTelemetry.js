@@ -60,14 +60,22 @@ export const FAIL = 'fail'
 export const APP_VERSION = '2b.1'
 
 /**
- * Per-clip ceiling, mirroring the `reel-sources` bucket's `file_size_limit` (300 MiB).
+ * Per-clip ceiling. SOURCE: the `reel-sources` bucket's `file_size_limit`, 314572800 B
+ * (300 MiB). PREREQUISITE: the Supabase PROJECT-LEVEL global file size limit must be at
+ * least this value, because the effective ceiling is min(bucket, global) and the global wins.
  *
- * THE SERVER REMAINS AUTHORITATIVE. This constant is a courtesy, not a control: it is in a
- * public bundle and a determined caller ignores it. Its only job is to stop the customer
- * spending 64 seconds of cellular data (measured, 2026-09-02, 482 MB) to be told something
- * we could have told her at the picker. If the bucket limit ever changes, this drifts and
- * the server still refuses correctly — the failure mode of drift is a redundant warning,
- * not an accepted oversize file.
+ * ⚠ THIS CONSTANT WAS WRONG IN PRACTICE BEFORE THE GLOBAL WAS RAISED, AND THE GATE STILL
+ * PASSED. On 2026-09-03 a 113.9 MB clip cleared this check, uploaded for 559.7 SECONDS on an
+ * iPhone, and was then rejected by storage — because the global limit was bracketed by
+ * evidence between 43 MB and 113.9 MB while this number said 300. The gate did exactly what
+ * it was built to do and was useless, because it was pointed at the wrong constraint. A limit
+ * that is not the binding one is not a limit.
+ *
+ * So: if the global is ever lowered below 300 MB again, this number silently stops meaning
+ * anything and the only symptom is a customer waiting nine minutes for a failure.
+ *
+ * THE SERVER REMAINS AUTHORITATIVE either way. This constant ships in a public bundle and a
+ * determined caller ignores it. Its job is to save the customer the upload, not to enforce.
  */
 export const MAX_CLIP_BYTES = 314572800
 
