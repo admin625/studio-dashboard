@@ -257,6 +257,32 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
         setSubmitting(false)
         return
       }
+      // A 2xx is not automatically a success. The generator answers with responseMode
+      // lastNode, so a refusal comes back as HTTP 200 carrying an error body (spec v0.2.1
+      // §3, §12 R1). generate-content.js forwards both the status and the body untouched.
+      // Without this check the modal closes and reports success while nothing was ever
+      // generated and nothing will ever be delivered.
+      let okBody = null
+      try { okBody = await res.json() } catch { /* 2xx body not JSON — treat as success */ }
+      if (okBody && okBody.error) {
+        if (okBody.error === 'prompt_field_missing') {
+          const fields = Array.isArray(okBody.fields) ? okBody.fields : []
+          let reason
+          if (fields.includes('brand_voice')) {
+            reason = 'your brand voice is missing. Add one in Brand Settings or type one above.'
+          } else if (fields.length) {
+            reason = `some required details are missing: ${fields.join(', ')}`
+          } else {
+            reason = 'some required details are missing.'
+          }
+          setError(`We couldn't generate — ${reason}`)
+        } else {
+          setError("We couldn't generate — something went wrong on our side and nothing was created. Please try again. If this keeps happening, contact support at admin@fiorsaoirse.com.")
+        }
+        setSubmitting(false)
+        return
+      }
+
       // 2xx — proceed
       onClose()
       if (onSubmitted) onSubmitted(activePlatforms.map(p => p.name))
@@ -407,7 +433,14 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
 
               {/* Standard fields */}
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Brand Voice" value={brandVoice} onChange={setBrandVoice} />
+                <div>
+                  <Field label="Brand Voice" value={brandVoice} onChange={setBrandVoice} />
+                  {!brandVoice.trim() && (
+                    <p className="text-[10px] text-amber-300/90 mt-1 leading-snug">
+                      Add a brand voice in Brand Settings, or type one here for this session.
+                    </p>
+                  )}
+                </div>
                 <Field label="Target Audience" value={targetAudience} onChange={setTargetAudience} />
                 <Field label="Fitness Focus" value={fitnessFocus} onChange={setFitnessFocus} />
                 <Field label="Primary Goal" value={primaryGoal} onChange={setPrimaryGoal} />
@@ -476,13 +509,21 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
             <button onClick={onClose} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
             <button
               onClick={handleSubmit}
-              disabled={submitting}
+              disabled={submitting || !brandVoice.trim()}
               className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
               style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
             >
               {submitting ? <><Loader2 size={16} className="animate-spin" /> Creating...</> : <><Sparkles size={16} /> Create Content</>}
             </button>
           </div>
+          {/* Freestyle hides the voice field, so on that path the disabled button would
+              otherwise have no visible explanation. In standard mode the helper sits
+              under the field instead, so this would only duplicate it. */}
+          {freestyle && !brandVoice.trim() && (
+            <p className="text-[10px] text-amber-300/90 text-center mt-3 leading-snug">
+              Add a brand voice in Brand Settings, or type one here for this session.
+            </p>
+          )}
           <p className="text-[10px] text-slate-500 text-center mt-3">
             FCA generates premium content — great things take a moment. Ready within 20 minutes.
           </p>

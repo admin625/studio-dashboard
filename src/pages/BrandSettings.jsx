@@ -475,6 +475,7 @@ function BrandSettingsForm() {
             className="w-full px-5 py-4 border-2 border-black/10 bg-white text-[#1e293b] text-sm leading-relaxed focus:outline-none transition-colors placeholder:text-[#CBD5E1] resize-y mb-2"
             style={{ borderColor: voice ? `${primary}40` : undefined }}
             onFocus={e => (e.target.style.borderColor = `${primary}80`)} onBlur={e => (e.target.style.borderColor = voice ? `${primary}40` : 'rgba(0,0,0,0.1)')} />
+          <p className="text-[11px] text-[#94A3B8] italic mb-4">Default voice — override per session.</p>
           {voice && <p className="text-xs mb-4" style={{ color: primary }}><Check size={11} className="inline mr-1.5" />Voice captured</p>}
           <button type="button" onClick={() => setShowVoice(v => !v)} className="flex items-center gap-2 text-[11px] font-bold tracking-[0.12em] uppercase mb-4 transition-colors" style={{ color: primary }}>
             <ChevronRight size={14} className="transition-transform duration-200" style={{ transform: showVoice ? 'rotate(90deg)' : 'none' }} />
@@ -483,7 +484,6 @@ function BrandSettingsForm() {
           {showVoice && (
             <div className="grid sm:grid-cols-2 gap-3">
               {VOICE_EXAMPLES.map(ex => <ExampleCard key={ex.studio} example={ex} brandColor={primary} onUse={setVoice} />)}
-              <p className="text-[11px] text-[#94A3B8] sm:col-span-2 italic">Default voice — override per session.</p>
             </div>
           )}
         </Section>
