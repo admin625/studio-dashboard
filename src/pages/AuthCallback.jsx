@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useApp } from '../context/AppContext'
 import { nextPathFromQuery } from '../lib/deepLink'
 import CheckYourEmail from '../components/CheckYourEmail'
 
@@ -41,38 +42,30 @@ export function isAuthCallbackArrival(hash, search) {
   return false
 }
 
+const IS_ARRIVAL = isAuthCallbackArrival(ARRIVAL_HASH, ARRIVAL_SEARCH)
+
 export default function AuthCallback() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [signedInAs, setSignedInAs] = useState(null)
-  const [phase, setPhase] = useState('working')   // 'working' | 'check-email'
+  const { user, authReady } = useApp()
 
   useEffect(() => {
+    // ONLY the magic-link path does async work. See the render note below for why the other
+    // path must not.
+    if (!IS_ARRIVAL) return
+
     const handle = async () => {
-      if (isAuthCallbackArrival(ARRIVAL_HASH, ARRIVAL_SEARCH)) {
-        // A real magic-link round trip. UNCHANGED from the original implementation.
-        const { data: { session }, error } = await supabase.auth.getSession()
-        if (error || !session) {
-          navigate('/login?error=magic_link_expired', { replace: true })
-          return
-        }
-        // THE security-critical read. GoTrue hands back whatever redirect_to it was
-        // given, and POST /auth/v1/otp is reachable with the public anon key -- so a
-        // crafted link can arrive here carrying any ?next= at all, on a session that
-        // authenticated for real. nextPathFromQuery allowlists it; nothing else does.
-        navigate(nextPathFromQuery(location.search), { replace: true })
+      // A real magic-link round trip. UNCHANGED from the original implementation.
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error || !session) {
+        navigate('/login?error=magic_link_expired', { replace: true })
         return
       }
-
-      // No auth callback in the URL. This is the Stripe success_url landing (or a stray visit).
-      //
-      // DO NOT navigate on the strength of an existing session. Whatever is in localStorage
-      // belongs to whoever last signed in on this browser, which is not necessarily the person
-      // who just paid -- and redirecting into it is precisely the 2026-09-08 defect. The studio
-      // that just checked out is authenticated by the link in their inbox, and by nothing else.
-      const { data: { session } } = await supabase.auth.getSession()
-      setSignedInAs(session?.user?.email ?? null)
-      setPhase('check-email')
+      // THE security-critical read. GoTrue hands back whatever redirect_to it was
+      // given, and POST /auth/v1/otp is reachable with the public anon key -- so a
+      // crafted link can arrive here carrying any ?next= at all, on a session that
+      // authenticated for real. nextPathFromQuery allowlists it; nothing else does.
+      navigate(nextPathFromQuery(location.search), { replace: true })
     }
     handle()
   }, [navigate, location.search])
@@ -80,14 +73,40 @@ export default function AuthCallback() {
   const handleSignOut = async () => {
     // Deliberately does not navigate: the studio still needs to read this page and open their
     // inbox. AuthProvider's onAuthStateChange handles SIGNED_OUT and resets the app context.
-    await supabase.auth.signOut()
-    setSignedInAs(null)
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // A failed sign-out must not blank the page they are trying to read.
+    }
   }
 
-  if (phase === 'check-email') {
-    // No address is passed. Resolving Stripe's ?session_id= to the checkout email needs a
-    // server-side secret-key lookup, which was scoped out; see CheckYourEmail for the detail.
-    return <CheckYourEmail signedInAs={signedInAs} onSignOut={signedInAs ? handleSignOut : null} />
+  if (!IS_ARRIVAL) {
+    // No auth callback in the URL: the Stripe success_url landing, or a stray visit.
+    //
+    // RENDERED SYNCHRONOUSLY, WITH NO AUTH CALL OF ITS OWN. The first version of this awaited
+    // supabase.auth.getSession() here just to learn who was signed in, and that was a real bug,
+    // caught on production: supabase-js guards the auth token with a navigator lock, AuthProvider
+    // is calling getSession() at the same moment on mount, and the two contend --
+    //   "[FCA] restoreSession error: TIMEOUT: getSession (5000ms)"
+    //   "Lock sb-<ref>-auth-token was released because another request stole it"
+    // -- so the await rejected, the effect threw, the phase state never advanced and the page sat
+    // on "Logging you in..." forever. On the exact URL shape Stripe is about to start sending.
+    //
+    // The fix is not a try/catch, it is not making the call. Requirement 2 is "never inherit a
+    // session", which needs no knowledge of the session at all: render the page, unconditionally
+    // and immediately. Whose session it is only decorates the notice below, and that comes from
+    // AppContext, which AuthProvider populates once -- no second auth call, nothing to contend
+    // with, and nothing that can hang.
+    //
+    // The banner is therefore best-effort by design: if AuthProvider is slow or its own read
+    // times out, `user` stays null and the notice is simply absent. The page is still correct.
+    const signedInAs = authReady ? (user?.email ?? null) : null
+    return (
+      <CheckYourEmail
+        signedInAs={signedInAs}
+        onSignOut={signedInAs ? handleSignOut : null}
+      />
+    )
   }
 
   return (
