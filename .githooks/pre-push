@@ -1,0 +1,19 @@
+#!/bin/sh
+# no-undef gate.
+#
+# `npm run build` is NOT a gate against a missing import: an undefined identifier is valid
+# JavaScript until it is evaluated, so Vite builds it happily and the failure lands on a
+# studio's screen instead. That happened twice in one session on 2026-09-10 — an import
+# removed while two call sites still used it, and a JSX component referenced with no import
+# at all — and both builds passed.
+#
+# Deliberately one rule. See eslint.config.js for why this is not a style pass.
+echo "[pre-push] eslint no-undef…"
+if ! npx --no-install eslint src test; then
+  echo ""
+  echo "  PUSH BLOCKED — eslint reported errors (see above)."
+  echo "  A missing import builds fine and breaks at runtime; that is what this catches."
+  echo "  Emergency bypass: git push --no-verify"
+  exit 1
+fi
+echo "[pre-push] no-undef clean."
