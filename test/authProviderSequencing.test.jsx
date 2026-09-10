@@ -167,23 +167,34 @@ describe('AuthProvider — auth-lock sequencing', () => {
     expect(order.indexOf('session_resolved')).toBeLessThan(order.indexOf('studio_read_start_1'))
   })
 
-  it('a later SIGNED_IN does not overlap a restore already in flight', async () => {
-    mount()
-    getSessionResolve()
-    await tick()
-    expect(singleCalls).toBe(1)
-    // Attempt 1 is still live (its promise only settles on abort). A SIGNED_IN now must JOIN
-    // the in-flight init rather than start a competing read.
+  it('THE DEADLOCK GUARD: the auth callback returns nothing and issues no supabase call synchronously', () => {
+    // GoTrue invokes subscribers from inside the auth-token lock and AWAITS what they return.
+    // A callback that returns a promise depending on any supabase call therefore deadlocks:
+    // the call queues for a lock the callback is preventing from being released. Confirmed on
+    // production 2026-09-10 by the ABSENCE of a request — token?grant_type=password returned
+    // 200 in 156ms and then nothing at all was issued, zero pending, button stuck.
     //
-    // Deliberately NOT awaited: joining means initOnce hands back the in-flight promise, which
-    // by design does not settle until attempt 1 does. Awaiting it here would hang the test on
-    // correct behaviour — an earlier draft did exactly that, timed out, and left a dangling
-    // act() that broke the NEXT test too.
-    let joined = false
-    act(() => { authCb('SIGNED_IN', SESSION).then(() => { joined = true }) })
+    // Two properties keep that from recurring, and both are asserted here:
+    //   1. the callback returns undefined — GoTrue has nothing to await
+    //   2. it issues no supabase call in the same tick
+    mount()
+    const before = singleCalls
+    let returned
+    act(() => { returned = authCb('SIGNED_IN', SESSION) })
+
+    expect(returned).toBeUndefined()
+    expect(typeof (returned && returned.then)).not.toBe('function')
+    expect(singleCalls).toBe(before)   // nothing issued synchronously, i.e. not inside the lock
+  })
+
+  it('the deferred SIGNED_IN work does run, just on a later macrotask', async () => {
+    // The other half: deferring must not mean dropping. Without the session resolving first,
+    // runRestore issues nothing, so any read seen here came from the deferred callback path.
+    mount()
+    act(() => { authCb('SIGNED_IN', SESSION) })
+    expect(singleCalls).toBe(0)
     await tick()
     expect(singleCalls).toBe(1)
-    expect(joined).toBe(false)   // still waiting on the same read, not racing it
   })
 
   it('stops at two attempts', async () => {

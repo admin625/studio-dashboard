@@ -136,6 +136,8 @@ export default function AuthProvider({ children }) {
   const initialized = useRef(false)
   const valveRef = useRef(null)
   const initInFlight = useRef(null)
+  // setTimeout ids for work deferred out of the auth-lock callback; cleared on unmount.
+  const deferredRefs = useRef([])
   // Distinct from "no session". True means we could not READ the session, not that there is none.
   const [authUnresolved, setAuthUnresolved] = useState(false)
 
@@ -325,7 +327,12 @@ export default function AuthProvider({ children }) {
   }, [initWithUser])
 
   const runRestore = useCallback(async () => {
-    setAuthUnresolved(false)
+    // 🚨 authUnresolved is NOT cleared here. It used to be, and that was the retry button's
+    // ejection: by the time anyone presses "Try again" the valve has already set
+    // `authReady: true` while `user` is still null, so dropping the connecting screen before
+    // the new read has an answer hands ProtectedRoute exactly the pair it reads as logged-out,
+    // and it redirects to /login before getSession has even been called. Same class as the
+    // valve bounce this file already removed once. It is cleared below, on an ANSWER only.
     if (valveRef.current) clearTimeout(valveRef.current)
 
     // Safety valve: if the restore has not finished within 10s, let the app render rather than
@@ -373,22 +380,46 @@ export default function AuthProvider({ children }) {
     let mounted = true
     runRestore()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // 🚨 THIS CALLBACK IS SYNCHRONOUS AND MAKES NO SUPABASE CALL. BOTH PROPERTIES ARE LOAD-BEARING.
+    //
+    // GoTrue invokes subscribers from INSIDE the auth-token lock and awaits what they return. So
+    // a callback that awaits any supabase call deadlocks by construction: the call queues for a
+    // lock that the callback itself is preventing from being released. Ours awaited
+    // `initOnce(session)` → `.from('studio_accounts')` → `_acquireLock`, and the outcome was
+    // exact — on a fresh password sign-in the network showed
+    // `token?grant_type=password` 200 in 156 ms and then NOTHING: no studio_accounts request, no
+    // pending request at all, button stuck on "Signing in…". The read was never issued. The lock
+    // sat held, exclusive, zero pending, indefinitely. Confirmed by the ABSENCE of the request.
+    //
+    // The documented fix, and the one supabase-js uses on itself (see its own
+    // `setTimeout(async () => this._notifyAllSubscribers('SIGNED_IN', session), 0)` inside
+    // `_initialize`): set React state synchronously here, and push every supabase call onto a
+    // later macrotask so it runs after the lock has been released.
+    //
+    // Do NOT make this `async` again, and do NOT `await` in it. queueMicrotask is not a
+    // substitute either — a microtask still runs before the lock-holding frame unwinds.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
-      // 🚨 INITIAL_SESSION IS DELIBERATELY NOT HANDLED HERE.
-      //
-      // supabase-js fires it from inside its own `_initialize()`, which is running at the same
-      // moment `runRestore()` is awaiting getSessionOnce(). Handling it meant TWO initWithUser
-      // calls in the same tick, each issuing its own studio_accounts read, each taking the
-      // auth-token lock — the exact "no two claimants in one tick" this is meant to prevent.
-      // The initial restore is owned by runRestore, which starts its read only after the
-      // session has resolved. SIGNED_IN (a genuine later sign-in, including a magic link) is
-      // still handled, and initOnce keeps it from overlapping a restore already in progress.
+
+      // INITIAL_SESSION is deliberately not handled: supabase-js fires it from inside its own
+      // _initialize(), while runRestore() is already awaiting getSessionOnce(). Handling it
+      // meant two initWithUser calls in one tick, each issuing its own studio_accounts read.
       if (event === 'SIGNED_IN' && session?.user) {
-        await initOnce(session)
-        setAuthUnresolved(false)
-        if (valveRef.current) clearTimeout(valveRef.current)
+        const deferred = setTimeout(() => {
+          if (!mounted) return
+          // Out of the lock now. Safe to touch supabase.
+          initOnce(session).then(() => {
+            if (!mounted) return
+            // Cleared only once the user is actually in context. Clearing it earlier would drop
+            // the connecting screen while `user` is still null and `authReady` already true,
+            // which ProtectedRoute reads as logged-out and answers with /login.
+            setAuthUnresolved(false)
+            if (valveRef.current) clearTimeout(valveRef.current)
+          })
+        }, 0)
+        deferredRefs.current.push(deferred)
       } else if (event === 'SIGNED_OUT') {
+        // Synchronous only — no supabase call, nothing awaited.
         app.reset()
         app.update({ authReady: true })
         setAuthUnresolved(false)
@@ -400,6 +431,8 @@ export default function AuthProvider({ children }) {
     return () => {
       mounted = false
       if (valveRef.current) clearTimeout(valveRef.current)
+      deferredRefs.current.forEach(clearTimeout)
+      deferredRefs.current = []
       subscription?.unsubscribe()
     }
   }, []) // eslint-disable-line

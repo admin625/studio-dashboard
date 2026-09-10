@@ -35,16 +35,35 @@ export { SUPABASE_URL }
  */
 let inFlightSession = null
 
+/**
+ * How long a single in-flight read may keep being handed to new callers.
+ *
+ * This bounds the CACHE, not the call. supabase-js `getSession()` takes no AbortSignal, so the
+ * underlying operation cannot be cancelled — but a promise that never settles must not become
+ * permanent. Without this, one stuck read poisons the page for its whole lifetime: every later
+ * caller joins the same dead promise and waits forever, so a transient stall presents as a
+ * permanently broken tab. Measured on production 2026-09-10 — `_initialize` held the auth lock
+ * with zero pending and never released, and nothing afterwards could recover.
+ */
+const SESSION_CACHE_DEADLINE_MS = 15000
+
 export function getSessionOnce() {
   if (inFlightSession) return inFlightSession
-  inFlightSession = supabase.auth.getSession()
+
+  const p = supabase.auth.getSession()
+  inFlightSession = p
+
+  const release = () => { if (inFlightSession === p) inFlightSession = null }
   // Clear on settle, success or failure. Attached to a copy so the promise handed to callers
   // is the original — a `.finally()` chain would swallow nothing but would change identity.
-  inFlightSession.then(
-    () => { inFlightSession = null },
-    () => { inFlightSession = null },
-  )
-  return inFlightSession
+  p.then(release, release)
+
+  // …and clear it anyway if it never settles, so the NEXT caller gets a fresh attempt rather
+  // than joining a corpse. The stuck promise is still stuck; it just stops being contagious.
+  const deadline = setTimeout(release, SESSION_CACHE_DEADLINE_MS)
+  if (typeof deadline === 'object' && typeof deadline.unref === 'function') deadline.unref()
+
+  return p
 }
 
 /**
