@@ -118,6 +118,13 @@ for (const line of diff.split('\n')) {
     const stripped = raw.replace(SQL_WORDS, '').replace(/[^A-Za-z0-9+/=_-]/g, '')
     if (stripped.length < 40) continue          // SQL-keyword allowlist
     if (PATH_SHAPED.test(raw) && !CRED_PREFIX.test(raw)) continue  // repo path, not a secret
+    // npm SUBRESOURCE INTEGRITY DIGESTS, in the lockfile only. `"integrity": "sha512-…"` is a
+    // published hash of a public tarball — the opposite of a secret, and there is one per
+    // dependency, so adding two packages staged 53 of them and blocked the commit outright on
+    // 2026-09-10. Deliberately NOT a blanket "skip package-lock.json": a real key pasted into
+    // that file must still be caught, so the exclusion is pinned to both the filename AND the
+    // sha<bits>- shape. Anything else in the lockfile is scanned exactly as before.
+    if (file === 'package-lock.json' && /^sha(?:256|384|512)-/.test(raw)) continue
     if (!looksLikeEntropy(stripped)) continue   // prose / SCREAMING_CASE
     findings.push({ file, rule: 'high-entropy 40+ char run', tok: raw })
   }
