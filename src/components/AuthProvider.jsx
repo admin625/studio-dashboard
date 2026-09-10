@@ -10,18 +10,20 @@
  * no way to bound it that actually cancels; the honest options are "no timeout" or "a timeout
  * that lies", and this is the first. The 10s valve below still guarantees the app renders.
  *
- * The studio_accounts read keeps its `retryWithTimeout` — that one is a PostgREST fetch, its
- * abandonment costs a socket rather than a lock slot, and it is not on the contention path.
+ * ⚠️ THE studio_accounts READ IS ABORTABLE AND SEQUENCED. It used to use `retryWithTimeout`,
+ * which has the same non-cancelling behaviour, and once getSession was fixed that became the
+ * dominant claimant — measured `attempts=2 elapsed≈15s` on 10 of 10 reloads. It is now a single
+ * attempt bound by a real `AbortController` via `.abortSignal()`, retried at most once and only
+ * after the first abort has actually fired. It also starts strictly after `getSessionOnce()`
+ * resolves, so AuthProvider never puts two claimants on the auth-token lock in one tick.
  */
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { supabase, getSessionOnce } from '../lib/supabase'
-// Still used by lookupUserRole's studio_instructors/clients reads. Those are PostgREST
-// fetches, not getSession — abandoning one costs a socket, not a place in the auth-lock
-// queue — so bounding them is safe in a way that bounding getSession was not.
+// Still used by lookupUserRole's studio_instructors/clients reads. Those run on the fallback
+// path only (no JWT studio claim), not on the first-load contention path.
 import { withTimeout } from '../lib/withTimeout'
-import { retryWithTimeout } from '../lib/retryWithTimeout'
 import { classifyStudioLoadError, describeStudioLoadFailure, STUDIO_LOAD_TIMEOUT, STUDIO_LOAD_NO_ROW } from '../lib/studioLoadDiagnostics'
 import { useApp } from '../context/AppContext'
 
@@ -133,6 +135,7 @@ export default function AuthProvider({ children }) {
   const location = useLocation()
   const initialized = useRef(false)
   const valveRef = useRef(null)
+  const initInFlight = useRef(null)
   // Distinct from "no session". True means we could not READ the session, not that there is none.
   const [authUnresolved, setAuthUnresolved] = useState(false)
 
@@ -207,23 +210,50 @@ export default function AuthProvider({ children }) {
         const studioLoadStartedAt = Date.now()
         let studioAttempts = 1
         try {
-          // Retry once with a higher ceiling rather than one longer wait: a longer
-          // single timeout trades a fast wrong answer for a slow one, while a second
-          // attempt addresses a cold connection directly. Ceilings 5s then 8s.
-          const { data: s, error: qErr } = await retryWithTimeout(
-            () => supabase.from('studio_accounts')
-              .select('studio_name, photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, logo_light_url, logo_dark_url, watermark_default_zone, watermark_default_variant, is_beta, studio_type, last_content_types')
-              .eq('id', ri.studioId).single(),
-            {
-              ceilings: [5000, 8000],
-              label: 'studio_accounts',
-              onRetry: (err, attempt, attemptMs) => {
-                studioAttempts = attempt + 1
-                updates.studioLoadRetried = true
-                console.warn(`[FCA] studio_accounts attempt ${attempt} gave up after ${attemptMs}ms (ceiling 5000ms) — retrying with an 8000ms ceiling. No server response yet; the first query may still be running.`)
-              },
+          // ONE ATTEMPT AT A TIME, AND IT IS REALLY CANCELLED WHEN IT GIVES UP.
+          //
+          // This used to be `retryWithTimeout(..., ceilings: [5000, 8000])`, which races a
+          // promise and abandons the loser WITHOUT cancelling it. That is the same defect that
+          // was removed from getSession, and after getSession was fixed it became the dominant
+          // one: attempt 1 kept its place in the auth-token lock queue while attempt 2 queued
+          // behind it, so a read that should cost one lock acquisition cost two and neither
+          // could win. Measured 2026-09-10 across ten reloads — `attempts=2 elapsed≈15s`, 10/10,
+          // while the row itself is an 0.087 ms index scan.
+          //
+          // `.abortSignal()` is the difference: supabase-js hands it to fetch, so an expired
+          // ceiling tears the request down and releases its claim instead of leaving a ghost.
+          // A second attempt is allowed ONLY once attempt 1's abort has actually fired, so the
+          // two can never be in flight together. Two attempts maximum.
+          const runAttempt = async () => {
+            const controller = new AbortController()
+            let aborted = false
+            const ceiling = setTimeout(() => { aborted = true; controller.abort() }, 8000)
+            try {
+              const res = await supabase.from('studio_accounts')
+                .select('studio_name, photo_source, ai_photo_prompt, brand_color, brand_color_secondary, brand_font, brand_voice, logo_url, logo_light_url, logo_dark_url, watermark_default_zone, watermark_default_variant, is_beta, studio_type, last_content_types')
+                .eq('id', ri.studioId)
+                .abortSignal(controller.signal)
+                .single()
+              return { ...res, aborted }
+            } catch (e) {
+              return { data: null, error: e, aborted }
+            } finally {
+              clearTimeout(ceiling)
             }
-          )
+          }
+
+          let attempt = await runAttempt()
+
+          // Retry ONLY on a fired abort. A PostgREST error (RLS denial, no row, bad column) is
+          // a real answer and repeating it just burns another lock acquisition for the same no.
+          if (attempt.error && attempt.aborted) {
+            studioAttempts = 2
+            updates.studioLoadRetried = true
+            console.warn('[FCA] studio_accounts attempt 1 ABORTED at its 8000ms ceiling and is cancelled, not merely abandoned — starting attempt 2.')
+            attempt = await runAttempt()
+          }
+
+          const { data: s, error: qErr } = attempt
           if (qErr) throw qErr
           if (s) {
             Object.assign(updates, {
@@ -282,6 +312,18 @@ export default function AuthProvider({ children }) {
     }
   }, [app, lookupUserRole])
 
+  /**
+   * One initWithUser at a time. A second caller joins the first rather than starting a
+   * competing studio_accounts read — two reads in one tick is the contention this exists to
+   * stop, and it is what INITIAL_SESSION arriving mid-restore used to cause.
+   */
+  const initOnce = useCallback((session) => {
+    if (initInFlight.current) return initInFlight.current
+    const p = initWithUser(session).finally(() => { initInFlight.current = null })
+    initInFlight.current = p
+    return p
+  }, [initWithUser])
+
   const runRestore = useCallback(async () => {
     setAuthUnresolved(false)
     if (valveRef.current) clearTimeout(valveRef.current)
@@ -305,7 +347,9 @@ export default function AuthProvider({ children }) {
     try {
       const { data: { session } } = await getSessionOnce()
       if (session?.user) {
-        await initWithUser(session)
+        // Sequenced: the studio_accounts read inside initWithUser starts only now, after
+        // getSessionOnce() has resolved. Never in the same tick as the session read.
+        await initOnce(session)
       } else {
         // A definitive answer: there is no session. This is the ONLY path that may fall
         // through to the login redirect.
@@ -320,7 +364,7 @@ export default function AuthProvider({ children }) {
     } finally {
       if (valveRef.current) clearTimeout(valveRef.current)
     }
-  }, [app, initWithUser])
+  }, [app, initOnce])
 
   useEffect(() => {
     if (initialized.current) return
@@ -331,8 +375,17 @@ export default function AuthProvider({ children }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-        await initWithUser(session)
+      // 🚨 INITIAL_SESSION IS DELIBERATELY NOT HANDLED HERE.
+      //
+      // supabase-js fires it from inside its own `_initialize()`, which is running at the same
+      // moment `runRestore()` is awaiting getSessionOnce(). Handling it meant TWO initWithUser
+      // calls in the same tick, each issuing its own studio_accounts read, each taking the
+      // auth-token lock — the exact "no two claimants in one tick" this is meant to prevent.
+      // The initial restore is owned by runRestore, which starts its read only after the
+      // session has resolved. SIGNED_IN (a genuine later sign-in, including a magic link) is
+      // still handled, and initOnce keeps it from overlapping a restore already in progress.
+      if (event === 'SIGNED_IN' && session?.user) {
+        await initOnce(session)
         setAuthUnresolved(false)
         if (valveRef.current) clearTimeout(valveRef.current)
       } else if (event === 'SIGNED_OUT') {
