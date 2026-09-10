@@ -4,8 +4,36 @@ import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import { Loader2, Calendar, ChevronRight, Inbox, Sparkles } from 'lucide-react'
 
+/**
+ * Should the delivery fetch run yet, and against which scope?
+ *
+ * WHY THIS GUARD EXISTS. This effect used to fire on mount with no guard at all, which meant
+ * `get_delivery_summaries` went out with `p_studio_id: null` while AuthProvider was still
+ * resolving. That is a wasted query (a null studio can never return this studio's rows), and
+ * worse, it was a third simultaneous claimant on the supabase-js auth lock, alongside
+ * `createClient()` parsing the magic-link fragment and AuthProvider's own `getSession()`.
+ * supabase-js resolves that contention by letting one caller steal the lock, and the loser
+ * surfaced as the first thing a brand-new studio saw after signing up:
+ *
+ *   Error loading deliveries — Lock "sb-<ref>-auth-token" was released because another request stole it
+ *
+ * NULL IS TWO DIFFERENT ANSWERS, and telling them apart is the whole point. Before `authReady`,
+ * a null `resolvedStudioId` means "not known yet" — do not query on it. After `authReady`, null
+ * is a real answer: an individual-scope client with no studio (2 such rows live on 2026-09-10),
+ * whose deliveries are scoped by RLS instead. Guarding on `resolvedStudioId` being truthy would
+ * strand those accounts on a permanent spinner, so the signal is `authReady`, not the id.
+ *
+ * Exported as a pure function because this repo's test harness is node-environment vitest with
+ * no jsdom and no @testing-library — the guard is tested as a decision rather than as a render.
+ */
+export function deliveryFetchScope({ authReady, resolvedStudioId }) {
+  if (!authReady) return { shouldFetch: false, studioId: null, reason: 'auth_not_ready' }
+  if (!resolvedStudioId) return { shouldFetch: true, studioId: null, reason: 'individual_scope' }
+  return { shouldFetch: true, studioId: resolvedStudioId, reason: 'studio_scope' }
+}
+
 export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
-  const { resolvedStudioId, brandColorPrimary } = useApp()
+  const { resolvedStudioId, brandColorPrimary, authReady } = useApp()
   const [deliveries, setDeliveries] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -13,11 +41,13 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
 
   const primary = brandColorPrimary || '#667eea'
 
+  const scope = deliveryFetchScope({ authReady, resolvedStudioId })
+
   const fetchDeliveries = async () => {
     try {
       // Try RPC first (returns counts), fallback to direct query
       let result = await supabase.rpc('get_delivery_summaries', {
-        p_studio_id: resolvedStudioId || null
+        p_studio_id: scope.studioId
       })
 
       if (result.error) {
@@ -41,13 +71,23 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
   }
 
   useEffect(() => {
+    // Hold in the loading state until auth has settled. Returning early leaves `loading` true,
+    // which is already the initial state, so the studio sees the spinner rather than a flash of
+    // "no deliveries yet" followed by their real list.
+    if (!scope.shouldFetch) return
+
     let mounted = true
     setLoading(true)
     fetchDeliveries()
       .then(data => { if (mounted) { setDeliveries(data); setLoading(false) } })
-      .catch(err => { if (mounted) { setError(err.message); setLoading(false) } })
+      .catch(err => {
+        // The raw message is diagnostic, not user-facing — it is where the supabase-js lock
+        // text was being rendered into the UI. Keep it in the console, show copy to the studio.
+        console.error('[DeliveryList] delivery load failed:', err)
+        if (mounted) { setError(err.message); setLoading(false) }
+      })
     return () => { mounted = false }
-  }, [resolvedStudioId, pollTrigger]) // eslint-disable-line
+  }, [authReady, resolvedStudioId, pollTrigger]) // eslint-disable-line
 
   if (loading) {
     return (
@@ -61,8 +101,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
   if (error) {
     return (
       <div className="text-center py-20">
-        <p className="text-red-400 text-sm mb-2">Error loading deliveries</p>
-        <p className="text-slate-500 text-xs">{error}</p>
+        <p className="text-red-400 text-sm mb-2">We couldn&apos;t load your content. Refresh to try again.</p>
       </div>
     )
   }
