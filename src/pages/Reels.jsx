@@ -8,7 +8,7 @@
  * (no bytes fetched while collapsed). render_url is signed at list-load and read directly by the row.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, getSessionOnce } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
 import NewReelModal from '../components/NewReelModal'
@@ -39,7 +39,7 @@ function reelGroup(r) {
 const byRecency = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
 
 async function callReels(action, payload) {
-  const { data } = await supabase.auth.getSession()
+  const { data } = await getSessionOnce()
   const token = data?.session?.access_token
   const res = await fetch('/.netlify/functions/reels', {
     method: 'POST',

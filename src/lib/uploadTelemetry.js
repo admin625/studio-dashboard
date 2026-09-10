@@ -30,7 +30,7 @@
  * unauthenticated posts and inserts service-side, so the session-death class is now
  * recordable. It was not before.
  */
-import { supabase } from './supabase'
+import { supabase, getSessionOnce } from './supabase'
 
 const QUEUE_KEY = 'fca_upload_events_queue'
 const QUEUE_MAX = 50
@@ -309,7 +309,7 @@ export async function emit(attemptId, stage, outcome, fields = {}) {
   try {
     // No session means the authenticated INSERT policy will reject us. Do not spend a
     // round trip discovering that — go straight to the channel that works without one.
-    const { data } = await supabase.auth.getSession()
+    const { data } = await getSessionOnce()
     if (!data?.session) {
       console.warn('[uploadTelemetry] no session, beaconing:', row.event_type)
       return beacon(row) ? BEACONED : (writeQueue(readQueue().concat([row])) ? QUEUED : DROPPED)
@@ -354,7 +354,7 @@ export async function emitFailure(attemptId, stage, fields = {}, err = null) {
   })
 
   try {
-    const { data } = await supabase.auth.getSession()
+    const { data } = await getSessionOnce()
     await fetch('/.netlify/functions/telemetry-alert', {
       method: 'POST',
       headers: {

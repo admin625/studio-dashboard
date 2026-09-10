@@ -1,10 +1,25 @@
 /**
  * AuthProvider — runs session restore on mount, sets authReady.
  * Must wrap all routes so auth state is available everywhere.
- * All Supabase queries have 5s timeouts to prevent infinite hangs.
+ *
+ * ⚠️ THE SESSION READ IS NO LONGER TIMED OUT, DELIBERATELY. It used to be wrapped in
+ * `withTimeout(…, 5000)`, and `withTimeout` races a promise without cancelling the underlying
+ * work — so a slow `getSession()` was abandoned by its caller while its lock request stayed
+ * queued, and the retry stacked another one behind it. The timeout was manufacturing the
+ * contention it existed to survive. supabase-js `getSession()` takes no AbortSignal, so there is
+ * no way to bound it that actually cancels; the honest options are "no timeout" or "a timeout
+ * that lies", and this is the first. The 10s valve below still guarantees the app renders.
+ *
+ * The studio_accounts read keeps its `retryWithTimeout` — that one is a PostgREST fetch, its
+ * abandonment costs a socket rather than a lock slot, and it is not on the contention path.
  */
-import { useEffect, useRef, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { useLocation, Link } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
+import { supabase, getSessionOnce } from '../lib/supabase'
+// Still used by lookupUserRole's studio_instructors/clients reads. Those are PostgREST
+// fetches, not getSession — abandoning one costs a socket, not a place in the auth-lock
+// queue — so bounding them is safe in a way that bounding getSession was not.
 import { withTimeout } from '../lib/withTimeout'
 import { retryWithTimeout } from '../lib/retryWithTimeout'
 import { classifyStudioLoadError, describeStudioLoadFailure, STUDIO_LOAD_TIMEOUT, STUDIO_LOAD_NO_ROW } from '../lib/studioLoadDiagnostics'
@@ -78,9 +93,48 @@ const ADMIN_ACCOUNTS = {
   },
 }
 
+/** Routes that must render even when the session cannot be read. /login is the way out. */
+const PUBLIC_PATHS = new Set(['/login', '/auth/callback', '/forgot-password'])
+
+/**
+ * Shown when the session read has not resolved — a stall, not a sign-out.
+ *
+ * This is the screen that replaces a wrong answer. Before it existed, ten seconds of silence
+ * became a redirect to /login, which tells a signed-in studio their session ended when it had
+ * not. Waiting is recoverable; being ejected mid-work is not.
+ */
+function StillConnecting({ onRetry }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: '#0A0B0D' }}>
+      <div className="text-center max-w-sm">
+        <Loader2 size={28} className="animate-spin mx-auto mb-4" style={{ color: 'var(--brand-primary)' }} />
+        <p className="text-slate-200 text-sm mb-2">Still connecting…</p>
+        <p className="text-slate-500 text-xs leading-relaxed mb-6">
+          This is taking longer than usual. You are still signed in — nothing has been lost.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="px-4 py-2 rounded-lg text-xs font-semibold text-white transition-opacity hover:opacity-90"
+          style={{ background: 'linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-secondary) 100%)' }}
+        >
+          Try again
+        </button>
+        <p className="text-slate-600 text-xs mt-6">
+          <Link to="/login" style={{ color: 'var(--brand-primary)' }}>Sign in instead</Link>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function AuthProvider({ children }) {
   const app = useApp()
+  const location = useLocation()
   const initialized = useRef(false)
+  const valveRef = useRef(null)
+  // Distinct from "no session". True means we could not READ the session, not that there is none.
+  const [authUnresolved, setAuthUnresolved] = useState(false)
 
   const lookupUserRole = useCallback(async (email) => {
     // Admin bypass — no queries, no timeouts, instant access
@@ -228,63 +282,83 @@ export default function AuthProvider({ children }) {
     }
   }, [app, lookupUserRole])
 
+  const runRestore = useCallback(async () => {
+    setAuthUnresolved(false)
+    if (valveRef.current) clearTimeout(valveRef.current)
+
+    // Safety valve: if the restore has not finished within 10s, let the app render rather than
+    // hang. It deliberately does NOT set studioLoaded — the brand fields are still absent, and
+    // with the retry the studio_accounts read can legitimately still be in flight at 10s.
+    //
+    // 🚨 WHAT IT MUST NOT DO IS SIGN ANYONE OUT. It used to set `authReady: true` with `user`
+    // still null, and ProtectedRoute reads exactly that pair as "logged out" and redirects to
+    // /login. So a ten-second stall — a contended lock, a slow network — presented as a session
+    // that had ended. Failing to READ a session is not evidence that there is no session, and a
+    // studio being bounced to a login screen mid-work is a far worse answer than being told to
+    // wait. `authUnresolved` keeps the two apart.
+    valveRef.current = setTimeout(() => {
+      console.warn('[FCA] SAFETY VALVE: auth restore unresolved after 10s — rendering the connecting state, NOT signing out')
+      setAuthUnresolved(true)
+      app.update({ authReady: true })
+    }, 10000)
+
+    try {
+      const { data: { session } } = await getSessionOnce()
+      if (session?.user) {
+        await initWithUser(session)
+      } else {
+        // A definitive answer: there is no session. This is the ONLY path that may fall
+        // through to the login redirect.
+        app.update({ authReady: true })
+      }
+      setAuthUnresolved(false)
+    } catch (err) {
+      // A transport or lock failure. Not a definitive "no session" — see above.
+      console.error('[FCA] restoreSession error:', (err && err.message) || err)
+      app.update({ authReady: true })
+      setAuthUnresolved(true)
+    } finally {
+      if (valveRef.current) clearTimeout(valveRef.current)
+    }
+  }, [app, initWithUser])
+
   useEffect(() => {
     if (initialized.current) return
     initialized.current = true
 
     let mounted = true
-
-    // Safety valve: if nothing sets authReady within 10s, force it so the app
-    // renders instead of hanging. It deliberately does NOT set studioLoaded —
-    // the brand fields are still absent when it fires, and with the retry the
-    // studio_accounts read can legitimately still be in flight at 10s. Any
-    // surface that writes brand data must gate on studioLoaded for that reason.
-    const safetyTimer = setTimeout(() => {
-      console.warn('[FCA] SAFETY VALVE: authReady forced after 10s timeout')
-      app.update({ authReady: true })
-    }, 10000)
-
-    const restoreSession = async () => {
-      try {
-        const { data: { session } } = await withTimeout(
-          supabase.auth.getSession(),
-          5000, 'getSession'
-        )
-        if (!mounted) return
-
-        if (session?.user) {
-          await initWithUser(session)
-        } else {
-          app.update({ authReady: true })
-        }
-      } catch (err) {
-        console.error('[FCA] restoreSession error:', err.message)
-        if (mounted) app.update({ authReady: true })
-      }
-      clearTimeout(safetyTimer)
-    }
-
-    restoreSession()
+    runRestore()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
         await initWithUser(session)
-        clearTimeout(safetyTimer)
+        setAuthUnresolved(false)
+        if (valveRef.current) clearTimeout(valveRef.current)
       } else if (event === 'SIGNED_OUT') {
         app.reset()
         app.update({ authReady: true })
+        setAuthUnresolved(false)
         applyBrandColors(null, null)
-        clearTimeout(safetyTimer)
+        if (valveRef.current) clearTimeout(valveRef.current)
       }
     })
 
     return () => {
       mounted = false
-      clearTimeout(safetyTimer)
+      if (valveRef.current) clearTimeout(valveRef.current)
       subscription?.unsubscribe()
     }
   }, []) // eslint-disable-line
+
+  // Public routes must keep working even while auth is unresolved — /login is the way out of
+  // this state, and /auth/callback has a magic-link token to process that does not depend on
+  // any prior session.
+  const onPublicRoute = PUBLIC_PATHS.has(location.pathname)
+
+  if (authUnresolved && !app.user && !onPublicRoute) {
+    return <StillConnecting onRetry={runRestore} />
+  }
 
   return children
 }

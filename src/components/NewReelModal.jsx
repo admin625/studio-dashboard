@@ -14,7 +14,7 @@
  * but never what completed. Every stage below now emits in both directions.
  */
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, getSessionOnce } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
@@ -190,7 +190,7 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
     // cannot diagnose failure.
     let token = null
     try {
-      const { data } = await supabase.auth.getSession()
+      const { data } = await getSessionOnce()
       token = data?.session?.access_token || null
       const claimed = token ? decodeJwtClaim(token, 'fca_studio_id') : null
       if (!token) {

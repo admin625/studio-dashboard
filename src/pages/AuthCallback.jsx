@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, getSessionOnce } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import { nextPathFromQuery } from '../lib/deepLink'
 import CheckYourEmail from '../components/CheckYourEmail'
@@ -56,7 +56,7 @@ export default function AuthCallback() {
 
     const handle = async () => {
       // A real magic-link round trip. UNCHANGED from the original implementation.
-      const { data: { session }, error } = await supabase.auth.getSession()
+      const { data: { session }, error } = await getSessionOnce()
       if (error || !session) {
         navigate('/login?error=magic_link_expired', { replace: true })
         return

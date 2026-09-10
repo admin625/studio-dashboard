@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, getSessionOnce } from '../lib/supabase'
 
 // Goes through our own function, not straight to n8n. The previous direct URL
 // shipped in the browser bundle, which made the workflow a public, unmetered
@@ -43,7 +43,7 @@ export default function HelpChatWidget({ currentPage }) {
     setLoading(true)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session } } = await getSessionOnce()
       if (!session?.access_token) {
         setMessages((prev) => [
           ...prev,

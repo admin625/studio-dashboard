@@ -26,14 +26,28 @@ import { Loader2, Calendar, ChevronRight, Inbox, Sparkles } from 'lucide-react'
  * Exported as a pure function because this repo's test harness is node-environment vitest with
  * no jsdom and no @testing-library — the guard is tested as a decision rather than as a render.
  */
-export function deliveryFetchScope({ authReady, resolvedStudioId }) {
-  if (!authReady) return { shouldFetch: false, studioId: null, reason: 'auth_not_ready' }
-  if (!resolvedStudioId) return { shouldFetch: true, studioId: null, reason: 'individual_scope' }
-  return { shouldFetch: true, studioId: resolvedStudioId, reason: 'studio_scope' }
+export function deliveryFetchScope({ studioLoaded, studioLoadError, resolvedStudioId }) {
+  // The studio read FAILED. Not "not yet" — never. Say so, or the studio watches a spinner
+  // that will not resolve, which is the failure mode gating on studioLoaded would otherwise
+  // introduce. This is the branch that keeps the gate honest.
+  if (studioLoadError) return { shouldFetch: false, failed: true, studioId: null, reason: 'studio_load_failed' }
+
+  // Not resolved yet. `authReady` was the wrong signal here and was measured to be: AuthProvider
+  // sets it when the session read settles, but its studio_accounts read keeps retrying for up to
+  // ~15s afterwards, so anything gated on authReady still fires into that window and still
+  // contends. studioLoaded is the flag that actually tracks that read.
+  if (!studioLoaded) return { shouldFetch: false, failed: false, studioId: null, reason: 'studio_not_loaded' }
+
+  // Loaded, and the id is legitimately absent: an individual-scope client with no studio, whose
+  // rows come back through RLS instead. AuthProvider sets studioLoaded true for them precisely
+  // because "no studio to load" is a loaded state.
+  if (!resolvedStudioId) return { shouldFetch: true, failed: false, studioId: null, reason: 'individual_scope' }
+
+  return { shouldFetch: true, failed: false, studioId: resolvedStudioId, reason: 'studio_scope' }
 }
 
 export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
-  const { resolvedStudioId, brandColorPrimary, authReady } = useApp()
+  const { resolvedStudioId, brandColorPrimary, studioLoaded, studioLoadError } = useApp()
   const [deliveries, setDeliveries] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -41,39 +55,36 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
 
   const primary = brandColorPrimary || '#667eea'
 
-  const scope = deliveryFetchScope({ authReady, resolvedStudioId })
+  const scope = deliveryFetchScope({ studioLoaded, studioLoadError, resolvedStudioId })
 
   const fetchDeliveries = async () => {
-    try {
-      // Try RPC first (returns counts), fallback to direct query
-      let result = await supabase.rpc('get_delivery_summaries', {
-        p_studio_id: scope.studioId
-      })
-
-      if (result.error) {
-        console.warn('[DeliveryList] RPC failed, falling back:', result.error.message)
-        let q = supabase.from('content_deliveries').select('id, created_at')
-        if (resolvedStudioId) q = q.eq('studio_id', resolvedStudioId)
-        result = await q.order('created_at', { ascending: false }).limit(50)
-        if (result.data) {
-          result.data = result.data.map(d => ({
-            id: d.id, created_at: d.created_at,
-            instagram_count: 0, facebook_count: 0, twitter_count: 0, linkedin_count: 0, tiktok_count: 0,
-          }))
-        }
-      }
-
-      if (result.error) throw result.error
-      return result.data || []
-    } catch (err) {
-      throw err
-    }
+    // THE FALLBACK DIRECT QUERY WAS REMOVED HERE, ON PURPOSE.
+    //
+    // It used to catch an RPC error and re-issue a plain `content_deliveries` select. Every
+    // failure this month came from auth-lock contention, and the fallback needed the same token
+    // the RPC had just failed to obtain — so it doubled the load on exactly the path that was
+    // already losing, and produced a second lock claimant per failed render. It never once
+    // recovered a real failure; it only made the queue longer and the spinner last twice as
+    // long. One attempt, and an honest error if it fails.
+    const result = await supabase.rpc('get_delivery_summaries', {
+      p_studio_id: scope.studioId,
+    })
+    if (result.error) throw result.error
+    return result.data || []
   }
 
   useEffect(() => {
-    // Hold in the loading state until auth has settled. Returning early leaves `loading` true,
-    // which is already the initial state, so the studio sees the spinner rather than a flash of
-    // "no deliveries yet" followed by their real list.
+    // The studio read failed outright: stop waiting and say so. Without this the studioLoaded
+    // gate would hold `loading` true forever, trading a wrong answer for a permanent spinner.
+    if (scope.failed) {
+      setError('studio_load_failed')
+      setLoading(false)
+      return
+    }
+
+    // Not resolved yet. Returning early leaves `loading` true, which is already the initial
+    // state, so the studio sees the spinner rather than a flash of "no deliveries yet"
+    // followed by their real list.
     if (!scope.shouldFetch) return
 
     let mounted = true
@@ -87,7 +98,7 @@ export default function DeliveryList({ onOpenGenerate, pollTrigger }) {
         if (mounted) { setError(err.message); setLoading(false) }
       })
     return () => { mounted = false }
-  }, [authReady, resolvedStudioId, pollTrigger]) // eslint-disable-line
+  }, [studioLoaded, studioLoadError, resolvedStudioId, pollTrigger]) // eslint-disable-line
 
   if (loading) {
     return (

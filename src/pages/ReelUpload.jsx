@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, getSessionOnce } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
@@ -79,7 +79,7 @@ export default function ReelUpload() {
   // stale/persisted user object.
   useEffect(() => {
     let active = true
-    supabase.auth.getSession().then(({ data }) => {
+    getSessionOnce().then(({ data }) => {
       if (!active) return
       const session = data?.session
       if (!session) {
