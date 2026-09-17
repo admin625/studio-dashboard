@@ -13,6 +13,7 @@ import DeliveryView from './pages/DeliveryView'
 import Reels from './pages/Reels'
 import ReelUpload from './pages/ReelUpload'
 import AccountSettings from './pages/AccountSettings'
+import Calendar from './pages/Calendar'
 import ProtectedRoute from './components/ProtectedRoute'
 import HelpChatWidget from './components/HelpChatWidget'
 
@@ -86,6 +87,16 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <ReelUpload />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Owner content calendar (2d). Also registered in lib/deepLink.js STATIC_PATHS —
+                  without that entry a post-login return here silently lands on /deliveries. */}
+              <Route
+                path="/calendar"
+                element={
+                  <ProtectedRoute>
+                    <Calendar />
                   </ProtectedRoute>
                 }
               />

@@ -37,7 +37,18 @@ const FREESTYLE_TEMPLATES = {
 // brand_voice NULL, so the placeholder was not an edge case — it was the common path.
 // An empty field is visibly empty and is blocked at submit instead.
 
-export default function GenerateModal({ open, onClose, onSubmitted }) {
+/**
+ * `slotId` / `slotJobLabel` (optional) — calendar 2d. When present the generation is bound to a
+ * calendar slot: slot_id rides the existing payload as an additive field, and the live generator
+ * (pTTpsIlhtOYHqvXd) resolves it, runs the §5.1/§5.2 slot guards before any model call, and flips
+ * the slot to `generated` on success. Absent, everything below behaves exactly as before —
+ * the generator treats a missing slot_id as owner-initiated and skips all slot logic.
+ *
+ * Deliberately routed through THIS modal rather than a bespoke calendar call: the brand-voice and
+ * studioLoadError refusals below are what stop wrong-voice content shipping, and a second
+ * generation entry point would have to re-implement them or quietly drop them.
+ */
+export default function GenerateModal({ open, onClose, onSubmitted, slotId = null, slotJobLabel = null }) {
   const app = useApp()
   const navigate = useNavigate()
   const primary = app.brandColorPrimary || '#667eea'
@@ -186,6 +197,14 @@ export default function GenerateModal({ open, onClose, onSubmitted }) {
       studio_type: app.studioType || '',
       brand_color: app.brandColorPrimary || '',
       last_content_types: app.lastContentTypes || [],
+      // Calendar 2d. ADDITIVE and conditional: with no slotId the payload is byte-identical to
+      // what it has always been, so the owner-initiated path is untouched. The generator treats
+      // an absent slot_id as owner-initiated and skips every slot rule.
+      //
+      // The slot's JOB is deliberately NOT sent. `Resolve Slot` reads job (and the program entry's
+      // hold/confirmation state) from calendar_slots server-side, so the constraint comes from the
+      // row rather than from a value the browser could be wrong about or tamper with.
+      ...(slotId ? { slot_id: slotId } : {}),
     }
 
     if (freestyle) {

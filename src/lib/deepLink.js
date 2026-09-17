@@ -47,6 +47,7 @@ const STATIC_PATHS = new Set([
   '/reels',
   '/reels/upload',
   '/brand',
+  '/calendar',
   '/settings/account',
 ])
 

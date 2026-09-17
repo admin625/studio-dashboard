@@ -1,7 +1,7 @@
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../hooks/useAuth'
 import { useLocation, Link } from 'react-router-dom'
-import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User, Film } from 'lucide-react'
+import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User, Film, CalendarDays } from 'lucide-react'
 
 export default function Layout({ children }) {
   const { email, role, studioName, brandColorPrimary, authReady } = useApp()
@@ -21,6 +21,9 @@ export default function Layout({ children }) {
 
   const navItems = [
     { path: '/deliveries', label: 'Content', Icon: LayoutGrid, show: true },
+    // Owner-only: the calendar endpoint gates at level 'owner', and calendar RLS keys on
+    // owned_studio_ids(). Showing it to an instructor would render a tab that 403s.
+    { path: '/calendar', label: 'Plan', Icon: CalendarDays, show: isOwner },
     { path: '/reels', label: 'Reels', Icon: Film, show: isOwner },
     { path: '/photos', label: 'Photos', Icon: ImageIcon, show: isOwner },
     { path: '/brand', label: 'Brand', Icon: Palette, show: isOwner },
