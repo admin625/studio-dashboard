@@ -3,11 +3,11 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
-import { nextPathFromQuery, withNext } from '../lib/deepLink'
+import { landingPath, allowedNextOrNull, withNext } from '../lib/deepLink'
 
 export default function Login() {
   const { login } = useAuth()
-  const { user, authReady } = useApp()
+  const { user, authReady, role } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -17,14 +17,21 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
 
   // Redirect once authenticated, to whatever ProtectedRoute put in ?next=.
-  // No next means /deliveries, exactly as before.
+  // No next means the role default — /calendar for an owner, /deliveries otherwise.
   useEffect(() => {
     if (authReady && user) {
-      // Destination rides in our own query string. Allowlist-validated on read;
-      // nextPathFromQuery never returns null, so there is no fallback to forget.
-      navigate(nextPathFromQuery(location.search), { replace: true })
+      // Destination rides in our own query string. Allowlist-validated on read inside
+      // landingPath; it never returns null, so there is no fallback to forget.
+      //
+      // The RESOLVED app role, with no fallback to the raw claim. AuthProvider already
+      // prefers the JWT role when it sets this, so the only case `role` is null is a
+      // failed resolution — and an account whose studio could not be resolved has no
+      // business being sent to /calendar on the strength of a claim alone. Null lands
+      // her on DEFAULT_PATH, which is the honest answer for a session we cannot place.
+      // Set in the same state update as `user`, so there is nothing to race.
+      navigate(landingPath(location.search, role), { replace: true })
     }
-  }, [authReady, user, navigate, location.search])
+  }, [authReady, user, role, navigate, location.search])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -130,7 +137,11 @@ export default function Login() {
 
         <p className="text-center mt-6 text-xs text-slate-500">
           Forgot password?{' '}
-          <Link to={withNext('/forgot-password', nextPathFromQuery(location.search))} className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
+          {/* allowedNextOrNull, not nextPathFromQuery: the latter turns "no destination"
+              into DEFAULT_PATH, and withNext can no longer tell those apart now that the
+              landing is role-dependent. Laundering it here would pin every magic link to
+              /deliveries and quietly cancel the owner default. */}
+          <Link to={withNext('/forgot-password', allowedNextOrNull(location.search))} className="transition-colors" style={{ color: 'var(--brand-primary)' }}>
             Reset it here
           </Link>
         </p>

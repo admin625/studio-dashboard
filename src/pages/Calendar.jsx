@@ -20,6 +20,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { getSessionOnce } from '../lib/supabase'
+import { fmtSlotDay, fmtSlotMonthDay } from '../lib/slotDate'
 import Layout from '../components/Layout'
 import GenerateModal from '../components/GenerateModal'
 import {
@@ -41,21 +42,11 @@ const JOB_LABEL = {
   event_conversion: 'Events',
 }
 
-function fmtDay(ymd) {
-  if (!ymd) return ''
-  // Parse as UTC — slot_date is a `date`, and `new Date('2026-10-05')` is already UTC-midnight.
-  // Formatting it in local time would shift it a day west of Greenwich.
-  return new Date(ymd + 'T00:00:00Z').toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
-  })
-}
-
-function fmtWeek(ymd) {
-  if (!ymd) return ''
-  return new Date(ymd + 'T00:00:00Z').toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', timeZone: 'UTC',
-  })
-}
+// Both moved to lib/slotDate.js on 2026-09-18 so GenerateModal formats the slot's
+// date by the same UTC rule. Aliased rather than renamed at every call site — the
+// rule lives in one file now, which is the part that matters.
+const fmtDay = fmtSlotDay
+const fmtWeek = fmtSlotMonthDay
 
 export default function Calendar() {
   const app = useApp()
@@ -188,6 +179,13 @@ export default function Calendar() {
 
       {openSlot && (
         <SlotPanel
+          // Keyed by slot id for the same reason DeliveryRoute is keyed by :id — React
+          // reuses a component instance across prop changes, and SlotPanel's draft lives
+          // in useState seeded once from `slot`. Today the panel always unmounts between
+          // slots (openSlot goes null on close), so nothing leaks; a key makes that
+          // structural instead of incidental, so a future "open the next slot directly"
+          // cannot carry one slot's unsaved words onto another's.
+          key={openSlot.id}
           slot={openSlot}
           primary={primary}
           onClose={() => setOpenSlot(null)}
@@ -198,7 +196,18 @@ export default function Calendar() {
           }}
           onReason={async (text) => {
             await call({ action: 'reason', slot_id: openSlot.id, rationale: text })
-            setOpenSlot(null)
+            // DO NOT CLOSE THE PANEL. Blocker 2, 2026-09-18: closing on success made a
+            // save indistinguishable from a discard — the panel vanished either way,
+            // which is how an unsaved edit passed for a saved one. The panel stays up
+            // and says "Saved"; the owner decides when she is done.
+            //
+            // Reflect the write locally so the panel's own copy is not stale while the
+            // week reloads behind it. `reason_source` flips to 'owner' because that is
+            // what the endpoint will now resolve for this slot.
+            setOpenSlot(s => (s ? { ...s, reason: text, reason_source: 'owner' } : s))
+            // Refresh the week so the card behind the panel shows her words and the
+            // "Your words" chip. Not awaited: the save has already succeeded, and a
+            // slow reload must not hold up the confirmation she is waiting for.
             loadWeek(weekStart)
           }}
           onGenerate={async () => {
@@ -211,10 +220,16 @@ export default function Calendar() {
         />
       )}
 
+      {/* Slot context is DISPLAY ONLY — the generator reads job, rationale and date from
+          calendar_slots off slot_id. `reason` (not `rationale`) is the resolved field: it is
+          the owner's own wording when she has edited it, the planner's otherwise, which is
+          the version she should be looking at while deciding what to write. */}
       <GenerateModal
         open={!!genSlot}
         slotId={genSlot ? genSlot.id : null}
         slotJobLabel={genSlot ? genSlot.job_label : null}
+        slotRationale={genSlot ? genSlot.reason : null}
+        slotDate={genSlot ? genSlot.slot_date : null}
         onClose={() => setGenSlot(null)}
         onSubmitted={() => { setGenSlot(null); loadWeek(weekStart) }}
       />
@@ -336,19 +351,75 @@ function QuarterView({ data }) {
   )
 }
 
-function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate }) {
+/**
+ * SlotPanel — the slot, and the one field in this product the owner writes herself.
+ *
+ * 🚨 THE REASON EDIT NEEDS AN EXPLICIT SAVE, AND THE FIRST CUT DID NOT HAVE ONE.
+ * Rehearsal blocker 2, 2026-09-18: the textarea was editable, the only control that
+ * persisted it was labelled "That reason's right", and that button did double duty —
+ * it saved when the text had changed and recorded an 'accepted' action when it had
+ * not. An owner who has just REWRITTEN the reason does not read "that reason's right"
+ * as "save what I typed"; she reads it as agreeing with what was already there. So
+ * she closed the panel, the draft lived only in component state, and the edit was
+ * gone on reload with nothing to say it had ever existed.
+ *
+ * `calendar_slot_rationales` held ZERO rows at the time of that rehearsal — across
+ * every studio, for the entire life of the feature. The write path was not broken;
+ * it was unreachable by anyone who did not already know the button was overloaded.
+ *
+ * Three things follow, and all three are requirements rather than styling:
+ *   SAVE IS ITS OWN CONTROL, next to the field it saves, and says "Save".
+ *   SAVING CONFIRMS VISIBLY and does NOT close the panel. Closing on success is how
+ *     the first cut managed to look identical whether it had saved or not.
+ *   A DIRTY DRAFT IS NEVER DISCARDED SILENTLY — closing with unsaved text asks first.
+ *
+ * ⚠️ NOT AUTOSAVE, deliberately. The rationale is the owner's own words and the
+ * signal the whole co-design loop reads; a half-typed sentence committed on a
+ * keystroke timer is worse than no edit at all. HQ ruling 2026-09-18.
+ */
+// Exported for test/slotReasonSave.test.jsx. The reason edit is the one field the owner
+// writes herself, its write path had never once succeeded in production, and its failure
+// mode is SILENT — the panel looked identical whether it saved or discarded. That is not
+// a class of bug a pure-function test can reach, so it is render-tested.
+export function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate }) {
+  // TWO states, not one. `saved` is what is persisted; `text` is the draft. A single
+  // variable cannot tell an untouched field from an edited one, which is precisely
+  // the distinction "unsaved changes" depends on.
+  const [saved, setSaved] = useState(slot.reason || '')
   const [text, setText] = useState(slot.reason || '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [justSaved, setJustSaved] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+
+  const trimmed = text.trim()
+  const dirty = trimmed !== saved.trim()
+  const canSave = dirty && trimmed.length > 0
 
   const run = async (fn) => {
     setBusy(true); setErr('')
     try { await fn() } catch (e) { setErr(e.message || 'That did not save.'); setBusy(false) }
   }
 
+  // Clears busy on success, unlike the action handlers below — this is the one path
+  // that leaves the panel mounted, so nothing else would ever re-enable the buttons.
+  const save = () => run(async () => {
+    await onReason(trimmed)
+    setSaved(trimmed)
+    setJustSaved(true)
+    setConfirmDiscard(false)
+    setBusy(false)
+  })
+
+  // The X and the backdrop both come through here. An unsaved draft stops and asks.
+  const attemptClose = () => {
+    if (dirty) { setConfirmDiscard(true); return }
+    onClose()
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
-      style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+      style={{ background: 'rgba(0,0,0,0.6)' }} onClick={attemptClose}>
       <div onClick={e => e.stopPropagation()}
         className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto"
         style={{ background: '#111318', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -362,22 +433,90 @@ function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate }) {
             {/* Job is read-only this cut — say so rather than showing a dead control. */}
             <p className="text-[10px] text-slate-500 mt-0.5">Set by your plan</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1"><X size={18} /></button>
+          {/* aria-label because the only child is an icon — without it the control is
+              nameless to a screen reader, and to any test that asks for it by name. */}
+          <button type="button" aria-label="Close" onClick={attemptClose}
+            className="text-slate-500 hover:text-white p-1"><X size={18} /></button>
         </div>
 
-        <label className="block text-[11px] text-slate-400 mb-1.5">Why this post</label>
+        <label className="block text-[11px] text-slate-400 mb-1.5" htmlFor="slot-reason">Why this post</label>
         <textarea
+          id="slot-reason"
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={e => {
+            setText(e.target.value)
+            // The confirmation describes the LAST save. Once she types again it is
+            // stale, and a "Saved" sitting above unsaved text is the exact lie this
+            // whole panel is being rebuilt to stop telling.
+            setJustSaved(false)
+            setConfirmDiscard(false)
+          }}
           rows={3}
-          className="w-full rounded-lg px-3 py-2 text-sm text-slate-100 mb-1"
+          className="w-full rounded-lg px-3 py-2 text-sm text-slate-100 mb-2"
           style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
         />
+
+        {/* SAVE LIVES HERE — beside the field, not among the slot actions below.
+            Where the control sits is most of the fix: the old one was in the action
+            row, where it read as a verdict on the plan rather than on her edit. */}
+        <div className="flex items-center gap-3 mb-2 min-h-[34px]">
+          <button
+            type="button"
+            onClick={save}
+            disabled={!canSave || busy}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[11px]
+                       font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: primary, color: '#0A0B0D' }}
+          >
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            {busy ? 'Saving…' : 'Save reason'}
+          </button>
+
+          {/* Exactly one of these, in this order, so the state is never ambiguous.
+              EMPTY IS CHECKED FIRST and independently of `dirty`: clearing the field
+              is an edit, so the dirty branch would otherwise win and she would see
+              "Unsaved changes" next to a disabled Save with nothing saying why. A
+              disabled control that does not explain itself is the same dead end as
+              the missing control this panel was rebuilt to fix. */}
+          {trimmed.length === 0 && (
+            <span className="text-[11px] text-amber-300">A reason can't be empty.</span>
+          )}
+          {trimmed.length > 0 && dirty && !busy && (
+            <span className="text-[11px] text-amber-300">Unsaved changes</span>
+          )}
+          {trimmed.length > 0 && !dirty && justSaved && (
+            <span className="text-[11px] flex items-center gap-1" style={{ color: '#34d399' }}>
+              <Check size={12} /> Saved — this is the reason your plan shows now.
+            </span>
+          )}
+        </div>
+
         <p className="text-[10px] text-slate-500 mb-4">
-          {slot.reason_source === 'owner'
+          {saved && slot.reason_source === 'owner'
             ? 'This is your wording. Your plan\'s original reason is kept.'
             : 'From your plan. Editing keeps the original.'}
         </p>
+
+        {confirmDiscard && (
+          <div className="rounded-lg px-3 py-2.5 mb-4"
+            style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <p className="text-[11px] text-amber-200 mb-2">
+              You've changed this reason and haven't saved it. Close anyway?
+            </p>
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose}
+                className="px-3 py-1.5 rounded text-[11px] font-semibold text-slate-200"
+                style={{ background: 'rgba(255,255,255,0.08)' }}>
+                Discard my changes
+              </button>
+              <button type="button" onClick={() => setConfirmDiscard(false)}
+                className="px-3 py-1.5 rounded text-[11px] font-semibold"
+                style={{ background: primary, color: '#0A0B0D' }}>
+                Keep editing
+              </button>
+            </div>
+          </div>
+        )}
 
         {slot.post_id && (
           <p className="text-[11px] mb-4" style={{ color: primary }}>A post has been written for this slot.</p>
@@ -388,13 +527,19 @@ function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Action icon={PenLine} label="Write the post" disabled={busy}
             onClick={() => run(onGenerate)} bg={primary} solid />
-          <Action icon={Check} label="That reason's right" disabled={busy}
-            onClick={() => run(() => (text.trim() && text.trim() !== (slot.reason || '').trim())
-              ? onReason(text.trim())
-              : onAct('accepted'))} />
+          {/* PURE ACCEPT NOW. It no longer saves — that ambiguity was blocker 2.
+              Disabled while dirty: accepting a reason she has just rewritten but not
+              saved would record agreement with the OLD wording. */}
+          <Action icon={Check} label="That reason's right" disabled={busy || dirty}
+            onClick={() => run(() => onAct('accepted'))} />
           <Action icon={SkipForward} label="Skip this one" disabled={busy}
             onClick={() => run(() => onAct('skipped'))} />
         </div>
+        {dirty && (
+          <p className="text-[10px] text-slate-500 mt-2">
+            Save your reason first, or discard it, to use “That reason's right”.
+          </p>
+        )}
       </div>
     </div>
   )

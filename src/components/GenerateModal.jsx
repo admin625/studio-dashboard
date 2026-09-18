@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase, getSessionOnce } from '../lib/supabase'
+import { fmtSlotDay } from '../lib/slotDate'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
@@ -38,17 +39,33 @@ const FREESTYLE_TEMPLATES = {
 // An empty field is visibly empty and is blocked at submit instead.
 
 /**
- * `slotId` / `slotJobLabel` (optional) — calendar 2d. When present the generation is bound to a
- * calendar slot: slot_id rides the existing payload as an additive field, and the live generator
- * (pTTpsIlhtOYHqvXd) resolves it, runs the §5.1/§5.2 slot guards before any model call, and flips
- * the slot to `generated` on success. Absent, everything below behaves exactly as before —
- * the generator treats a missing slot_id as owner-initiated and skips all slot logic.
+ * `slotId` / `slotJobLabel` / `slotRationale` / `slotDate` (optional) — calendar 2d. When present
+ * the generation is bound to a calendar slot: slot_id rides the existing payload as an additive
+ * field, and the live generator (pTTpsIlhtOYHqvXd) resolves it, runs the §5.1/§5.2 slot guards
+ * before any model call, and flips the slot to `generated` on success. Absent, everything below
+ * behaves exactly as before — the generator treats a missing slot_id as owner-initiated and skips
+ * all slot logic.
+ *
+ * 🚨 THE THREE DESCRIPTIVE PROPS ARE FOR DISPLAY ONLY, AND THAT IS THE WHOLE POINT.
+ * `slotJobLabel` shipped in the first cut destructured, documented, and never referenced — the
+ * modal opened from "Write the post" looking identical to an owner-initiated generation, so a
+ * slot-bound post showed no sign of the slot it was bound to. The binding was real and invisible,
+ * which is the worst of both: the owner cannot tell whether her tap landed on the right day.
+ *
+ * ⚠️ NONE OF THEM MAY RIDE THE PAYLOAD. The generator reads job, rationale and date from
+ * `calendar_slots` server-side off slot_id — see the payload note below, which already says this
+ * for `job` and applies verbatim to the other two. Sending them would make a browser-supplied
+ * value compete with the row for the same constraint, and the browser can be wrong about it or
+ * tamper with it. Display here, authority there.
  *
  * Deliberately routed through THIS modal rather than a bespoke calendar call: the brand-voice and
  * studioLoadError refusals below are what stop wrong-voice content shipping, and a second
  * generation entry point would have to re-implement them or quietly drop them.
  */
-export default function GenerateModal({ open, onClose, onSubmitted, slotId = null, slotJobLabel = null }) {
+export default function GenerateModal({
+  open, onClose, onSubmitted,
+  slotId = null, slotJobLabel = null, slotRationale = null, slotDate = null,
+}) {
   const app = useApp()
   const navigate = useNavigate()
   const primary = app.brandColorPrimary || '#667eea'
@@ -204,6 +221,11 @@ export default function GenerateModal({ open, onClose, onSubmitted, slotId = nul
       // The slot's JOB is deliberately NOT sent. `Resolve Slot` reads job (and the program entry's
       // hold/confirmation state) from calendar_slots server-side, so the constraint comes from the
       // row rather than from a value the browser could be wrong about or tamper with.
+      //
+      // ⚠️ SAME FOR RATIONALE AND DATE, added as display props 2026-09-18. They are rendered in
+      // the header band above and stop here. slot_id is the only slot value the generator is
+      // given, so the payload contract with pTTpsIlhtOYHqvXd is unchanged by that work —
+      // byte-identical on both the owner-initiated and the slot-bound path.
       ...(slotId ? { slot_id: slotId } : {}),
     }
 
@@ -334,12 +356,42 @@ export default function GenerateModal({ open, onClose, onSubmitted, slotId = nul
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div>
             <h2 className="text-white text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.03em' }}>
-              Generate New Content
+              {slotId ? 'Write this post' : 'Generate New Content'}
             </h2>
-            <p className="text-slate-300 text-xs">FCA creates content suggestions — you decide what goes live.</p>
+            <p className="text-slate-300 text-xs">
+              {slotId
+                ? 'This one is for a day on your plan — everything below applies to it.'
+                : 'FCA creates content suggestions — you decide what goes live.'}
+            </p>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1"><X size={20} /></button>
         </div>
+
+        {/* SLOT CONTEXT BAND — shown only for a slot-bound generation.
+            Without it this modal is byte-identical to the owner-initiated one, so the
+            owner has no way to confirm her tap landed on the day she meant. The date is
+            first and largest for exactly that reason: picking the wrong day is the
+            mistake this band exists to catch, and it is the one the calendar cannot
+            catch for her. Display only — see the props note; the generator reads all
+            three from the row. */}
+        {slotId && (
+          <div className="px-6 py-3" style={{ background: `${primary}12`, borderBottom: `1px solid ${primary}30` }}>
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              {slotDate && (
+                <span className="text-white text-sm font-semibold">{fmtSlotDay(slotDate)}</span>
+              )}
+              {slotJobLabel && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                  style={{ background: `${primary}28`, color: primary }}>
+                  {slotJobLabel}
+                </span>
+              )}
+            </div>
+            {slotRationale && (
+              <p className="text-[11px] text-slate-300 leading-snug">{slotRationale}</p>
+            )}
+          </div>
+        )}
 
         <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
           {/* Session Vibe */}

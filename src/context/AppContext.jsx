@@ -6,6 +6,16 @@ const INITIAL_STATE = {
   user: null,
   email: '',
   role: null,
+  // True only for an ADMIN_ACCOUNTS email (AuthProvider). Gates INTERNAL DEBUG UI —
+  // the reel-upload RLS self-test and its raw id block — so a studio never sees
+  // developer furniture on a page she can reach.
+  //
+  // ⚠️ NOT a permission, and must never become one. It is set from a client-side
+  // email comparison, so it is trivially forgeable by anyone editing their own app
+  // state; every real capability is enforced by `_authz.cjs requireStudioAccess` and
+  // RLS. Use it to decide what to RENDER, never what to allow. Defaults false, so a
+  // session that fails to resolve shows the studio-safe view rather than the debug one.
+  isAdmin: false,
   scopeType: null,
   resolvedStudioId: null,
   resolvedClientId: null,

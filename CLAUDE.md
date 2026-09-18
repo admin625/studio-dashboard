@@ -109,19 +109,41 @@ render-phase write — so neither is a live trade-off any more.
 link for any existing studio owner carrying an arbitrary `redirect_to` — including
 `/auth/callback?next=https://evil.example`. The victim authenticates for real and is then sent
 wherever `next` says. **Validating when we write the parameter is worthless — an attacker never
-uses our write path.** Every point that *reads* `next` must go through `nextPathFromQuery()`, which
-allowlists it: `AuthCallback`, `Login`, `ForgotPassword`. No exceptions, and no "this one is
-internal" carve-outs. `nextPathFromQuery` never returns null, so there is no fallback to forget.
+uses our write path.** Every point that *reads* `next` must go through the allowlist, and all of
+them route into the single check `allowedNextOrNull()`: `AuthCallback` and `Login` via
+`landingPath()`, `ForgotPassword` and `Login`'s forgot-password link via `allowedNextOrNull()`
+directly. `nextPathFromQuery()` is the same check with "absent" and "rejected" collapsed into
+`DEFAULT_PATH`; it is still exported and still never returns null, but as of 2026-09-18 it has no
+production caller. No exceptions, and no "this one is internal" carve-outs.
 
 The allowlist lives in exactly one place, `lib/deepLink.js`. Three or four copies would drift, and
 drift in a security check is how a hole opens quietly. It takes a **path, never a URL** — do not
 "add support for full URLs", that is the open redirect it exists to prevent.
 
 ⚠️ **If you add an authenticated route, add it to `STATIC_PATHS`** or a post-login return to it
-silently falls back to `/deliveries`.
+silently falls back to the role default.
 
-Covered by `test/deepLink.test.js` (77 cases). The hostile-input set is a single shared `HOSTILE`
-array reused across every carrier, so a new carrier cannot be added with a weaker rejection set.
+🚨 **`/reels/upload` is deliberately NOT in `STATIC_PATHS`** (2026-09-18). It is an unlinked
+private-beta surface whose RLS self-test and raw-id readout are now admin-gated; nothing may
+deep-link a studio onto it, and a post-login landing is a deep link. Re-adding the entry reopens
+that. The route itself stays registered — it is reachable by typing the URL, which is the beta's
+access model.
+
+🚨 **`DEFAULT_PATH` is NOT the sentinel for "no destination".** `withNext()` and
+`buildCallbackUrl()` omit `next` only when there is no *valid* path, and callers pass `null` rather
+than laundering absent into `/deliveries`. Conflating the two was correct only while every login
+landed on `DEFAULT_PATH`; once the landing became role-dependent it silently ate a real request —
+an owner bounced off `/deliveries` carried nothing and was delivered to `/calendar`.
+
+**Where a login lands** — `landingPath(search, role)`, one place: an allowlisted `?next=` wins,
+else `/calendar` for `studio_owner`, else `/deliveries`. Role is read from the signed access token
+(`AuthCallback`) or resolved app state (`Login`), never from a value that can still be resolving.
+An unknown or absent role falls to `/deliveries`, so an account provisioned without
+`raw_app_meta_data.role` never reaches the owner default — see `provision_studio()`.
+
+Covered by `test/deepLink.test.js` (44 tests) and `test/slotReasonSave.test.jsx`. The hostile-input
+set is a single shared `HOSTILE` array reused across every carrier — including `allowedNextOrNull`
+and `landingPath` — so a new carrier cannot be added with a weaker rejection set.
 Keep it that way — that property is structural, not a matter of remembering.
 
 ### Netlify Functions
@@ -321,7 +343,7 @@ Carried forward from the previous CLAUDE.md; not re-verified against Stripe in t
 - **Never name a Netlify function `.js` if it requires a local module.** Use `.cjs`.
 - **Never gate a brand-data write on `authReady`.** Use `studioLoaded`.
 - **Never reintroduce `studioData` into `ADMIN_ACCOUNTS`.**
-- **Never navigate to a `next` value that has not been through `nextPathFromQuery()`**, and never
+- **Never navigate to a `next` value that has not been through the deepLink allowlist** (`landingPath()` / `allowedNextOrNull()`), and never
   treat write-time validation as a substitute — the attacker mints the link, not us.
 - **Never carry the post-login destination in `sessionStorage`, `localStorage`, or history state.**
   The URL is the only carrier that survives a mail client. Removed 2026-08-17; do not restore it.

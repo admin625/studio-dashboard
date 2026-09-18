@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-import { nextPathFromQuery } from '../lib/deepLink'
+import { allowedNextOrNull } from '../lib/deepLink'
 
 export default function ForgotPassword() {
   const { loginWithMagicLink, loading } = useAuth()
@@ -16,7 +16,10 @@ export default function ForgotPassword() {
     if (!email) return
     setError(null)
     // Carry the destination the studio was originally headed for into the email.
-    const { ok, error } = await loginWithMagicLink(email, nextPathFromQuery(location.search))
+    // allowedNextOrNull, not nextPathFromQuery: "she asked for /deliveries" and "she
+    // asked for nothing" must stay distinguishable all the way into buildCallbackUrl,
+    // or the first one is delivered as the second and she lands on the role default.
+    const { ok, error } = await loginWithMagicLink(email, allowedNextOrNull(location.search))
     if (ok) setSubmitted(true)
     else setError(error)
   }

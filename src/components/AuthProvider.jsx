@@ -26,6 +26,7 @@ import { supabase, getSessionOnce } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { classifyStudioLoadError, describeStudioLoadFailure, STUDIO_LOAD_TIMEOUT, STUDIO_LOAD_NO_ROW } from '../lib/studioLoadDiagnostics'
 import { useApp } from '../context/AppContext'
+import { normalizeRole } from '../lib/role'
 
 // Default brand colors — match :root in index.css
 const DEFAULT_BRAND_PRIMARY = '#667eea'
@@ -43,17 +44,9 @@ function applyBrandColors(primary, secondary) {
   root.style.setProperty('--brand-secondary', secondary || DEFAULT_BRAND_SECONDARY)
 }
 
-/**
- * Normalize the JWT app_metadata role into the app's internal vocabulary.
- * The access token carries 'studio_owner' or 'instructor'; the app gates on
- * 'studio_owner' / 'studio_instructor'. Anything else (individual/unknown/absent)
- * returns null so resolution falls through to the table lookup.
- */
-function normalizeRole(r) {
-  if (r === 'studio_owner') return 'studio_owner'
-  if (r === 'instructor' || r === 'studio_instructor') return 'studio_instructor'
-  return null
-}
+// normalizeRole moved to lib/role.js on 2026-09-18 — the post-login landing decision
+// needs the same JWT-vs-app vocabulary bridge, and a role check that exists in two
+// files drifts. Imported at the top of this file; behaviour is unchanged.
 
 /**
  * Read a single claim from a JWT without verifying it (client-side read only).
@@ -195,6 +188,10 @@ export default function AuthProvider({ children }) {
       const updates = {
         user, email: user.email,
         role: ri?.role || null,
+        // Render-gate for internal debug UI only — see the note in AppContext.
+        // Same ADMIN_ACCOUNTS lookup the role bypass above uses, so the two cannot
+        // disagree about who is internal.
+        isAdmin,
         scopeType: ri?.scopeType || null,
         resolvedStudioId: ri?.studioId || null,
         resolvedClientId: ri?.clientId || null,

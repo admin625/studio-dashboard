@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { supabase, getSessionOnce } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
-import { nextPathFromQuery } from '../lib/deepLink'
+import { landingPath } from '../lib/deepLink'
+import { roleFromSession } from '../lib/role'
 import CheckYourEmail from '../components/CheckYourEmail'
 
 /**
@@ -64,8 +65,14 @@ export default function AuthCallback() {
       // THE security-critical read. GoTrue hands back whatever redirect_to it was
       // given, and POST /auth/v1/otp is reachable with the public anon key -- so a
       // crafted link can arrive here carrying any ?next= at all, on a session that
-      // authenticated for real. nextPathFromQuery allowlists it; nothing else does.
-      navigate(nextPathFromQuery(location.search), { replace: true })
+      // authenticated for real. landingPath allowlists it internally (via
+      // allowedNextOrNull, the same single check nextPathFromQuery uses); nothing else
+      // does. A rejected `next` falls to the role default, never to the crafted value.
+      //
+      // Role comes off THIS session, not AppContext. AuthProvider may still be
+      // resolving the studio when this runs, so reading app state here would race --
+      // and lose by sending an owner to the delivery list as though she had no role.
+      navigate(landingPath(location.search, roleFromSession(session)), { replace: true })
     }
     handle()
   }, [navigate, location.search])

@@ -357,11 +357,21 @@ export default function ReelUpload() {
       <h2 style={{ marginBottom: 4 }}>Upload reel clips</h2>
       <p style={{ color: '#666', marginTop: 0, fontSize: 14 }}>Private beta. Clips upload to your studio's private library.</p>
 
-      <div style={{ background: '#f6f7f9', borderRadius: 8, padding: '10px 14px', fontSize: 13, margin: '12px 0' }}>
-        <div><strong>Studio:</strong> {studioId || '— (no studio context)'} </div>
-        <div><strong>Source:</strong> {claimChecked ? studioIdSource : 'checking session…'}</div>
-        <div><strong>Reel id:</strong> {reelId}</div>
-      </div>
+      {/* INTERNAL DIAGNOSTICS — admin only. See the isAdmin note below the component.
+          A studio has no use for a raw studio UUID, a resolution-path label or a reel id
+          she cannot act on; it reads as leaked internals on a page she can reach. Kept
+          rather than stripped, per HQ 2026-09-18, because the reel telemetry work needs
+          exactly this readout. */}
+      {app.isAdmin && (
+        <div style={{ background: '#f6f7f9', borderRadius: 8, padding: '10px 14px', fontSize: 13, margin: '12px 0' }}>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#888', marginBottom: 4 }}>
+            Internal diagnostics
+          </div>
+          <div><strong>Studio:</strong> {studioId || '— (no studio context)'} </div>
+          <div><strong>Source:</strong> {claimChecked ? studioIdSource : 'checking session…'}</div>
+          <div><strong>Reel id:</strong> {reelId}</div>
+        </div>
+      )}
 
       {!studioId && claimChecked && (
         <p style={{ color: '#b00' }}>No studio context on this session — upload unavailable.</p>
@@ -402,22 +412,34 @@ export default function ReelUpload() {
         </div>
       )}
 
-      <hr style={{ margin: '24px 0', border: 0, borderTop: '1px solid #eee' }} />
-      <div>
-        <button
-          onClick={runRlsTest}
-          disabled={!studioId}
-          style={{ background: '#fff', color: brand, border: `1px solid ${brand}`, borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 13 }}
-        >
-          Verify studio isolation (RLS self-test)
-        </button>
-        {rlsTest && (
-          <div style={{ marginTop: 10, fontSize: 13 }}>
-            <div>Own-studio write: {rlsTest.own}</div>
-            <div>Cross-studio write: {rlsTest.cross}</div>
+      {/* RLS SELF-TEST — admin only, HQ 2026-09-18.
+          It deliberately attempts a write into another studio's folder
+          (FOREIGN_TEST_STUDIO) to prove the policy refuses it. That is a useful thing
+          for us to run and an alarming thing for a customer to find on her own upload
+          page: a button offering to test whether her data is isolated invites exactly
+          the doubt it is meant to settle. The gate is on RENDER only — `runRlsTest`
+          still relies on storage RLS to produce its result, so the proof is unchanged
+          and nothing here is load-bearing for security. */}
+      {app.isAdmin && (
+        <>
+          <hr style={{ margin: '24px 0', border: 0, borderTop: '1px solid #eee' }} />
+          <div>
+            <button
+              onClick={runRlsTest}
+              disabled={!studioId}
+              style={{ background: '#fff', color: brand, border: `1px solid ${brand}`, borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 13 }}
+            >
+              Verify studio isolation (RLS self-test)
+            </button>
+            {rlsTest && (
+              <div style={{ marginTop: 10, fontSize: 13 }}>
+                <div>Own-studio write: {rlsTest.own}</div>
+                <div>Cross-studio write: {rlsTest.cross}</div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   )
 }
