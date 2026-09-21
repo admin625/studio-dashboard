@@ -220,10 +220,14 @@ export default function Calendar() {
         />
       )}
 
-      {/* Slot context is DISPLAY ONLY — the generator reads job, rationale and date from
-          calendar_slots off slot_id. `reason` (not `rationale`) is the resolved field: it is
-          the owner's own wording when she has edited it, the planner's otherwise, which is
-          the version she should be looking at while deciding what to write. */}
+      {/* Slot context is DISPLAY ONLY — the generator resolves the slot off slot_id.
+          `reason` (not `rationale`) is the resolved field: the owner's own wording when she
+          has edited it, the planner's otherwise.
+          🚨 Corrected 2026-09-21: this said the generator "reads job, rationale and date" off
+          the row. It read neither date nor rationale, and wrote for the day of the tap. It now
+          reads slot_date, job, audience and this same resolved reason — see GenerateModal.
+          onSubmitted fires at the run's END (delivered / needs review / refused) and must not
+          close the modal: the outcome is shown there, and closing it hid every failure. */}
       <GenerateModal
         open={!!genSlot}
         slotId={genSlot ? genSlot.id : null}
@@ -231,7 +235,7 @@ export default function Calendar() {
         slotRationale={genSlot ? genSlot.reason : null}
         slotDate={genSlot ? genSlot.slot_date : null}
         onClose={() => setGenSlot(null)}
-        onSubmitted={() => { setGenSlot(null); loadWeek(weekStart) }}
+        onSubmitted={() => { loadWeek(weekStart) }}
       />
     </Layout>
   )
