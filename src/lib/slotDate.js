@@ -21,6 +21,23 @@ export function fmtSlotDay(ymd) {
   })
 }
 
+/**
+ * Which calendar day each post in a delivery was written for (HQ 2026-09-21: "make the date
+ * visible so an owner can see it took"). Input: generation_posts rows for one delivery, with
+ * the slot embedded — `{ platform, post_index, calendar_slots: { slot_date } }`.
+ * Output: { 'instagram:0': '2026-10-05', ... }. Posts with no slot are absent, never guessed.
+ * post_index is the 0-based position in content_deliveries.<platform>_content, the same index
+ * DeliveryView renders by, so the key lines up by construction.
+ */
+export function slotDatesByPost(rows) {
+  const out = {}
+  for (const r of rows || []) {
+    const d = r && r.calendar_slots && r.calendar_slots.slot_date
+    if (d && r.platform != null && r.post_index != null) out[`${r.platform}:${r.post_index}`] = d
+  }
+  return out
+}
+
 /** "October 5" — used for week headings, where the weekday is noise. */
 export function fmtSlotMonthDay(ymd) {
   if (!ymd) return ''

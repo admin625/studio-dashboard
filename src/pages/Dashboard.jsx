@@ -64,7 +64,19 @@ export default function Dashboard() {
     }
   }, [])
 
-  const handleGenSubmitted = (platforms) => {
+  // `outcome` is set when the modal followed the run to its end (item 7, 2026-09-21). The modal
+  // is showing that result itself, so the "being created" banner and card must NOT appear: over a
+  // needs-review or refused run they would be the same false reassurance the modal used to give.
+  // A delivery just refreshes the list. No `outcome` = the modal closed on a synchronous 2xx,
+  // which keeps the original banner-and-poll behaviour.
+  const handleGenSubmitted = (platforms, outcome) => {
+    if (outcome) {
+      if (outcome.phase === 'delivered') {
+        if (outcome.deliveryId) knownIdsRef.current.add(outcome.deliveryId)
+        setPollTrigger(t => t + 1)
+      }
+      return
+    }
     setShowBanner(true)
     setPendingPlatforms(platforms || ['instagram'])
     setPendingTime(new Date())

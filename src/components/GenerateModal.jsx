@@ -8,9 +8,13 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase, getSessionOnce } from '../lib/supabase'
 import { fmtSlotDay } from '../lib/slotDate'
+import { pollOutcome, fetchAttempt, classifySyncBody, NO_ANSWER_MS } from '../lib/generationOutcome'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
+
+/** The one customer-facing support address (see the TODO in handleSubmit). */
+const SUPPORT_EMAIL = 'admin@fiorsaoirse.com'
 
 /* ── Platform modifier map ── */
 const PLATFORM_MODIFIERS = {
@@ -52,11 +56,22 @@ const FREESTYLE_TEMPLATES = {
  * slot-bound post showed no sign of the slot it was bound to. The binding was real and invisible,
  * which is the worst of both: the owner cannot tell whether her tap landed on the right day.
  *
- * ⚠️ NONE OF THEM MAY RIDE THE PAYLOAD. The generator reads job, rationale and date from
- * `calendar_slots` server-side off slot_id — see the payload note below, which already says this
- * for `job` and applies verbatim to the other two. Sending them would make a browser-supplied
- * value compete with the row for the same constraint, and the browser can be wrong about it or
- * tamper with it. Display here, authority there.
+ * ⚠️ NONE OF THEM MAY RIDE THE PAYLOAD. The generator resolves the slot from `calendar_slots`
+ * server-side off slot_id. Sending them would make a browser-supplied value compete with the row
+ * for the same constraint, and the browser can be wrong about it or tamper with it. Display here,
+ * authority there.
+ *
+ * 🚨 CORRECTED 2026-09-21. This note used to say the generator "reads job, rationale and date"
+ * off the row. It did not: `Resolve Slot` selected no slot_date and no rationale, and the prompt
+ * used the clock — Katie's Oct 8 slot opened "September has a different kind of pull" (exec
+ * 71022). Since the 2026-09-21 generator change it reads slot_date, job, audience and the
+ * resolved reason (latest owner edit, else the planner's), writes the post FOR slot_date, and
+ * refuses a slot run whose prompt lacks it (`Assert Prompt Fields`). Verify against an
+ * execution's `Build Premium Prompt` output, not against this comment — that is how the false
+ * version survived.
+ *
+ * Every run with a studio follows a 202 to its end (item 7): see `lib/generationOutcome.js`.
+ * A synchronous delivery still closes at once; only a 202 polls.
  *
  * Deliberately routed through THIS modal rather than a bespoke calendar call: the brand-voice and
  * studioLoadError refusals below are what stop wrong-voice content shipping, and a second
@@ -95,6 +110,25 @@ export default function GenerateModal({
   const [imageSlots, setImageSlots] = useState([{ id: 1, platforms: ['all'], direction: '' }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  // Any run followed past its first answer (slot-bound or owner-initiated): where it ended up.
+  // null = still on the form.
+  const [outcome, setOutcome] = useState(null)
+  // Each submit gets its own run number. A poll only lives while it is the CURRENT run, so a
+  // loop left sleeping by close-reopen-resubmit can never land an old result on a new run.
+  const runRef = useRef(0)
+  const platformsRef = useRef([])
+  useEffect(() => () => { runRef.current += 1 }, [])
+  // The modal stays mounted while closed (`open` false returns null), so a finished run's state
+  // must be cleared here or it would greet the next slot. Closed mid-run, the caller gets the
+  // pre-item-7 hand-off (no outcome) so the Dashboard can still show its "being created" banner.
+  const close = () => {
+    const wasGenerating = outcome && outcome.phase === 'generating'
+    runRef.current += 1
+    setOutcome(null)
+    setError('')
+    onClose()
+    if (wasGenerating && onSubmitted) onSubmitted(platformsRef.current)
+  }
 
   // -- Profile re-sync (mount-capture guard) --
   // brandVoice/sessionVibe are seeded from app.* at MOUNT. On the normal path that is safe:
@@ -196,6 +230,12 @@ export default function GenerateModal({
     setSubmitting(true)
     setError('')
 
+    // Item 7: every run that can get an attempt row (Log Attempt needs a studio_id) carries a
+    // correlation id, so a 202 can be followed to its end. Individual-scope runs have no studio
+    // and keep the old close-on-2xx behaviour.
+    // No randomUUID (old browser / insecure context): no id, so the old close-on-2xx behaviour.
+    const requestId = app.resolvedStudioId && typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID() : null
     const slotsPayload = getImageSlotsPayload()
     const legacyPrompt = imageSlots.map(s => s.direction).filter(Boolean).join('; ')
 
@@ -222,11 +262,14 @@ export default function GenerateModal({
       // hold/confirmation state) from calendar_slots server-side, so the constraint comes from the
       // row rather than from a value the browser could be wrong about or tamper with.
       //
-      // ⚠️ SAME FOR RATIONALE AND DATE, added as display props 2026-09-18. They are rendered in
-      // the header band above and stop here. slot_id is the only slot value the generator is
-      // given, so the payload contract with pTTpsIlhtOYHqvXd is unchanged by that work —
-      // byte-identical on both the owner-initiated and the slot-bound path.
+      // ⚠️ SAME FOR RATIONALE AND DATE: display props only. The generator reads both off the
+      // row (since 2026-09-21 — before that it read neither; see the note at the top).
+      //
       ...(slotId ? { slot_id: slotId } : {}),
+      // client_request_id (item 7, 2026-09-21), slot-bound AND owner-initiated. The generator
+      // stamps it on the generation_attempts row it creates and writes the run's terminal there,
+      // which is the only way the outcome of a run longer than the proxy's 25s reaches this modal.
+      ...(requestId ? { client_request_id: requestId } : {}),
     }
 
     if (freestyle) {
@@ -256,17 +299,38 @@ export default function GenerateModal({
       })
     }
 
-    // Wait for response before claiming success.
-    // 200/202 = accepted (n8n may still be processing — Dashboard polls for the row).
-    // 4xx/5xx = surface in modal, keep modal open so user can retry.
+    // Every run with a studio (HQ 2026-09-21, item 7):
+    //   200 + a terminal body (needs_review / refused) → shown in the modal
+    //   200 otherwise (a delivery, or any other synchronous answer) → close, as before
+    //   202 + requestId → "accepted", never "done": stay open and follow the attempt row
+    //   platform 502/504 (no `error` body), or our own 30s abort, + requestId → the proxy lost
+    //     the answer, not the run: follow the row rather than claim it failed. The proxy's own
+    //     502s carry `error` and never reached n8n, so they are shown as errors.
+    //   202 / timeout with no requestId (individual scope) → the old close / error behaviour
+    //   other 4xx/5xx → surfaced in the modal, form kept so the user can retry
     // 30s abort budget covers Netlify Pro function timeout (26s) + transport.
     //
-    // TODO(post-launch): the admin@fiorsaoirse.com support contact hardcoded in
-    // the error messages below couples Mac's personal identity to customer-facing
-    // error surfaces. Replace with a generic support address (e.g.,
-    // support@fiorsaoirse.com) once that mailbox/alias is provisioned.
+    // TODO(post-launch): SUPPORT_EMAIL couples Mac's personal identity to customer-facing
+    // error surfaces. Replace with a generic support address (e.g. support@fiorsaoirse.com)
+    // once that mailbox/alias is provisioned — one constant now, one edit then.
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 30000)
+    const finish = (state) => {
+      setOutcome(state)
+      if (onSubmitted) onSubmitted(activePlatforms.map(p => p.name), state)
+    }
+    const follow = async (uncertain) => {
+      setSubmitting(false)
+      const run = ++runRef.current
+      platformsRef.current = activePlatforms.map(p => p.name)
+      setOutcome({ phase: 'generating', uncertain })
+      const final = await pollOutcome({
+        fetchRow: () => fetchAttempt(supabase, requestId),
+        isCancelled: () => runRef.current !== run,
+        // Only the first "generating" renders; later ticks change nothing visible.
+      })
+      if (final) finish(final)
+    }
     try {
       // The function verifies this token and checks the caller actually owns
       // payload.studio_id. Without it every request is rejected with 401.
@@ -289,12 +353,15 @@ export default function GenerateModal({
       })
       clearTimeout(timeoutId)
       if (!res.ok) {
-        let detail = ''
-        try {
-          const body = await res.json()
-          detail = body.error || body.message || ''
-        } catch { /* response body not JSON */ }
-        setError(`We couldn't submit your request (status ${res.status}${detail ? ': ' + detail : ''}). Please try again. If this keeps happening, contact support at admin@fiorsaoirse.com.`)
+        let errBody = null
+        try { errBody = await res.json() } catch { /* response body not JSON */ }
+        // Every 502 generate-content.js emits itself carries an `error` and happens BEFORE or
+        // INSTEAD OF reaching n8n (session check, studio check, connection refused), so no run
+        // exists and its message is the truth. Only a platform 502/504 (function timeout or
+        // crash: no `error` key) can mean the webhook was already running — follow those.
+        if ((res.status === 502 || res.status === 504) && requestId && !(errBody && errBody.error)) { await follow(true); return }
+        const detail = (errBody && (errBody.error || errBody.message)) || ''
+        setError(`We couldn't submit your request (status ${res.status}${detail ? ': ' + detail : ''}). Please try again. If this keeps happening, contact support at ${SUPPORT_EMAIL}.`)
         setSubmitting(false)
         return
       }
@@ -318,22 +385,29 @@ export default function GenerateModal({
           }
           setError(`We couldn't generate — ${reason}`)
         } else {
-          setError("We couldn't generate — something went wrong on our side and nothing was created. Please try again. If this keeps happening, contact support at admin@fiorsaoirse.com.")
+          setError(`We couldn't generate — something went wrong on our side and nothing was created. Please try again. If this keeps happening, contact support at ${SUPPORT_EMAIL}.`)
         }
         setSubmitting(false)
         return
       }
 
-      // 2xx — proceed
+      // A needs-review or refused body is SHOWN — it used to be read as success because it
+      // carries no `error` key.
+      const sync = classifySyncBody(okBody)
+      if (sync) { setSubmitting(false); finish(sync); return }
+      if (res.status === 202 && requestId) { await follow(false); return }
+
+      // Synchronous 2xx (a delivery) — close, as before.
       onClose()
       if (onSubmitted) onSubmitted(activePlatforms.map(p => p.name))
       setSubmitting(false)
     } catch (err) {
       clearTimeout(timeoutId)
+      if (err.name === 'AbortError' && requestId) { await follow(true); return }
       if (err.name === 'AbortError') {
-        setError("Request timed out after 30 seconds. We couldn't reach our servers. Please try again, or contact support at admin@fiorsaoirse.com.")
+        setError(`Request timed out after 30 seconds. We couldn't reach our servers. Please try again, or contact support at ${SUPPORT_EMAIL}.`)
       } else {
-        setError(`We couldn't reach our servers (${err.message}). Please try again, or contact support at admin@fiorsaoirse.com.`)
+        setError(`We couldn't reach our servers (${err.message}). Please try again, or contact support at ${SUPPORT_EMAIL}.`)
       }
       setSubmitting(false)
     }
@@ -364,7 +438,7 @@ export default function GenerateModal({
                 : 'FCA creates content suggestions — you decide what goes live.'}
             </p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1"><X size={20} /></button>
+          <button onClick={close} aria-label="Close" className="text-slate-500 hover:text-white transition-colors p-1"><X size={20} /></button>
         </div>
 
         {/* SLOT CONTEXT BAND — shown only for a slot-bound generation.
@@ -393,7 +467,18 @@ export default function GenerateModal({
           </div>
         )}
 
-        <div className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+        {outcome && (
+          <OutcomePanel
+            outcome={outcome}
+            slotDate={slotDate}
+            primary={primary}
+            onOpen={(id) => { close(); navigate(`/delivery/${id}`) }}
+            onDeliveries={() => { close(); navigate('/deliveries') }}
+            onClose={close}
+          />
+        )}
+
+        <div hidden={!!outcome} className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
           {/* Session Vibe */}
           <div className="p-4 rounded-xl" style={{ background: `${primary}10`, border: `1px solid ${primary}30` }}>
             <label className="block text-xs font-bold tracking-wider uppercase mb-1" style={{ color: primary }}>This session's vibe</label>
@@ -575,9 +660,9 @@ export default function GenerateModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div hidden={!!outcome} className="px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="flex items-center justify-between">
-            <button onClick={onClose} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
+            <button onClick={close} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
             <button
               onClick={handleSubmit}
               disabled={submitting || !brandVoice.trim()}
@@ -600,6 +685,95 @@ export default function GenerateModal({
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Where a run ended up (item 7) — slot-bound or owner-initiated. Every state says what actually
+ * happened, including "we haven't heard back", which is never dressed up as success or as
+ * "nothing was created". needs_review offers no retry on purpose: two reflection passes already
+ * failed, and the flag is for a human, not a button.
+ *
+ * Accessibility: the result text is the live region (actions sit outside it), and focus moves to
+ * the heading whenever the phase changes — the form that held focus has just been hidden.
+ */
+function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose }) {
+  const headingRef = useRef(null)
+  useEffect(() => { if (headingRef.current) headingRef.current.focus() }, [outcome.phase])
+  const day = slotDate ? fmtSlotDay(slotDate) : null
+  const forDay = day ? ` for ${day}` : ''
+  const what = day ? 'post' : 'content' // a slot is one post; an owner-initiated run is a batch
+  const retryWhere = day ? 'Close this and tap the day on your plan to try again.' : 'Close this and choose Create Content to try again.'
+  const btn = 'px-5 py-2.5 rounded-xl text-sm font-bold'
+  const done = (
+    <button onClick={onClose} className={`${btn} text-slate-300`} style={{ background: 'rgba(255,255,255,0.06)' }}>Close</button>
+  )
+  const toDeliveries = (
+    <button onClick={onDeliveries} className={`${btn} text-slate-200`} style={{ background: 'rgba(255,255,255,0.10)' }}>Go to Deliveries</button>
+  )
+  const support = <a href={`mailto:${SUPPORT_EMAIL}`} className="underline">{SUPPORT_EMAIL}</a>
+  let title, body, actions = done, tone = 'text-slate-300'
+  switch (outcome.phase) {
+    case 'generating':
+      title = <span className="flex items-center gap-2"><Loader2 size={18} className="animate-spin" /> Writing your {what}{forDay}…</span>
+      body = outcome.uncertain
+        ? <>We lost the connection while sending this, but it may already be on its way. Checking — keep this open.</>
+        : <>This usually takes about a minute, longer with AI images. Keep this open to see how it turns out.</>
+      actions = null
+      break
+    case 'delivered':
+      title = day ? `Written${forDay}.` : 'Your content is ready.'
+      body = day ? `Your post is ready, written for ${day} on your plan.` : 'It is in your Deliveries.'
+      actions = (
+        <div className="flex gap-3">
+          {done}
+          {outcome.deliveryId && (
+            <button onClick={() => onOpen(outcome.deliveryId)} className={btn}
+              style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}>{day ? 'Open the post' : 'Open it'}</button>
+          )}
+        </div>
+      )
+      break
+    case 'needs_review':
+      title = 'This one needs a human look.'
+      tone = 'text-amber-200'
+      body = `Your ${what}${forDay} didn't pass our quality check after two tries, so nothing was delivered. We've been notified and will look at it.`
+      break
+    case 'refused':
+      // Slot rules refuse slot runs; entitlement and no-studio refusals reach every run.
+      title = day ? "This slot can't be written right now." : "We couldn't create this right now."
+      tone = 'text-amber-200'
+      body = (outcome.detail && outcome.detail.message)
+        || (day ? 'A rule on this slot stopped it before anything was written. Nothing was delivered.' : 'It was stopped before anything was written. Nothing was delivered.')
+      break
+    case 'no_answer':
+      title = "We haven't heard back."
+      tone = 'text-amber-200'
+      // Honest under uncertainty: a run that crashed mid-way writes no outcome either (the error
+      // handler does not mark attempts yet), so do not promise it is still coming.
+      body = <>Your {what}{forDay} hasn't reported back in {Math.round(NO_ANSWER_MS / 60000)} minutes. It may have arrived, or it may have failed. Check Deliveries; if it isn't there, contact support at {support}.</>
+      actions = <div className="flex gap-3">{done}{toDeliveries}</div>
+      break
+    default: // failed — the generator itself reported that it created nothing
+      title = day ? "We couldn't write this post." : "We couldn't create this content."
+      tone = 'text-red-300'
+      body = <>Something went wrong on our side and nothing was created. {retryWhere} If this keeps happening, contact support at {support}.</>
+  }
+  const notes = outcome.phase === 'needs_review' && outcome.detail && outcome.detail.notes
+  return (
+    <div className="px-6 py-6 space-y-3" data-outcome={outcome.phase}>
+      <div role="status" className="space-y-3">
+        <h3 ref={headingRef} tabIndex={-1} className={`text-base font-semibold outline-none ${tone}`}>{title}</h3>
+        <p className="text-sm text-slate-300 leading-snug">{body}</p>
+      </div>
+      {notes && (
+        <details className="text-xs text-slate-400">
+          <summary className="cursor-pointer inline-block py-3">What the check flagged</summary>
+          <p className="mt-1 leading-snug">{notes}</p>
+        </details>
+      )}
+      {actions && <div className="pt-2 flex justify-end">{actions}</div>}
     </div>
   )
 }

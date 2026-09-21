@@ -220,18 +220,35 @@ export default function Calendar() {
         />
       )}
 
-      {/* Slot context is DISPLAY ONLY — the generator reads job, rationale and date from
-          calendar_slots off slot_id. `reason` (not `rationale`) is the resolved field: it is
-          the owner's own wording when she has edited it, the planner's otherwise, which is
-          the version she should be looking at while deciding what to write. */}
+      {/* Slot context is DISPLAY ONLY — the generator resolves the slot off slot_id.
+          `reason` (not `rationale`) is the resolved field: the owner's own wording when she
+          has edited it, the planner's otherwise.
+          🚨 Corrected 2026-09-21: this said the generator "reads job, rationale and date" off
+          the row. It read neither date nor rationale, and wrote for the day of the tap. It now
+          reads slot_date, job, audience and this same resolved reason — see GenerateModal.
+          onSubmitted(platforms, outcome?) must not close the modal: the outcome is shown there,
+          and closing it hid every failure. `outcome` is present for every terminal state and
+          absent when the modal closed on a synchronous 2xx or the owner closed it mid-run;
+          either way the week just reloads. */}
       <GenerateModal
         open={!!genSlot}
         slotId={genSlot ? genSlot.id : null}
         slotJobLabel={genSlot ? genSlot.job_label : null}
         slotRationale={genSlot ? genSlot.reason : null}
         slotDate={genSlot ? genSlot.slot_date : null}
-        onClose={() => setGenSlot(null)}
-        onSubmitted={() => { setGenSlot(null); loadWeek(weekStart) }}
+        // Reload on close too: the owner may close before the slot finished flipping.
+        onClose={() => { setGenSlot(null); loadWeek(weekStart) }}
+        onSubmitted={(_platforms, outcome) => {
+          loadWeek(weekStart)
+          // "delivered" is written as soon as the delivery row exists — BEFORE the post rows and
+          // the slot flip land (Mark Delivered runs first so a failing email can't eat it). A
+          // single reload here could show a written slot as unwritten and invite a duplicate, so
+          // look again once those have had time to land.
+          if (outcome && outcome.phase === 'delivered') {
+            setTimeout(() => loadWeek(weekStart), 5000)
+            setTimeout(() => loadWeek(weekStart), 15000)
+          }
+        }}
       />
     </Layout>
   )

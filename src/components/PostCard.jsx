@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react'
 import { supabase, SUPABASE_URL, authedJsonHeaders } from '../lib/supabase'
 import { downscaleToBase64, probeLogoAlpha } from '../lib/image'
 import { withDownloadParam, photoDownloadName } from '../lib/downloadUrl'
+import { fmtSlotDay } from '../lib/slotDate'
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
@@ -33,7 +34,7 @@ const WM_ZONES = [
   { value: 'bottom-right', label: 'Bot R', row: 2, col: 2 },
 ]
 
-export default function PostCard({ post, index, platform, deliveryId, readOnly, createdAt }) {
+export default function PostCard({ post, index, platform, deliveryId, readOnly, createdAt, slotDate = null }) {
   const {
     brandColorPrimary, resolvedStudioId, email, studioName, studioType, brandVoice, aiPhotoPrompt,
     brandLogoUrl, brandLogoLightUrl, brandLogoDarkUrl, watermarkDefaultZone, watermarkDefaultVariant, update,
@@ -634,6 +635,12 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
       {/* Header */}
       <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
         <span className="text-xs font-bold text-slate-400">Post #{post.post_number || index + 1}</span>
+        {slotDate && (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-white"
+            style={{ background: `${primary}40` }} title="The day on your plan this post was written for">
+            For {fmtSlotDay(slotDate)}
+          </span>
+        )}
         {post.content_type && (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style={{ background: `${primary}20`, color: primary }}>
             {post.content_type}

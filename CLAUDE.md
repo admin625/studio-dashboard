@@ -261,7 +261,15 @@ describe it as rare. `studioLoadRetried` makes a retry visible in app state; not
 
 Tables this repo reads or writes: `studio_photos`, `studio_accounts`, `content_deliveries`,
 `studio_instructors`, `clients`, plus the reels tables (`reel_edls`, `reel_hook_captures`,
-`reel_music_library` — see *Reels*).
+`reel_music_library` — see *Reels*), and since 2026-09-21 `generation_attempts` via the RPC
+`get_generation_outcome(client_request_id)` only — the table has NO read policy (GenerateModal
+polls one request's `outcome` after the proxy's 202 — `lib/generationOutcome.js`),
+`generation_posts` + `calendar_slots` (DeliveryView's "written for" plan day).
+
+🚨 **A 202 from `generate-content.js` means "accepted", never "done".** The proxy gives up at 25s;
+generator runs take ~50-85s. Until 2026-09-21 the modal closed on the 202, so every run that
+failed review twice ("needs review", nothing delivered) looked like a success. Never reintroduce
+a close-on-202.
 
 ⚠️ **`reel_edls` is RLS deny-by-default**, so it is reachable only through the `service_role`
 `reels.cjs` function. Everything else is readable by the browser under `authenticated` policies.
@@ -358,8 +366,9 @@ Carried forward from the previous CLAUDE.md; not re-verified against Stripe in t
 ## Working Conventions
 
 - Run `npm test` and `npm run build` before pushing. Run `/review` before any `git push`.
-- Playwright browser installs are unreliable on this Windows machine — prefer manual verification
-  or the deployed-artifact checks below over automated browser QA.
+- Browser QA works on this machine (verified 2026-09-18): gstack `browse` is built and Chromium is
+  installed. The old "Playwright is unreliable here" note was stale. Authenticated surfaces still
+  need a real session, so cover them with jsdom render tests (`test/*.test.jsx`).
 - **Verify the artifact, not the intention.** After a deploy, fetch the built bundle from
   `app.fiorsaoirse.com` and grep for a string unique to the change. A 200 proves shape, never values.
 

@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { slotDatesByPost, fmtSlotDay } from '../lib/slotDate'
 import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
 import PostCard from '../components/PostCard'
@@ -23,6 +24,7 @@ export default function DeliveryView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState(null)
+  const [slotDates, setSlotDates] = useState({})
 
   // 2b — gate on authReady so edit permissions don't flip on a transient null role.
   const isOwner = app.authReady && app.role === 'studio_owner'
@@ -69,6 +71,34 @@ export default function DeliveryView() {
         if (firstPlatform) setActiveTab(firstPlatform)
 
         setLoading(false)
+
+        // Calendar 2d: which day each post was written for, via generation_posts.slot_id.
+        // Display only and never blocking — a failed lookup leaves the page exactly as it was
+        // before this existed, and says so in the console rather than inventing a date.
+        // Own try: a throw here must never reach the outer catch, which would replace a delivery
+        // that already loaded with "Error loading content".
+        // A delivery opened straight from the modal can arrive a moment BEFORE its post rows
+        // (the generator marks "delivered" first), so a fresh delivery gets a few short retries.
+        const fresh = data.created_at && (Date.now() - new Date(data.created_at).getTime()) < 2 * 60 * 1000
+        for (let attempt = 0; attempt < (fresh ? 4 : 1); attempt++) {
+          if (attempt) await new Promise((r) => setTimeout(r, 3000))
+          if (!mounted) return
+          try {
+            const { data: gp, error: gpErr } = await supabase
+              .from('generation_posts')
+              .select('platform, post_index, calendar_slots(slot_date)')
+              .eq('delivery_id', id)
+              .not('slot_id', 'is', null)
+            if (!mounted) return
+            if (gpErr) { console.warn('[DeliveryView] slot date lookup failed:', gpErr.message); break }
+            const dates = slotDatesByPost(gp)
+            setSlotDates(dates)
+            if (Object.keys(dates).length) break
+          } catch (e) {
+            console.warn('[DeliveryView] slot date lookup threw:', e && e.message)
+            break
+          }
+        }
       } catch (err) {
         if (mounted) { setError(err.message); setLoading(false) }
       }
@@ -129,6 +159,7 @@ export default function DeliveryView() {
   })
 
   const activePosts = activeTab ? (delivery[`${activeTab}_content`] || []) : []
+  const planDays = [...new Set(Object.values(slotDates))].sort()
 
   return (
     <Layout>
@@ -147,6 +178,13 @@ export default function DeliveryView() {
           <Calendar size={16} className="text-slate-500" />
           <h1 className="text-white text-xl font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.02em' }}>{date}</h1>
         </div>
+        {planDays.length > 0 && (
+          // Neutral text, brand colour as a marker only: a dark brand colour as text on this
+          // near-black page falls under 4.5:1, and this is the line that confirms the date took.
+          <p className="text-sm font-semibold mt-2 text-slate-200 pl-2" style={{ borderLeft: `3px solid ${primary}` }} data-testid="plan-day">
+            Written for {planDays.map(fmtSlotDay).join(', ')} on your plan
+          </p>
+        )}
         {readOnly && (
           <p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
             <Lock size={10} /> Read-only — instructors cannot edit content
@@ -190,6 +228,7 @@ export default function DeliveryView() {
               platform={activeTab}
               deliveryId={id}
               createdAt={delivery.created_at}
+              slotDate={slotDates[`${activeTab}:${idx}`] || null}
               readOnly={readOnly}
             />
           ))}
