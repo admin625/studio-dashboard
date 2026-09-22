@@ -77,6 +77,20 @@ function resolveReason(slot, ownerRationales) {
   return { reason: slot.rationale, reason_source: 'planner', reason_edited_at: null };
 }
 
+/**
+ * Skip state: the LATEST of `skipped` / `generate_requested` decides (HQ 2026-09-22). "Write the
+ * post" appends generate_requested before the modal opens, so writing a skipped slot un-skips it.
+ * Before this, any skip ever recorded showed Skipped for good (the table is append-only), next to
+ * Written on a slot the owner had since written. `accepted` does not un-skip. The generator's Slot
+ * Guard applies the same rule, so the badge and the refusal cannot disagree.
+ */
+function isSkipped(actions) {
+  const latest = (actions || [])
+    .filter((a) => a.action === 'skipped' || a.action === 'generate_requested')
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+  return !!latest && latest.action === 'skipped';
+}
+
 function percentages(slots) {
   const live = slots.filter((s) => s.status !== 'superseded');
   const total = live.length;
@@ -200,7 +214,7 @@ async function slotsForWeek(studioId, weekId) {
       event_title: pe ? pe.title : null,
       ...resolveReason(s, rationales),
       accepted: acts.some((a) => a.action === 'accepted'),
-      skipped: acts.some((a) => a.action === 'skipped'),
+      skipped: isSkipped(acts),
       post_id: post ? post.id : null,
     };
   });
@@ -329,3 +343,5 @@ function respond(status, body) {
     body: JSON.stringify(body),
   };
 }
+
+module.exports.isSkipped = isSkipped;
