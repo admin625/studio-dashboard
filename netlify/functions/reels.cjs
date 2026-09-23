@@ -45,11 +45,14 @@ const RERENDERABLE = ['delivered', 'render_failed', 'render_timeout', 'delivery_
 
 /** Fast feedback before firing WF2. WF2's atomic claim is the real cap. */
 function rerenderGuard(row, max = MAX_RENDERS) {
-  if (!row) return { status: 404, error: 'Reel not found' };
-  if (row.status !== 'approved') return { status: 409, error: 'This reel has not been generated yet. Use Generate Reel first.' };
-  if (!RERENDERABLE.includes(row.render_status)) return { status: 409, error: 'This reel is still rendering. Wait for it to finish, then render again.' };
+  // Every refusal carries source 'app'. WF2's Respond Cap Reached carries source 'wf2' and emits a
+  // CHARACTER-IDENTICAL message and code for the cap case, so without this field the two are
+  // indistinguishable in a log and the only tell was whether reel_id happened to be present.
+  if (!row) return { status: 404, source: 'app', error: 'Reel not found' };
+  if (row.status !== 'approved') return { status: 409, source: 'app', error: 'This reel has not been generated yet. Use Generate Reel first.' };
+  if (!RERENDERABLE.includes(row.render_status)) return { status: 409, source: 'app', error: 'This reel is still rendering. Wait for it to finish, then render again.' };
   if ((row.render_count || 0) >= max) {
-    return { status: 409, code: 'render_cap_reached', error: 'This reel has been rendered ' + max + ' times. Start a new reel to keep going.' };
+    return { status: 409, source: 'app', code: 'render_cap_reached', error: 'This reel has been rendered ' + max + ' times. Start a new reel to keep going.' };
   }
   return { ok: true };
 }
@@ -294,7 +297,11 @@ exports.handler = async (event) => {
       const curRows = await cur.json();
       const row = Array.isArray(curRows) ? curRows[0] : null;
       const guard = rerenderGuard(row);
-      if (!guard.ok) return respond(guard.status, guard.code ? { error: guard.error, code: guard.code } : { error: guard.error });
+      if (!guard.ok) {
+        const out = { error: guard.error, source: guard.source };
+        if (guard.code) out.code = guard.code;
+        return respond(guard.status, out);
+      }
 
       const folded = foldHookIntoEdl(row.edl, body.hook_text);
       if (folded.changed) {
@@ -316,8 +323,15 @@ exports.handler = async (event) => {
       const text = await wh.text();
       let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
       // WF2 owns the cap: a refusal comes back 200 with refused:true, so surface it as a 409 to the UI.
+      // source is taken from WF2's own body ('wf2'), never hardcoded here: if it is ever absent, that
+      // says the refusal came from a WF2 version predating the field, which is worth seeing.
       if (data && data.refused) {
-        return respond(409, { error: data.message || 'This reel cannot be rendered again.', code: data.code || 'render_refused', reel_id: body.reel_id });
+        return respond(409, {
+          error: data.message || 'This reel cannot be rendered again.',
+          code: data.code || 'render_refused',
+          source: data.source || 'wf2_unversioned',
+          reel_id: body.reel_id,
+        });
       }
       return respond(200, { rerendered: true, reel_id: body.reel_id, hook_edited: folded.hook_edited, webhook_status: wh.status, webhook: data });
     }

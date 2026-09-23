@@ -49,6 +49,34 @@ describe('rerenderGuard — fast feedback before firing WF2 (WF2 owns the real c
   })
 })
 
+describe('refusals say WHERE they came from', () => {
+  // WF2's Respond Cap Reached emits this string. Copied verbatim from the running workflow
+  // (kMYsBSkPnp5OsL7G, Respond Cap Reached) on 2026-09-23.
+  const WF2_CAP_MESSAGE = 'This reel has been rendered 3 times. Start a new reel to keep going.'
+
+  it('THE REASON THIS FIELD EXISTS: app and WF2 emit the identical message and code', () => {
+    const appRefusal = rerenderGuard(row({ render_count: 3 }))
+    expect(appRefusal.error).toBe(WF2_CAP_MESSAGE)   // character for character
+    expect(appRefusal.code).toBe('render_cap_reached')
+    // Message and code cannot tell them apart. Only source can.
+    expect(appRefusal.source).toBe('app')
+  })
+
+  it('every app refusal carries source app, not just the cap one', () => {
+    expect(rerenderGuard(null).source).toBe('app')
+    expect(rerenderGuard(row({ status: 'pending_approval' })).source).toBe('app')
+    expect(rerenderGuard(row({ render_status: 'rendering' })).source).toBe('app')
+    expect(rerenderGuard(row({ render_count: 3 })).source).toBe('app')
+  })
+
+  it('NEGATIVE CONTROL: a permitted re-render carries no source at all', () => {
+    const ok = rerenderGuard(row({ render_count: 1 }))
+    expect(ok.ok).toBe(true)
+    expect(ok.source).toBeUndefined()
+    expect(ok.code).toBeUndefined()
+  })
+})
+
 describe('foldHookIntoEdl — the capture must be able to say hook_edited', () => {
   const edl = { overlays: [{ text: 'Ready to move?', proposed_text: 'Ready to move?' }], timeline: [1] }
 
