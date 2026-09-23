@@ -298,7 +298,7 @@ function assemblyFailureCopy(reel) {
  * the refusal that matters comes back from WF2 and lands in the page-level error line.
  */
 const MAX_RENDERS = 3
-function RerenderControl({ reel, primary, busy, onRerender }) {
+export function RerenderControl({ reel, primary, busy, onRerender }) {
   const [hookText, setHookText] = useState(reel.hook || '')
   const used = reel.render_count != null ? reel.render_count : null
   const spent = used != null && used >= MAX_RENDERS
