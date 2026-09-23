@@ -19,6 +19,14 @@
  *                                           approval.hook_edited) as the moat signal BEFORE render, flip
  *                                           pending_approval->approved (conditional), then fire the authenticated
  *                                           WF2 render webhook (x-wf2-secret). Renders nothing without the header.
+ *   rerender    { reel_id, hook_text? }  -> render an ALREADY approved reel again, capped at MAX_RENDERS total.
+ *                                           Only from a terminal render state (delivered or a failure), never
+ *                                           mid-flight. An edited hook keeps the ORIGINAL proposal in
+ *                                           overlays[0].proposed_text so WF2's capture records hook_edited=true.
+ *
+ * WHERE THE CAP ACTUALLY LIVES: in WF2, as claim_render_slot() — one atomic UPDATE that returns no row at
+ * the cap. The check in rerenderGuard() below is only fast feedback for the UI; it is NOT the gate, because
+ * anything holding the WF2 secret could call the webhook directly. Never move the cap here.
  *
  * Track B: source clips (reel-sources) + renders (reel-renders) are private, studio-scoped. Fetchable URLs are
  * minted at use (WF1 sign-to-probe, WF2 sign-at-render, and here sign-at-load) — never baked into the DB.
@@ -28,6 +36,52 @@ const { requireStudioAccess } = require('./_authz.cjs');
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fidhmvuurygpknhshpml.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WF2_URL = process.env.WF2_WEBHOOK_URL || 'https://jmac.app.n8n.cloud/webhook/wf2-render';
+
+// Renders allowed per reel, total (first render + re-renders). Mirrors p_max in WF2's claim_render_slot
+// call; WF2 is the enforcing side. Changing this alone changes only the UI's fast feedback.
+const MAX_RENDERS = 3;
+// A re-render is only sensible once the previous one has stopped moving.
+const RERENDERABLE = ['delivered', 'render_failed', 'render_timeout', 'delivery_failed'];
+
+/** Fast feedback before firing WF2. WF2's atomic claim is the real cap. */
+function rerenderGuard(row, max = MAX_RENDERS) {
+  if (!row) return { status: 404, error: 'Reel not found' };
+  if (row.status !== 'approved') return { status: 409, error: 'This reel has not been generated yet. Use Generate Reel first.' };
+  if (!RERENDERABLE.includes(row.render_status)) return { status: 409, error: 'This reel is still rendering. Wait for it to finish, then render again.' };
+  if ((row.render_count || 0) >= max) {
+    return { status: 409, code: 'render_cap_reached', error: 'This reel has been rendered ' + max + ' times. Start a new reel to keep going.' };
+  }
+  return { ok: true };
+}
+
+/**
+ * Fold a re-render's hook into the EDL. proposed_text must keep the ORIGINAL proposal: reel_hook_captures
+ * derives hook_edited as (final_text IS DISTINCT FROM proposed_text) in a GENERATED column, so overwriting
+ * the proposal with the edit would record every edit as "not edited" — the exact reason 0 of 27 historical
+ * captures show an edit.
+ *
+ * hook_edited is therefore "differs from WF1's ORIGINAL proposal", not "was edited on THIS render". A
+ * re-render with no change still records true if the hook was edited at approve time. Reading it as
+ * per-render is how a negative control gets misjudged — an unedited re-render proves nothing unless the
+ * reel's hook was never edited at all.
+ */
+function foldHookIntoEdl(edl, hookText) {
+  const next = Object.assign({}, edl || {});
+  const overlays = Array.isArray(next.overlays) ? next.overlays.map((o) => Object.assign({}, o)) : [];
+  const o = overlays[0];
+  let hook_edited = !!(next.approval && next.approval.hook_edited);
+  let changed = false;
+  if (o && typeof hookText === 'string' && hookText.trim()) {
+    if (o.proposed_text == null) o.proposed_text = o.text; // first edit: today's text IS the proposal
+    const finalText = hookText.trim();
+    changed = finalText !== o.text;
+    o.text = finalText;
+    hook_edited = o.text !== o.proposed_text;
+  }
+  next.overlays = overlays;
+  next.approval = Object.assign({}, next.approval, { hook_edited });
+  return { edl: next, hook_edited, changed };
+}
 const WF2_SECRET = process.env.WF2_WEBHOOK_SECRET;
 const RENDER_URL_TTL_S = 21600; // 6h — comfortable review window; re-minted on each list.
 
@@ -115,7 +169,7 @@ exports.handler = async (event) => {
       const gate = await requireStudioAccess(event, body.studio_id, 'member');
       if (!gate.ok) return respond(gate.status, { error: gate.error });
       const r = await rest('reel_edls?studio_id=eq.' + encodeURIComponent(body.studio_id) +
-        '&select=reel_id,studio_id,status,edl,render_status,render_url,render_id,render_submitted_at,created_at,updated_at&order=created_at.desc');
+        '&select=reel_id,studio_id,status,edl,render_status,render_url,render_id,render_submitted_at,render_count,created_at,updated_at&order=created_at.desc');
       const rows = await r.json();
       if (!Array.isArray(rows)) return respond(502, { error: 'reel_edls read failed', detail: rows });
       // One lookup for the whole page: every row here shares body.studio_id. Failure is
@@ -128,6 +182,8 @@ exports.handler = async (event) => {
         render_status: x.render_status,
         render_url: await signRenderUrl(x.render_url, downloadFilename(studioName, x.created_at)),
         render_ready: x.render_status === 'delivered' && !!x.render_url,
+        render_count: x.render_count || 0,
+        renders_left: Math.max(0, MAX_RENDERS - (x.render_count || 0)),
         created_at: x.created_at,
         updated_at: x.updated_at,
         hook: x.edl && x.edl.overlays && x.edl.overlays[0] ? x.edl.overlays[0].text : null,
@@ -220,6 +276,52 @@ exports.handler = async (event) => {
       return respond(200, { approved: true, reel_id: body.reel_id, hook_edited, webhook_status: wh.status, webhook: data });
     }
 
+    if (body.action === 'rerender') {
+      if (!body.reel_id) return respond(400, { error: 'reel_id is required' });
+      if (!WF2_SECRET) return respond(500, { error: 'WF2_WEBHOOK_SECRET is not configured. Set it in Netlify environment variables.' });
+
+      // Authorize BEFORE the state check, exactly as approve does: a non-member must not learn from a
+      // 409-vs-403 whether another studio's reel exists or how many renders it has used.
+      const own = await rest('reel_edls?reel_id=eq.' + encodeURIComponent(body.reel_id) + '&select=studio_id&limit=1');
+      const ownRows = await own.json();
+      const ownRow = Array.isArray(ownRows) ? ownRows[0] : null;
+      if (!ownRow) return respond(404, { error: 'Reel not found' });
+      const gate = await requireStudioAccess(event, ownRow.studio_id, 'member');
+      if (!gate.ok) return respond(gate.status, { error: gate.error });
+
+      const cur = await rest('reel_edls?reel_id=eq.' + encodeURIComponent(body.reel_id) +
+        '&select=status,render_status,render_count,edl&limit=1');
+      const curRows = await cur.json();
+      const row = Array.isArray(curRows) ? curRows[0] : null;
+      const guard = rerenderGuard(row);
+      if (!guard.ok) return respond(guard.status, guard.code ? { error: guard.error, code: guard.code } : { error: guard.error });
+
+      const folded = foldHookIntoEdl(row.edl, body.hook_text);
+      if (folded.changed) {
+        // Only the EDL moves. status stays 'approved' and render_count is WF2's to increment.
+        const patch = await rest('reel_edls?reel_id=eq.' + encodeURIComponent(body.reel_id) + '&status=eq.approved', {
+          method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ edl: folded.edl }),
+        });
+        const updated = await patch.json();
+        if (!Array.isArray(updated) || updated.length === 0) {
+          return respond(409, { error: 'This reel is no longer in a state we can re-render.' });
+        }
+      }
+
+      const wh = await fetch(WF2_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-wf2-secret': WF2_SECRET },
+        body: JSON.stringify({ reel_id: body.reel_id }),
+      });
+      const text = await wh.text();
+      let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      // WF2 owns the cap: a refusal comes back 200 with refused:true, so surface it as a 409 to the UI.
+      if (data && data.refused) {
+        return respond(409, { error: data.message || 'This reel cannot be rendered again.', code: data.code || 'render_refused', reel_id: body.reel_id });
+      }
+      return respond(200, { rerendered: true, reel_id: body.reel_id, hook_edited: folded.hook_edited, webhook_status: wh.status, webhook: data });
+    }
+
     return respond(400, { error: 'Unknown action' });
   } catch (err) {
     console.error('[reels] error:', err.message);
@@ -238,3 +340,7 @@ function cors() {
 function respond(status, body) {
   return { statusCode: status, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
+
+module.exports.rerenderGuard = rerenderGuard;
+module.exports.foldHookIntoEdl = foldHookIntoEdl;
+module.exports.MAX_RENDERS = MAX_RENDERS;

@@ -109,6 +109,25 @@ export default function Reels() {
     }
   }
 
+  // Render an already-approved reel again. The cap (3 total) is enforced by WF2's atomic claim; a refusal
+  // arrives here as a 409 whose message is the one to show, not a generic failure.
+  const rerender = async (reel, hookText) => {
+    setBusy((b) => ({ ...b, [reel.reel_id]: true }))
+    setError(null)
+    try {
+      await callReels('rerender', { reel_id: reel.reel_id, hook_text: hookText })
+      setReels((rs) => rs.map((r) => (r.reel_id === reel.reel_id
+        ? { ...r, render_status: 'rendering', render_count: (r.render_count || 0) + 1, renders_left: Math.max(0, (r.renders_left || 0) - 1) }
+        : r)))
+      setTimeout(load, 3000)
+    } catch (e) {
+      setError(e.message)
+      load()
+    } finally {
+      setBusy((b) => ({ ...b, [reel.reel_id]: false }))
+    }
+  }
+
   const newReelButton = (extra) => (
     <button
       onClick={() => setShowNew(true)}
@@ -188,9 +207,9 @@ export default function Reels() {
                 <div className={group.key === 'delivered' ? 'grid gap-2' : 'grid gap-4'}>
                   {group.reels.map((reel) =>
                     group.key === 'delivered' ? (
-                      <DeliveredRow key={reel.reel_id} reel={reel} />
+                      <DeliveredRow key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onRerender={(ht) => rerender(reel, ht)} />
                     ) : (
-                      <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={(ht) => approve(reel, ht)} onNewReel={() => setShowNew(true)} />
+                      <ReelCard key={reel.reel_id} reel={reel} primary={primary} busy={!!busy[reel.reel_id]} onApprove={(ht) => approve(reel, ht)} onRerender={(ht) => rerender(reel, ht)} onNewReel={() => setShowNew(true)} />
                     )
                   )}
                 </div>
@@ -273,7 +292,48 @@ function assemblyFailureCopy(reel) {
 
 // Active (non-delivered) reel: Ready-to-review (editable hook + Generate Reel), Rendering, Failed, or
 // Couldn't-assemble (status='validation_failed' — WF1 could not produce a valid EDL, e.g. truncation).
-function ReelCard({ reel, primary, busy, onApprove, onNewReel }) {
+/**
+ * Re-render control: an editable hook plus "Render again", with the renders already spent.
+ * MAX_RENDERS mirrors reels.cjs, which mirrors WF2's claim. The button disabling here is courtesy;
+ * the refusal that matters comes back from WF2 and lands in the page-level error line.
+ */
+const MAX_RENDERS = 3
+function RerenderControl({ reel, primary, busy, onRerender }) {
+  const [hookText, setHookText] = useState(reel.hook || '')
+  const used = reel.render_count != null ? reel.render_count : null
+  const spent = used != null && used >= MAX_RENDERS
+  return (
+    <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <label className="block text-slate-400 text-xs font-medium mb-1.5">Hook — edit it, then render again</label>
+      <textarea
+        value={hookText}
+        onChange={(e) => setHookText(e.target.value)}
+        rows={2}
+        disabled={busy || spent}
+        className="w-full rounded-lg px-3 py-2 text-sm text-white outline-none resize-none mb-2 disabled:opacity-60"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
+      />
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => onRerender(hookText)}
+          disabled={busy || spent}
+          className="flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:opacity-60"
+          style={{ background: primary }}
+        >
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+          {busy ? 'Rendering…' : 'Render again'}
+        </button>
+        {used != null && (
+          <span className="text-slate-500 text-xs">
+            {spent ? `All ${MAX_RENDERS} renders used — start a new reel to keep going.` : `${used} of ${MAX_RENDERS} renders used`}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ReelCard({ reel, primary, busy, onApprove, onRerender, onNewReel }) {
   const [hookText, setHookText] = useState(reel.hook || '')
   const failLabel = FAIL_STATES[reel.render_status]
   const failedAssembly = reel.status === 'validation_failed'
@@ -304,8 +364,11 @@ function ReelCard({ reel, primary, busy, onApprove, onNewReel }) {
           )}
 
           {failLabel && (
-            <div className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}>
-              <AlertTriangle size={15} /> {failLabel}. The team has been notified — try again shortly.
+            <div>
+              <div className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}>
+                <AlertTriangle size={15} /> {failLabel}. The team has been notified — try again shortly.
+              </div>
+              {onRerender && <RerenderControl reel={reel} primary={primary} busy={busy} onRerender={onRerender} />}
             </div>
           )}
 
@@ -355,7 +418,7 @@ function ReelCard({ reel, primary, busy, onApprove, onNewReel }) {
 
 // Delivered reel: compact row; the <video> mounts only on expand (no bytes fetched while collapsed).
 // render_url is signed at list-load and passed in via the reel object.
-function DeliveredRow({ reel }) {
+function DeliveredRow({ reel, primary, busy, onRerender }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="rounded-lg" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -377,6 +440,7 @@ function DeliveredRow({ reel }) {
           ) : (
             <div className="text-slate-500 text-sm py-2">Playback unavailable.</div>
           )}
+          {onRerender && <RerenderControl reel={reel} primary={primary} busy={busy} onRerender={onRerender} />}
         </div>
       )}
     </div>
