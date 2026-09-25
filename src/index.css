@@ -40,3 +40,8 @@ a:hover { color: var(--brand-primary); }
   font-family: 'Bebas Neue', sans-serif;
   letter-spacing: 0.02em;
 }
+
+/* ── Top-nav tab row (PR-4): scrolls within the nav, never the page. The scrollbar is hidden
+   because the fade + chevron at the edge is the affordance; touch/trackpad scrolling still works. ── */
+.nav-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.nav-scroll::-webkit-scrollbar { display: none; }
