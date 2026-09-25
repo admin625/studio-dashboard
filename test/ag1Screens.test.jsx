@@ -66,6 +66,12 @@ describe('AG-1.1b voice setup', () => {
     expect(screen.queryByRole('button', { name: /skip|later|not now/i })).toBeNull()
   })
 
+  it('renders the form on a light card (Layout is #0A0B0D; dark-on-dark would be invisible)', () => {
+    renderAt('/setup/voice', <VoiceSetup />)
+    const heading = screen.getByRole('heading', { name: /your studio's voice/i })
+    expect(heading.closest('.bg-white')).not.toBeNull()
+  })
+
   it('cannot save an empty or whitespace-only voice', () => {
     renderAt('/setup/voice', <VoiceSetup />)
     const save = screen.getByRole('button', { name: /save and continue/i })

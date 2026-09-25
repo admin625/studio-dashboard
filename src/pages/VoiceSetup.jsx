@@ -85,7 +85,9 @@ export function VoiceSetupForm() {
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto py-8 sm:py-12" style={{ fontFamily: "'DM Sans', -apple-system, sans-serif" }}>
+      {/* Layout paints #0A0B0D; this form uses Brand Settings' light-section palette, so it sits on
+          its own white card. Without it the heading and prompts render dark-on-dark (invisible). */}
+      <div className="max-w-2xl mx-auto my-6 sm:my-10 bg-white rounded-2xl px-5 py-8 sm:px-10 sm:py-12" style={{ fontFamily: "'DM Sans', -apple-system, sans-serif" }}>
         <p className="text-[11px] font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: primary }}>First step</p>
         <h1 className="text-[#0A0B0D] leading-none mb-4" style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 'clamp(2.2rem, 6vw, 3.4rem)', letterSpacing: '0.02em' }}>
           Your Studio's Voice
