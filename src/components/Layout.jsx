@@ -2,6 +2,7 @@ import { useApp } from '../context/AppContext'
 import { useAuth } from '../hooks/useAuth'
 import { useLocation, Link } from 'react-router-dom'
 import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User, Film, CalendarDays } from 'lucide-react'
+import { NAV_BG, NAV_INACTIVE, NAV_ACTIVE, NAV_ACTIVE_PILL } from '../lib/navColors'
 
 export default function Layout({ children }) {
   const { email, role, studioName, brandColorPrimary, authReady } = useApp()
@@ -31,11 +32,11 @@ export default function Layout({ children }) {
   ].filter(n => n.show)
 
   return (
-    <div className="min-h-screen" style={{ background: '#0A0B0D' }}>
+    <div className="min-h-screen" style={{ background: NAV_BG }}>
       {/* ── Nav bar ── */}
       <nav
         className="sticky top-0 z-50"
-        style={{ background: '#0A0B0D' }}
+        style={{ background: NAV_BG }}
       >
         <div className="max-w-5xl mx-auto px-6 flex items-center justify-between" style={{ height: 52 }}>
           {/* Left: Logo + nav */}
@@ -62,13 +63,17 @@ export default function Layout({ children }) {
                   <Link
                     key={path}
                     to={path}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-all duration-150"
+                    aria-current={active ? 'page' : undefined}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-all duration-150 hover:text-white"
                     style={{
-                      color: active ? '#fff' : '#4a5568',
-                      background: active ? 'rgba(255,255,255,0.07)' : 'transparent',
+                      // PR-3: inactive was #4a5568 (2.62:1); now NAV_INACTIVE (7.68:1, WCAG AA). Active stays
+                      // distinct three ways: white text, a tinted pill, and a brand-coloured icon + underline.
+                      color: active ? NAV_ACTIVE : NAV_INACTIVE,
+                      background: active ? NAV_ACTIVE_PILL : 'transparent',
+                      boxShadow: active ? `inset 0 -2px 0 ${primary}` : 'none',
                     }}
                   >
-                    <Icon size={13} style={{ color: active ? primary : '#4a5568' }} />
+                    <Icon size={13} style={{ color: active ? primary : NAV_INACTIVE }} />
                     {label}
                   </Link>
                 )
@@ -89,7 +94,9 @@ export default function Layout({ children }) {
             </div>
             <button
               onClick={signOut}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-slate-500 hover:text-white hover:bg-white/5 transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium hover:text-white hover:bg-white/5 transition-all"
+              style={{ color: NAV_INACTIVE }}
+              aria-label="Sign out"
             >
               <LogOut size={13} />
               <span className="hidden sm:inline">Out</span>
