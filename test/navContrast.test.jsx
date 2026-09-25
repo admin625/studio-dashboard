@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, cleanup, screen } from '@testing-library/react'
+import { render, cleanup, screen, fireEvent, act } from '@testing-library/react'
+import fs from 'node:fs'
+import path from 'node:path'
 import React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { NAV_BG, NAV_INACTIVE, NAV_ACTIVE, contrastRatio } from '../src/lib/navColors'
@@ -39,5 +41,36 @@ describe('nav contrast (WCAG AA)', () => {
     expect(plan.style.boxShadow).toMatch(/inset/)            // underline marks the active tab
     expect(content.style.boxShadow).not.toMatch(/inset/)
     expect(rgbToHex(screen.getByRole('button', { name: /sign out/i }).style.color)).toBe(NAV_INACTIVE.toUpperCase())
+  })
+})
+
+describe('PR-4: mobile nav reachability + no sub-AA greys left', () => {
+  it('every tab lives inside the scroll container (the page never widens for the nav)', () => {
+    render(<MemoryRouter initialEntries={['/calendar']}><Layout><div /></Layout></MemoryRouter>)
+    const row = screen.getByTestId('nav-tabs')
+    expect(row.className).toMatch(/overflow-x-auto/)
+    for (const t of ['Content', 'Plan', 'Reels', 'Photos', 'Brand', 'Account']) {
+      expect(row.contains(screen.getByRole('link', { name: new RegExp(t, 'i') }))).toBe(true)
+    }
+  })
+  it('shows the right-edge hint when more tabs are off-screen, and the left one after scrolling to the end', async () => {
+    render(<MemoryRouter initialEntries={['/calendar']}><Layout><div /></Layout></MemoryRouter>)
+    const row = screen.getByTestId('nav-tabs')
+    Object.defineProperty(row, 'scrollWidth', { configurable: true, value: 430 })
+    Object.defineProperty(row, 'clientWidth', { configurable: true, value: 250 })
+    Object.defineProperty(row, 'scrollLeft', { configurable: true, writable: true, value: 0 })
+    await act(async () => { fireEvent.scroll(row) })
+    expect(screen.queryByTestId('nav-more-right')).not.toBeNull()
+    expect(screen.queryByTestId('nav-more-left')).toBeNull()
+    row.scrollLeft = 180
+    await act(async () => { fireEvent.scroll(row) })
+    expect(screen.queryByTestId('nav-more-right')).toBeNull()
+    expect(screen.queryByTestId('nav-more-left')).not.toBeNull()
+  })
+  it('the failing grey #4a5568 (2.62:1) is not used as a colour anywhere in src', () => {
+    const hits = []
+    const walk = (d) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p); else if (/\.(jsx?|css)$/.test(f.name)) { fs.readFileSync(p, 'utf8').split('\n').forEach((l, i) => { if (/#4a5568/i.test(l) && !/^\s*(\/\/|\*|\/\*)/.test(l)) hits.push(p + ':' + (i + 1)) }) } } }
+    walk(path.resolve(__dirname, '../src'))
+    expect(hits).toEqual([])
   })
 })

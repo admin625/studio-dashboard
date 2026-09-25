@@ -23,6 +23,7 @@ import { getSessionOnce } from '../lib/supabase'
 import { fmtSlotDay, fmtSlotMonthDay } from '../lib/slotDate'
 import Layout from '../components/Layout'
 import GenerateModal from '../components/GenerateModal'
+import { NAV_ACTIVE, NAV_INACTIVE, NAV_ACTIVE_PILL } from '../lib/navColors'
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Lock,
   Check, SkipForward, PenLine, Loader2, X,
@@ -135,10 +136,12 @@ export default function Calendar() {
         <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
           {['week', 'quarter'].map(v => (
             <button key={v} onClick={() => setView(v)}
+              aria-pressed={view === v}
               className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider transition-colors"
               style={{
-                background: view === v ? 'rgba(255,255,255,0.07)' : 'transparent',
-                color: view === v ? '#fff' : '#4a5568',
+                // PR-4: the unselected view was #4a5568 on #0A0B0D (2.62:1). Same AA standard as the nav (PR-3).
+                background: view === v ? NAV_ACTIVE_PILL : 'transparent',
+                color: view === v ? NAV_ACTIVE : NAV_INACTIVE,
               }}>
               {v}
             </button>
