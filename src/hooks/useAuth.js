@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
-import { buildCallbackUrl } from '../lib/deepLink'
+import { buildCallbackUrl, APP_ORIGIN } from '../lib/deepLink'
+import { classifyOtpError } from '../lib/signInLink'
 
 /**
  * useAuth — provides login(), loginWithMagicLink(), and signOut() actions.
@@ -46,6 +47,27 @@ export function useAuth() {
     }
   }, [])
 
+  // AG-1.4 Part 1: the /login "Email me a sign-in link" button. Differs from loginWithMagicLink on
+  // purpose, in two ways: the callback is pinned to APP_ORIGIN (a link requested from the netlify
+  // subdomain must still sign the studio in on the production origin), and the result is a
+  // classification, never GoTrue's raw message — the raw "no such user" error would tell anyone
+  // whether an address has an account. See lib/signInLink.
+  // Returns 'sent' | 'rate_limited' | 'error'. Never throws.
+  const sendSignInLink = useCallback(async (email, destination) => {
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: buildCallbackUrl(APP_ORIGIN, destination),
+          shouldCreateUser: false,
+        },
+      })
+      return classifyOtpError(error)
+    } catch (err) {
+      return classifyOtpError(err || { message: 'unknown' })
+    }
+  }, [])
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     app.reset()
@@ -53,5 +75,5 @@ export function useAuth() {
     navigate('/login')
   }, [app, navigate])
 
-  return { login, loginWithMagicLink, signOut, isAuthenticated: !!app.user, loading }
+  return { login, loginWithMagicLink, sendSignInLink, signOut, isAuthenticated: !!app.user, loading }
 }

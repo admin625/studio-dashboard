@@ -48,7 +48,8 @@ const PHOTO_SOURCES = [
   { value: 'ai_only', Icon: ImagePlus, label: 'AI ONLY', sub: 'Fully generated, every time.' },
 ]
 
-const VOICE_EXAMPLES = [
+// Exported for the first-login voice setup screen (AG-1.1b), which reuses these rather than copying them.
+export const VOICE_EXAMPLES = [
   { Icon: Leaf, studio: 'Yoga / Mindfulness', text: 'Warm, grounding, and inclusive. We speak like a trusted friend — calm, encouraging, never preachy. We celebrate small wins and meet people where they are.' },
   { Icon: Zap, studio: 'HIIT / CrossFit', text: "Bold, direct, and motivating. We don't sugarcoat — we push. High energy, community-driven, a little gritty. We celebrate hard work and results." },
   { Icon: Disc3, studio: 'Barre / Dance', text: 'Elegant, aspirational, and empowering. We speak with grace and confidence. Our community is strong, refined, and supports each other.' },
@@ -105,7 +106,7 @@ function Divider({ brandColor }) {
   return <div className="h-px w-full" style={{ background: brandColor, opacity: 0.25 }} />
 }
 
-function ExampleCard({ example, onUse, brandColor }) {
+export function ExampleCard({ example, onUse, brandColor }) {
   return (
     <button
       type="button"
@@ -244,8 +245,12 @@ function BrandSettingsForm() {
       setSaveState('saved')
       setTimeout(() => setSaveState('idle'), 3000)
     } catch (e) {
+      // AG-1.2 (C4): a failed save used to reset to 'idle' with only a console.error, so the owner
+      // saw a normal Save button and believed her voice was stored — and this is the ONLY writer of
+      // brand_voice. Now it says so, keeps every field exactly as typed, and the button retries.
+      // The server-side save_failed event is deferred with AG-1.7 (spec v0.9).
       console.error('[Brand] Save failed:', e)
-      setSaveState('idle')
+      setSaveState('error')
     }
   }
 
@@ -616,9 +621,16 @@ function BrandSettingsForm() {
               style={{ background: isLight(saveBtnBg) ? DARK : '#fff', color: isLight(saveBtnBg) ? '#fff' : (saveState === 'saved' ? '#10B981' : primary), fontFamily: "'DM Sans', sans-serif" }}>
               {saveState === 'saving' ? <><Loader2 size={16} className="animate-spin" /> Saving…</> :
                 saveState === 'saved' ? <><Check size={16} /> Saved</> :
-                  <>Save Brand Settings <ArrowRight size={16} /></>}
+                  saveState === 'error' ? <>Try again <ArrowRight size={16} /></> :
+                    <>Save Brand Settings <ArrowRight size={16} /></>}
             </button>
           </div>
+          {saveState === 'error' && (
+            <p role="alert" className="relative z-10 mt-6 px-4 py-3 rounded-lg text-sm font-semibold"
+              style={{ background: '#fff', color: '#B91C1C', fontFamily: "'DM Sans', sans-serif" }}>
+              Your brand settings didn't save. Everything you entered is still here — press Try again.
+            </p>
+          )}
         </div>
       </div>
     </Layout>

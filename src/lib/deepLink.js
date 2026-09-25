@@ -25,6 +25,7 @@
  */
 
 import { isOwnerRole } from './role'
+import { isVoiceEmpty } from './voice'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -46,6 +47,21 @@ export const DEFAULT_PATH = '/deliveries'
  * landingPath.
  */
 export const OWNER_DEFAULT_PATH = '/calendar'
+
+/**
+ * First-login voice setup (AG-1.1). An owner whose studio has no stored brand voice is sent here
+ * from every protected route until she saves one — see voiceGateRedirect. There is no skip (HQ B3):
+ * without a voice the generator refuses (`prompt_field_missing`), so every other screen is a dead end.
+ */
+export const VOICE_SETUP_PATH = '/setup/voice'
+
+/**
+ * The one production origin a /login sign-in link points at (AG-1.4b). Fixed, not
+ * window.location.origin: sessions are origin-scoped, and a link requested from the netlify
+ * subdomain or a deploy preview would otherwise sign the studio in on the wrong host. Both the
+ * callback and `/**` for this origin are on the Supabase Redirect URLs allowlist.
+ */
+export const APP_ORIGIN = 'https://app.fiorsaoirse.com'
 
 /** The query parameter that carries the destination on every hop. */
 const NEXT_PARAM = 'next'
@@ -82,6 +98,7 @@ const STATIC_PATHS = new Set([
   '/brand',
   '/calendar',
   '/settings/account',
+  VOICE_SETUP_PATH,
 ])
 
 /**
@@ -215,6 +232,35 @@ export function landingPath(search, role) {
   const explicit = allowedNextOrNull(search)
   if (explicit) return explicit
   return isOwnerRole(role) ? OWNER_DEFAULT_PATH : DEFAULT_PATH
+}
+
+/**
+ * Routes an owner with no stored brand voice may still open while the voice gate is closed:
+ * the setup screen itself, Brand Settings (the same field, fuller form), and Account (sign out).
+ */
+const VOICE_GATE_OPEN = new Set([VOICE_SETUP_PATH, '/brand', '/settings/account'])
+
+/**
+ * AG-1.1a: where to send this session instead of `pathname`, or null to let it through.
+ *
+ * Fires only when ALL hold:
+ *   - the role is owner (instructors cannot set a voice, so gating them is a dead end);
+ *   - brand data is hydrated (`studioLoaded`). authReady is NOT hydration — the 10s safety valve
+ *     sets it with every brand field still at its empty default, and gating on it would bounce an
+ *     owner who HAS a voice into setup (and setup saves what it shows);
+ *   - the stored voice is empty under the one predicate (lib/voice);
+ *   - she is not already on a route the gate leaves open.
+ *
+ * Fail-open by construction: an unhydrated or failed studio load returns null, so the gate never
+ * traps a session it cannot read. Generate stays disabled on an empty voice either way.
+ */
+export function voiceGateRedirect({ role, studioLoaded, brandVoice, pathname }) {
+  if (!isOwnerRole(role)) return null
+  if (studioLoaded !== true) return null
+  if (!isVoiceEmpty(brandVoice)) return null
+  const clean = String(pathname || '').split('?')[0].split('#')[0]
+  if (VOICE_GATE_OPEN.has(clean)) return null
+  return VOICE_SETUP_PATH
 }
 
 /**

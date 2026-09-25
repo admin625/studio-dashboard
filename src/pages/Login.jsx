@@ -4,9 +4,10 @@ import { useAuth } from '../hooks/useAuth'
 import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
 import { landingPath, allowedNextOrNull, withNext } from '../lib/deepLink'
+import { SIGN_IN_LINK_MESSAGES } from '../lib/signInLink'
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, sendSignInLink } = useAuth()
   const { user, authReady, role } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
@@ -15,6 +16,8 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // AG-1.4 Part 1. linkState: null | 'sending' | 'sent' | 'rate_limited' | 'error' | 'need_email'.
+  const [linkState, setLinkState] = useState(null)
 
   // Redirect once authenticated, to whatever ProtectedRoute put in ?next=.
   // No next means the role default — /calendar for an owner, /deliveries otherwise.
@@ -47,6 +50,16 @@ export default function Login() {
       setLoading(false)
     }
     // Don't setLoading(false) on success — keep spinner until redirect
+  }
+
+  // A first-class way back in without a password (AG-1.4 Part 1). Most studios never set one:
+  // provisioning signs them in by magic link. The destination rides the callback exactly as it
+  // does from /forgot-password — allowedNextOrNull, never a laundered default.
+  const handleSignInLink = async () => {
+    if (!email.trim()) { setLinkState('need_email'); return }
+    setError('')
+    setLinkState('sending')
+    setLinkState(await sendSignInLink(email.trim(), allowedNextOrNull(location.search)))
   }
 
   // If already authenticated, show nothing (redirect is happening)
@@ -134,6 +147,34 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
+
+        <div className="mt-4">
+          <div className="flex items-center gap-3 mb-4" aria-hidden="true">
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+            <span className="text-[11px] uppercase tracking-wider text-slate-500">or</span>
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          </div>
+          <button
+            type="button"
+            onClick={handleSignInLink}
+            disabled={linkState === 'sending'}
+            className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl text-sm font-semibold
+                       text-white transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)' }}
+          >
+            {linkState === 'sending' && <Loader2 size={16} className="animate-spin" />}
+            {linkState === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
+          </button>
+          {linkState && linkState !== 'sending' && (
+            <p
+              role="status"
+              className={`mt-3 px-4 py-3 rounded-lg text-sm ${linkState === 'sent' ? 'text-emerald-300' : linkState === 'error' ? 'text-red-300' : 'text-amber-200'}`}
+              style={{ background: linkState === 'sent' ? 'rgba(16,185,129,0.1)' : linkState === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)' }}
+            >
+              {SIGN_IN_LINK_MESSAGES[linkState]}
+            </p>
+          )}
+        </div>
 
         <p className="text-center mt-6 text-xs text-slate-500">
           Forgot password?{' '}
