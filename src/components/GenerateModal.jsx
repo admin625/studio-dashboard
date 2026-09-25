@@ -8,10 +8,28 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { supabase, getSessionOnce } from '../lib/supabase'
 import { fmtSlotDay } from '../lib/slotDate'
+import { isVoiceEmpty } from '../lib/voice'
 import { pollOutcome, fetchAttempt, classifySyncBody, NO_ANSWER_MS } from '../lib/generationOutcome'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
+
+/**
+ * AG-1.1c: why Create Content is disabled, with the fix one click away. Replaces a hint that told
+ * freestyle users to "type one here" on a screen with no field to type in. `canTypeHere` only in
+ * standard mode, where the Brand Voice field above really does accept a one-off voice.
+ */
+function VoiceMissingHint({ canTypeHere = false, centered = false, onOpenBrand }) {
+  return (
+    <p className={`text-xs text-amber-300 mt-2 leading-snug ${centered ? 'text-center' : ''}`} role="note">
+      Create Content needs your studio's brand voice.{' '}
+      <button type="button" onClick={onOpenBrand} className="underline font-semibold hover:text-amber-200">
+        Add it in Brand Settings
+      </button>
+      {canTypeHere ? ', or type one above for this session.' : '.'}
+    </p>
+  )
+}
 
 /** The one customer-facing support address (see the TODO in handleSubmit). */
 const SUPPORT_EMAIL = 'admin@fiorsaoirse.com'
@@ -121,6 +139,10 @@ export default function GenerateModal({
   // The modal stays mounted while closed (`open` false returns null), so a finished run's state
   // must be cleared here or it would greet the next slot. Closed mid-run, the caller gets the
   // pre-item-7 hand-off (no outcome) so the Dashboard can still show its "being created" banner.
+  // AG-1.1c: the disabled Create button's reason links straight to the fix. Closing first so a
+  // half-configured run never lingers behind the settings page.
+  const openBrandSettings = () => { close(); navigate('/brand') }
+
   const close = () => {
     const wasGenerating = outcome && outcome.phase === 'generating'
     runRef.current += 1
@@ -222,7 +244,7 @@ export default function GenerateModal({
     // proven differentiator, so refuse rather than produce plausible generic content silently.
     // Recoverable two ways, and the copy says both: set it once in Brand Settings (durable),
     // or type one here for this generation. NOT a "reload and try again" - nothing is loading.
-    if (!brandVoice.trim()) {
+    if (isVoiceEmpty(brandVoice)) {
       setError("Your studio doesn't have a brand voice set yet, and generating without one produces generic content that won't sound like you. Add one in Brand Settings, or type one below for this generation.")
       return
     }
@@ -591,10 +613,8 @@ export default function GenerateModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Field label="Brand Voice" value={brandVoice} onChange={setBrandVoice} />
-                  {!brandVoice.trim() && (
-                    <p className="text-[10px] text-amber-300/90 mt-1 leading-snug">
-                      Add a brand voice in Brand Settings, or type one here for this session.
-                    </p>
+                  {isVoiceEmpty(brandVoice) && (
+                    <VoiceMissingHint canTypeHere onOpenBrand={openBrandSettings} />
                   )}
                 </div>
                 <Field label="Target Audience" value={targetAudience} onChange={setTargetAudience} />
@@ -665,7 +685,7 @@ export default function GenerateModal({
             <button onClick={close} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
             <button
               onClick={handleSubmit}
-              disabled={submitting || !brandVoice.trim()}
+              disabled={submitting || isVoiceEmpty(brandVoice)}
               className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
               style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
             >
@@ -675,10 +695,8 @@ export default function GenerateModal({
           {/* Freestyle hides the voice field, so on that path the disabled button would
               otherwise have no visible explanation. In standard mode the helper sits
               under the field instead, so this would only duplicate it. */}
-          {freestyle && !brandVoice.trim() && (
-            <p className="text-[10px] text-amber-300/90 text-center mt-3 leading-snug">
-              Add a brand voice in Brand Settings, or type one here for this session.
-            </p>
+          {freestyle && isVoiceEmpty(brandVoice) && (
+            <VoiceMissingHint centered onOpenBrand={openBrandSettings} />
           )}
           <p className="text-[10px] text-slate-500 text-center mt-3">
             FCA generates premium content — great things take a moment. Ready within 20 minutes.

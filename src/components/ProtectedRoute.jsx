@@ -1,10 +1,10 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { Loader2 } from 'lucide-react'
-import { withNext } from '../lib/deepLink'
+import { withNext, voiceGateRedirect } from '../lib/deepLink'
 
 export default function ProtectedRoute({ children }) {
-  const { authReady, user } = useApp()
+  const { authReady, user, role, studioLoaded, brandVoice } = useApp()
   const location = useLocation()
 
   if (!authReady) {
@@ -26,6 +26,11 @@ export default function ProtectedRoute({ children }) {
     // client and back. Validated on read at each consumer — see lib/deepLink.js.
     return <Navigate to={withNext('/login', location.pathname)} replace />
   }
+
+  // AG-1.1a: an owner with no stored brand voice sets it up before anything else. The decision
+  // (owner, hydrated, empty, not already on an open route) lives in lib/deepLink — one place.
+  const gate = voiceGateRedirect({ role, studioLoaded, brandVoice, pathname: location.pathname })
+  if (gate) return <Navigate to={gate} replace />
 
   return children
 }

@@ -14,6 +14,7 @@ import Reels from './pages/Reels'
 import ReelUpload from './pages/ReelUpload'
 import AccountSettings from './pages/AccountSettings'
 import Calendar from './pages/Calendar'
+import VoiceSetup from './pages/VoiceSetup'
 import ProtectedRoute from './components/ProtectedRoute'
 import HelpChatWidget from './components/HelpChatWidget'
 
@@ -121,6 +122,16 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <AccountSettings />
+                  </ProtectedRoute>
+                }
+              />
+              {/* AG-1.1 first-login voice setup. ProtectedRoute routes an owner with no stored voice
+                  here (lib/deepLink voiceGateRedirect). Also in STATIC_PATHS. */}
+              <Route
+                path="/setup/voice"
+                element={
+                  <ProtectedRoute>
+                    <VoiceSetup />
                   </ProtectedRoute>
                 }
               />
