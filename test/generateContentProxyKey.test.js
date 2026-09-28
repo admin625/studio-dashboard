@@ -47,6 +47,7 @@ const ok = () => ({ ok: true, status: 200, text: async () => '{"success":true}' 
 const status = (s) => () => ({ ok: false, status: s, text: async () => '{"message":"Authorization data is wrong!"}' })
 const webhookCall = (calls) => calls.find((c) => c.url === WEBHOOK)
 const tagged = (logs) => logs.filter((l) => l.text.includes('generate_upstream_error')).map((l) => JSON.parse(l.text))
+const pending = (logs) => logs.filter((l) => l.text.includes('generate_upstream_pending')).map((l) => JSON.parse(l.text))
 
 describe('AG-1.8 X-FCA-Proxy-Key header', () => {
   it('sends the header when N8N_GENERATOR_KEY is set, alongside Content-Type', async () => {
@@ -108,20 +109,46 @@ describe('AG-1.8(c) generate_upstream_error log', () => {
     expect(tagged(logs)).toEqual([])
   })
 
-  it('an abort (the 25s timeout) logs status "timeout" and still returns 202', async () => {
+  // HQ 09-28: the 25s abort is the NORMAL path (runs take ~50-85s), so it has its own tag and
+  // never appears as an upstream error.
+  it('an abort (the 25s timeout) logs generate_upstream_pending, no error tag, still 202', async () => {
     const abort = () => { const e = new Error('aborted'); e.name = 'AbortError'; throw e }
     const { handler, logs } = load({ upstream: abort })
     const res = await handler(event())
     expect(res.statusCode).toBe(202)
-    expect(tagged(logs)).toEqual([{ tag: 'generate_upstream_error', status: 'timeout' }])
+    expect(pending(logs)).toEqual([{ tag: 'generate_upstream_pending' }])
+    expect(tagged(logs)).toEqual([])
   })
 
-  it('a network error logs status "network" and returns 502', async () => {
-    const boom = () => { throw new TypeError('fetch failed') }
+  it('a network error logs kind "network" and returns 502 without err.message in the body', async () => {
+    const boom = () => { throw new TypeError('fetch failed: https://secret-webhook.example.test/x') }
     const { handler, logs } = load({ upstream: boom })
     const res = await handler(event())
     expect(res.statusCode).toBe(502)
-    expect(tagged(logs)).toEqual([{ tag: 'generate_upstream_error', status: 'network' }])
+    expect(JSON.parse(res.body)).toEqual({ error: 'Upstream request failed' })
+    expect(tagged(logs)).toEqual([{ tag: 'generate_upstream_error', kind: 'network' }])
+  })
+
+  it('refuses to follow redirects (the header must never reach another host)', async () => {
+    const { handler, calls } = load({ upstream: ok })
+    await handler(event())
+    expect(webhookCall(calls).opts.redirect).toBe('error')
+  })
+
+  it('a body-read failure after a non-2xx is logged once, with its status', async () => {
+    const up = () => ({ ok: false, status: 403, text: async () => { throw new TypeError('terminated') } })
+    const { handler, logs } = load({ upstream: up })
+    await handler(event())
+    expect(tagged(logs)).toEqual([{ tag: 'generate_upstream_error', status: 403 }])
+  })
+
+  it('a malformed key (embedded line break) is not sent, and is logged by name only', async () => {
+    const bad = 'unit-test-proxy-key-\nsecond-line'
+    const { handler, calls, logs } = load({ key: bad, upstream: ok })
+    await handler(event())
+    expect(webhookCall(calls).opts.headers).toEqual({ 'Content-Type': 'application/json' })
+    expect(logs.some((l) => l.text.includes('N8N_GENERATOR_KEY is malformed'))).toBe(true)
+    expect(logs.some((l) => l.text.includes('second-line'))).toBe(false)
   })
 
   it('the key value never appears in any log line, on any path', async () => {
