@@ -19,6 +19,10 @@ exports.handler = async (event) => {
     return respond(500, { error: 'Content generation is not configured.' });
   }
 
+  // AG-1.8: shared-secret header for the generator webhook. Production-only by design:
+  // deploy previews and branch deploys have no key, so once n8n enforces it they get 403.
+  const generatorKey = readGeneratorKey();
+
   let body;
   try {
     body = JSON.parse(event.body);
@@ -95,15 +99,27 @@ exports.handler = async (event) => {
   // saves results to content_deliveries. The React app polls for results.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
+  let upstreamLogged = false;
 
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(generatorKey ? { 'X-FCA-Proxy-Key': generatorKey } : {}),
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
+      // Never follow a redirect: a custom header survives a cross-origin redirect, so following
+      // one could hand X-FCA-Proxy-Key to whatever host it names. A 3xx fails as 'network'.
+      redirect: 'error',
     });
     clearTimeout(timeout);
+    if (!res.ok) {
+      // AG-1.8(c), HQ 09-28: surface upstream rejections (e.g. 403 once header auth is on). Status only.
+      logUpstreamError({ status: res.status });
+      upstreamLogged = true;
+    }
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch { data = text; }
@@ -111,13 +127,42 @@ exports.handler = async (event) => {
   } catch (err) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      // Timeout — n8n is still processing, will save results when done
+      // Timeout — n8n is still processing, will save results when done. This is the NORMAL path
+      // (runs take ~50-85s), so it gets its own tag and never counts as an upstream error.
+      console.log(JSON.stringify({ tag: 'generate_upstream_pending' }));
       return respond(202, { success: true, message: 'Content generation in progress. Results will appear in your deliveries.' });
     }
+    // A body-read failure after a non-2xx was already logged with its status: log once, not twice.
+    if (!upstreamLogged) logUpstreamError({ kind: 'network' });
     console.error('[generate-content] Upstream fetch failed:', err.message);
-    return respond(502, { error: 'Upstream request failed', detail: err.message });
+    // err.message stays server-side only: it can carry the webhook URL. The modal shows `error`.
+    return respond(502, { error: 'Upstream request failed' });
   }
 };
+
+// AG-1.8: the key must be a single header-safe token (printable ASCII, no whitespace). A value
+// with a line break makes fetch throw an error whose message contains the value, so a malformed
+// key is dropped here (logged by NAME only) rather than sent.
+function readGeneratorKey() {
+  const key = process.env.N8N_GENERATOR_KEY;
+  if (!key) {
+    console.warn('[generate-content] N8N_GENERATOR_KEY not set; generator call sends no X-FCA-Proxy-Key');
+    return null;
+  }
+  if (!/^[\x21-\x7e]+$/.test(key)) {
+    console.error('[generate-content] N8N_GENERATOR_KEY is malformed (not a single printable token); sending no X-FCA-Proxy-Key');
+    return null;
+  }
+  return key;
+}
+
+// AG-1.8(c): one structured line per upstream failure, readable in Netlify function logs.
+// `status` is always a number (a non-2xx HTTP status); a fetch failure is `kind: 'network'`.
+// Never the key, the request body, or a studio id. Satisfied via function log, not the AG-1.7
+// event path (HQ 09-28). The 202 timeout path logs `generate_upstream_pending` instead.
+function logUpstreamError(fields) {
+  console.error(JSON.stringify({ tag: 'generate_upstream_error', ...fields }));
+}
 
 function corsHeaders() {
   return {

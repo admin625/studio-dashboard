@@ -182,7 +182,17 @@ prefixed `VITE_` is compiled into the JS bundle. Never put a non-public value be
 
 **Server-side (Netlify Functions env, never bundled):** `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `HELP_CHAT_WEBHOOK_SECRET`,
-`LOGO_COMPOSITE_SERVICE_URL`, `LOGO_COMPOSITE_SHARED_SECRET`, `DASHBOARD_ORIGIN`.
+`LOGO_COMPOSITE_SERVICE_URL`, `LOGO_COMPOSITE_SHARED_SECRET`, `DASHBOARD_ORIGIN`,
+`N8N_WEBHOOK_URL`, `N8N_GENERATOR_KEY`.
+
+**`N8N_GENERATOR_KEY` (AG-1.8, 2026-09-28)** is the shared secret `generate-content.js` sends as
+`X-FCA-Proxy-Key` to the generator webhook. It is set for the **production context only**
+(functions scope, marked secret), so deploy previews and branch deploys send no header. Once n8n
+enforces it, **previews and branch deploys cannot generate**, and any QA that needs a real
+generation has to run against production. Upstream failures log one line tagged
+`generate_upstream_error`, carrying either a numeric non-2xx `status` or `kind: "network"`. The
+normal 25s-abort 202 path logs `generate_upstream_pending` instead, and is never an error. The
+webhook fetch refuses redirects, and a malformed key is dropped and logged by name only.
 
 The old claim "no server-side secrets in this repo" is false and was load-bearing in the wrong
 direction — treat every function as secret-holding.
