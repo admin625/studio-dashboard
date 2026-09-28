@@ -49,16 +49,16 @@ const webhookCall = (calls) => calls.find((c) => c.url === WEBHOOK)
 const tagged = (logs) => logs.filter((l) => l.text.includes('generate_upstream_error')).map((l) => JSON.parse(l.text))
 
 describe('AG-1.8 X-FCA-Proxy-Key header', () => {
-  it('sends the header when N8N_GENERATOR_KEY is set', async () => {
+  it('sends the header when N8N_GENERATOR_KEY is set, alongside Content-Type', async () => {
     const { handler, calls } = load({ upstream: ok })
     await handler(event())
-    expect(webhookCall(calls).opts.headers['X-FCA-Proxy-Key']).toBe(KEY)
+    expect(webhookCall(calls).opts.headers).toEqual({ 'Content-Type': 'application/json', 'X-FCA-Proxy-Key': KEY })
   })
 
   it('omits the header (and warns) when the key is not set: previews/branch deploys', async () => {
     const { handler, calls, logs } = load({ key: null, upstream: ok })
     const res = await handler(event())
-    expect('X-FCA-Proxy-Key' in webhookCall(calls).opts.headers).toBe(false)
+    expect(webhookCall(calls).opts.headers).toEqual({ 'Content-Type': 'application/json' })
     expect(res.statusCode).toBe(200)
     expect(logs.some((l) => l.level === 'warn' && l.text.includes('N8N_GENERATOR_KEY not set'))).toBe(true)
   })
@@ -78,6 +78,28 @@ describe('AG-1.8(c) generate_upstream_error log', () => {
       await handler(event())
       expect(tagged(logs)).toEqual([{ tag: 'generate_upstream_error', status: s }])
     }
+  })
+
+  // The proxy's OWN rejections must never look like an upstream one: a studio-mismatch 403 is
+  // indistinguishable by status from the n8n auth 403 the rollback watch is looking for.
+  it('its own studio-mismatch 403 emits no tag and never calls n8n', async () => {
+    const { handler, logs, calls } = load({ upstream: ok })
+    const ev = event()
+    ev.body = JSON.stringify({ email: 'owner@example.test', studio_id: '99999999-2222-3333-4444-555555555555', platforms: ['instagram'] })
+    const res = await handler(ev)
+    expect(res.statusCode).toBe(403)
+    expect(webhookCall(calls)).toBeUndefined()
+    expect(tagged(logs)).toEqual([])
+  })
+
+  it('its own missing-token 401 emits no tag and never calls n8n', async () => {
+    const { handler, logs, calls } = load({ upstream: ok })
+    const ev = event()
+    ev.headers = {}
+    const res = await handler(ev)
+    expect(res.statusCode).toBe(401)
+    expect(webhookCall(calls)).toBeUndefined()
+    expect(tagged(logs)).toEqual([])
   })
 
   it('a 2xx logs nothing tagged', async () => {
