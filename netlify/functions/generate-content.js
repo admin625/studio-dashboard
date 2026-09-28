@@ -19,6 +19,11 @@ exports.handler = async (event) => {
     return respond(500, { error: 'Content generation is not configured.' });
   }
 
+  // AG-1.8: shared-secret header for the generator webhook. Production-only by design:
+  // deploy previews and branch deploys have no key, so once n8n enforces it they get 403.
+  const generatorKey = process.env.N8N_GENERATOR_KEY;
+  if (!generatorKey) console.warn('[generate-content] N8N_GENERATOR_KEY not set; generator call sends no X-FCA-Proxy-Key');
+
   let body;
   try {
     body = JSON.parse(event.body);
@@ -99,11 +104,18 @@ exports.handler = async (event) => {
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(generatorKey ? { 'X-FCA-Proxy-Key': generatorKey } : {}),
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
     clearTimeout(timeout);
+    if (!res.ok) {
+      // AG-1.8(c), HQ 09-28: surface upstream rejections (e.g. 403 once header auth is on). Status only.
+      logUpstreamError(res.status);
+    }
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch { data = text; }
@@ -112,12 +124,21 @@ exports.handler = async (event) => {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
       // Timeout — n8n is still processing, will save results when done
+      logUpstreamError('timeout');
       return respond(202, { success: true, message: 'Content generation in progress. Results will appear in your deliveries.' });
     }
+    logUpstreamError('network');
     console.error('[generate-content] Upstream fetch failed:', err.message);
     return respond(502, { error: 'Upstream request failed', detail: err.message });
   }
 };
+
+// AG-1.8(c): one structured line per upstream failure, readable in Netlify function logs.
+// Status only — never the key, the request body, or a studio id. Satisfied via function log,
+// not the AG-1.7 event path (HQ 09-28).
+function logUpstreamError(status) {
+  console.error(JSON.stringify({ tag: 'generate_upstream_error', status }));
+}
 
 function corsHeaders() {
   return {
