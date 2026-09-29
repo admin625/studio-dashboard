@@ -37,6 +37,10 @@
  *   member  = active studio_instructor OR client of the studio   (parity: get_my_studio_ids)
  *   owner   = studio_accounts.owner_email matches the caller     (parity: sa_update_owner)
  *
+ * NOT FOR GENERATION RIGHTS: generate-content.js deliberately does not use `member`. A clients
+ * row alone does not let someone generate (former instructors keep theirs); it requires owner or
+ * an ACTIVE studio_instructors row, and derives the role it forwards (HQ 2026-09-29).
+ *
  * Instructors are read-only on studio-level configuration and read-write on their own content:
  * they can view + generate + edit content for their studio, but cannot change Brand settings
  * (sa_update_owner is owner-only), cannot add/edit/delete photos (sp_* INSERT/UPDATE/DELETE use

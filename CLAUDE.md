@@ -154,7 +154,7 @@ Keep it that way — that property is structural, not a matter of remembering.
 | `reels.cjs` | Reel CRUD |
 | `derive-photo-style.cjs` | Drafts `ai_photo_prompt` from a studio's own photos. 26s timeout |
 | `derive-photo-keywords.cjs` | Derives `studio_photos.keywords` (the CANDIDATE side of photo matching) from each photo. Owner-level. **Dry run by default** — writing needs `dry_run:false`; re-deriving needs `redo:true`. Never overwrites `keywords_source='human'`. 26s timeout |
-| `generate-content.js` | Generation entry point |
+| `generate-content.js` | Generation entry point. **Derives `email` and `user_role` server-side (HQ 2026-09-29)**: body values are dropped; role = `studio_owner` if `studio_accounts.owner_email` matches the session, `studio_instructor` if an ACTIVE `studio_instructors` row does, else 403. `studio_id` required (400); a `client_id` must belong to it (400) and be the caller's own row (403); `email` is always the verified session email. `platforms[].postCount` must be an integer 1–5, total ≤25 (mirrors the modal's select; raise together) (400). All reads use the caller's token (RLS), no service role |
 | `proxy-webhook.js` | Fronts n8n webhooks. 26s timeout (set in `netlify.toml`) |
 | `help-chat.js` | Help chat backend |
 | `reel-create-background.js` | Background function for reel creation |
