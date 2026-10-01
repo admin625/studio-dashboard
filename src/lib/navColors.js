@@ -9,6 +9,9 @@ export const NAV_BG = '#0A0B0D'
 export const NAV_INACTIVE = '#94A3B8'   // slate-400 — 7.68:1 on NAV_BG
 export const NAV_ACTIVE = '#FFFFFF'     // 19.69:1 on NAV_BG
 export const NAV_ACTIVE_PILL = 'rgba(255,255,255,0.10)'
+// Katie polish (HQ 2026-09-29; 13px per HQ 2026-10-01): tab labels were 11px, small on a phone even after the contrast fix.
+// A full literal class so Tailwind's source scan emits it.
+export const NAV_LABEL_SIZE = 'text-[13px]'
 
 /** WCAG 2.x relative luminance of a #rrggbb colour. */
 export function luminance(hex) {

@@ -33,6 +33,8 @@ function VoiceMissingHint({ canTypeHere = false, centered = false, onOpenBrand }
 
 /** The one customer-facing support address (see the TODO in handleSubmit). */
 const SUPPORT_EMAIL = 'admin@fiorsaoirse.com'
+// Posts per platform on every open. The select offers 1-5 and generate-content.js clamps to the same.
+export const DEFAULT_POST_COUNT = 3
 
 /* ── Platform modifier map ── */
 const PLATFORM_MODIFIERS = {
@@ -105,12 +107,20 @@ export default function GenerateModal({
 
   // Form state
   const [platforms, setPlatforms] = useState({
-    instagram: { on: true, count: 3, images: true, formats: ['feed_post'] },
-    facebook: { on: false, count: 3, images: true },
-    twitter: { on: false, count: 3, images: false },
-    linkedin: { on: false, count: 3, images: false },
-    tiktok: { on: false, count: 3, images: false },
+    instagram: { on: true, count: DEFAULT_POST_COUNT, images: true, formats: ['feed_post'] },
+    facebook: { on: false, count: DEFAULT_POST_COUNT, images: true },
+    twitter: { on: false, count: DEFAULT_POST_COUNT, images: false },
+    linkedin: { on: false, count: DEFAULT_POST_COUNT, images: false },
+    tiktok: { on: false, count: DEFAULT_POST_COUNT, images: false },
   })
+  // Katie polish (HQ 2026-09-29, A3): the modal stays mounted while closed, so a post count picked
+  // for one run stuck on every later open until a page reload, and a 1-post test quietly became
+  // the next real run's size. Every open now starts each platform at the default count. Only the
+  // count resets; which platforms are on, images and formats keep their last choice.
+  useEffect(() => {
+    if (!open) return
+    setPlatforms(p => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, { ...v, count: DEFAULT_POST_COUNT }])))
+  }, [open])
   const [freestyle, setFreestyle] = useState(false)
   const [freestylePrompt, setFreestylePrompt] = useState('')
   const [sessionVibe, setSessionVibe] = useState(app.aiPhotoPrompt || app.brandVoice || '')

@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext'
 import { useAuth } from '../hooks/useAuth'
 import { useLocation, Link } from 'react-router-dom'
 import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User, Film, CalendarDays, ChevronRight, ChevronLeft } from 'lucide-react'
-import { NAV_BG, NAV_INACTIVE, NAV_ACTIVE, NAV_ACTIVE_PILL } from '../lib/navColors'
+import { NAV_BG, NAV_INACTIVE, NAV_ACTIVE, NAV_ACTIVE_PILL, NAV_LABEL_SIZE } from '../lib/navColors'
 
 export default function Layout({ children }) {
   const { email, role, studioName, brandColorPrimary, authReady } = useApp()
@@ -90,7 +90,7 @@ export default function Layout({ children }) {
                     key={path}
                     to={path}
                     aria-current={active ? 'page' : undefined}
-                    className="flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap transition-all duration-150 hover:text-white"
+                    className={`flex flex-shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-md ${NAV_LABEL_SIZE} font-semibold uppercase tracking-wider whitespace-nowrap transition-all duration-150 hover:text-white`}
                     style={{
                       // PR-3: inactive was #4a5568 (2.62:1); now NAV_INACTIVE (7.68:1, WCAG AA). Active stays
                       // distinct three ways: white text, a tinted pill, and a brand-coloured icon + underline.
