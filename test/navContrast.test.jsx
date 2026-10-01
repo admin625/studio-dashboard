@@ -67,13 +67,14 @@ describe('PR-4: mobile nav reachability + no sub-AA greys left', () => {
     expect(screen.queryByTestId('nav-more-right')).toBeNull()
     expect(screen.queryByTestId('nav-more-left')).not.toBeNull()
   })
-  it('Katie polish: every tab label renders at NAV_LABEL_SIZE (12px), not the old 11px', () => {
+  it('Katie polish: every tab label renders at NAV_LABEL_SIZE (13px), never 11px or 12px', () => {
     render(<MemoryRouter initialEntries={['/calendar']}><Layout><div /></Layout></MemoryRouter>)
-    expect(NAV_LABEL_SIZE).toBe('text-[12px]')
+    expect(NAV_LABEL_SIZE).toBe('text-[13px]')
     for (const t of ['Content', 'Plan', 'Reels', 'Photos', 'Brand', 'Account']) {
       const cls = screen.getByRole('link', { name: new RegExp(t, 'i') }).className
-      expect(cls).toContain(NAV_LABEL_SIZE)
+      expect(cls).toContain('text-[13px]')
       expect(cls).not.toContain('text-[11px]')
+      expect(cls).not.toContain('text-[12px]')
     }
   })
   it('the failing grey #4a5568 (2.62:1) is not used as a colour anywhere in src', () => {
