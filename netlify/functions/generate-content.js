@@ -20,7 +20,8 @@ exports.handler = async (event) => {
   }
 
   // AG-1.8: shared-secret header for the generator webhook. Production-only by design:
-  // deploy previews and branch deploys have no key, so once n8n enforces it they get 403.
+  // deploy previews and branch deploys have no key, so they get 403. n8n enforces it (header auth
+  // on the generator webhook since 2026-09-28), so this proxy is the only way in.
   const generatorKey = readGeneratorKey();
 
   let body;
@@ -29,8 +30,12 @@ exports.handler = async (event) => {
   } catch {
     return respond(400, { error: 'Invalid JSON' });
   }
+  // JSON.parse('null') and friends succeed; everything below needs an object.
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return respond(400, { error: 'Invalid JSON' });
+  }
 
-  // --- authenticate the caller, and prove they own the studio they named -----
+  // --- authenticate the caller (session only; membership and role are derived below) ---------
   // Without this the function is an open relay: it validated body SHAPE only,
   // so anyone with a studio_id could spend Claude budget, write deliveries and
   // email that studio's owner. studio_id is an unguessable UUID, but every
@@ -41,56 +46,122 @@ exports.handler = async (event) => {
     return respond(401, { error: 'Sign in again to generate content.' });
   }
 
-  let callerEmail;
+  // verifiedEmail is forwarded as GoTrue stored it; callerEmail is the lowercased copy used only
+  // for comparisons.
+  let verifiedEmail;
   try {
     const who = await fetch(supabaseUrl.replace(/\/+$/, '') + '/auth/v1/user', {
       headers: { apikey: anonKey, Authorization: 'Bearer ' + token },
     });
     if (!who.ok) return respond(401, { error: 'Your session has expired. Reload and sign in again.' });
     const user = await who.json();
-    callerEmail = (user && user.email) ? user.email.toLowerCase() : '';
+    verifiedEmail = (user && typeof user.email === 'string') ? user.email.trim() : '';
   } catch (err) {
     console.error('[generate-content] session check failed:', err.message);
     return respond(502, { error: 'Could not verify your session. Please try again.' });
   }
-  if (!callerEmail) {
+  if (!verifiedEmail) {
     return respond(401, { error: 'Your session has expired. Reload and sign in again.' });
   }
+  const callerEmail = verifiedEmail.toLowerCase();
 
-  if (body.studio_id) {
-    // Read with the CALLER's token so RLS decides what they can see. If the
-    // studio they named is not among their own rows, they do not own it.
-    try {
-      const scope = await fetch(
-        supabaseUrl.replace(/\/+$/, '') +
-        '/rest/v1/clients?select=studio_id&email=eq.' + encodeURIComponent(callerEmail),
-        { headers: { apikey: anonKey, Authorization: 'Bearer ' + token } },
-      );
-      if (!scope.ok) {
-        console.error('[generate-content] studio scope lookup failed:', scope.status);
-        return respond(502, { error: 'Could not verify your studio. Please try again.' });
-      }
-      const rows = await scope.json();
-      const owned = Array.isArray(rows) ? rows.map((r) => r.studio_id).filter(Boolean) : [];
-      if (!owned.includes(body.studio_id)) {
-        console.error('[generate-content] studio mismatch for', callerEmail);
-        return respond(403, { error: 'You do not have access to that studio.' });
-      }
-    } catch (err) {
-      console.error('[generate-content] studio scope check failed:', err.message);
-      return respond(502, { error: 'Could not verify your studio. Please try again.' });
-    }
-  }
+  // --- identity is derived here, never taken from the body (HQ 2026-09-29) --------------------
+  // The generator trusts body.email and body.user_role. `user_role: "studio_instructor"` skips
+  // its paywall, and body.email picks whose posts_used is written and who gets the content.
+  // Both were forwarded as sent, so any signed-in owner could skip the trial cap and cancel
+  // check, or write to another tenant's counter and inbox (reproduced 09-29, execs 73742 and
+  // 73744). Whatever the browser sent for these two is dropped before anything reads it.
+  delete body.email;
+  delete body.user_role;
 
-  if (!body.email || typeof body.email !== 'string' || !body.email.includes('@')) {
-    return respond(400, { error: 'Valid email is required' });
+  if (typeof body.studio_id !== 'string' || !UUID.test(body.studio_id)) {
+    return respond(400, { error: 'studio_id is required' });
   }
-  if (!body.studio_id && !body.client_id) {
-    return respond(400, { error: 'studio_id or client_id is required' });
+  if (body.client_id != null && (typeof body.client_id !== 'string' || !UUID.test(body.client_id))) {
+    return respond(400, { error: 'client_id is invalid' });
   }
   if (!Array.isArray(body.platforms) || body.platforms.length === 0) {
     return respond(400, { error: 'At least one platform is required' });
   }
+  // HQ 2026-09-29: postCount decides how many posts one run writes (Claude spend), and the trial
+  // cap is checked BEFORE the run against posts already used, never against posts requested. So
+  // the request size is bounded here, to what the modal can send. Every entry must carry an
+  // explicit integer: the generator reads a missing postCount, or a bare string entry, as 3.
+  let requested = 0;
+  for (const p of body.platforms) {
+    const n = p && typeof p === 'object' && !Array.isArray(p) ? p.postCount : undefined;
+    if (!Number.isInteger(n) || n < 1 || n > MAX_POSTS_PER_PLATFORM) {
+      return respond(400, { error: 'Each platform needs a post count from 1 to ' + MAX_POSTS_PER_PLATFORM + '.' });
+    }
+    requested += n;
+  }
+  if (requested > MAX_POSTS_PER_REQUEST) {
+    return respond(400, { error: 'At most ' + MAX_POSTS_PER_REQUEST + ' posts per request.' });
+  }
+  // Postgres returns uuids lowercase; compare like with like.
+  body.studio_id = body.studio_id.toLowerCase();
+  if (body.client_id != null) body.client_id = body.client_id.toLowerCase();
+
+  // Every read below uses the CALLER's token, so RLS bounds what can be seen: a studio the
+  // caller has no membership in returns no row, and that is a 403.
+  const rest = (path) => fetch(supabaseUrl.replace(/\/+$/, '') + '/rest/v1/' + path, {
+    headers: { apikey: anonKey, Authorization: 'Bearer ' + token },
+  });
+  const sid = encodeURIComponent(body.studio_id);
+  const RETRY = 'Could not verify your studio. Please try again.';
+  let role;
+  try {
+    // One round of parallel reads. The clients read depends only on body.client_id, so it rides
+    // along rather than adding a serial round trip ahead of the 25s generator window.
+    const [saRes, siRes, cRes] = await Promise.all([
+      rest('studio_accounts?select=id,owner_email&id=eq.' + sid),
+      rest('studio_instructors?select=instructor_email&status=eq.active&studio_id=eq.' + sid),
+      body.client_id != null
+        ? rest('clients?select=id,studio_id,email&id=eq.' + encodeURIComponent(body.client_id))
+        : null,
+    ]);
+    if (!saRes.ok || !siRes.ok || (cRes && !cRes.ok)) {
+      console.error('[generate-content] role lookup failed:', saRes.status, siRes.status, cRes ? cRes.status : '-');
+      return respond(502, { error: RETRY });
+    }
+    const [sa, si, cl] = await Promise.all([saRes.json(), siRes.json(), cRes ? cRes.json() : null]);
+    const studio = Array.isArray(sa) ? sa.find((r) => r && r.id === body.studio_id) : null;
+    // Owner: studio_accounts.owner_email (parity with _authz isStudioOwner). Instructor: an ACTIVE
+    // studio_instructors row for this studio. A clients row alone is NOT membership here, unlike
+    // _authz isStudioMember: former instructors keep theirs after they are set inactive. Do not
+    // swap this for requireStudioAccess(..., 'member').
+    if (studio && lower(studio.owner_email) === callerEmail) {
+      role = 'studio_owner';
+    } else if (studio && Array.isArray(si) && si.some((r) => r && lower(r.instructor_email) === callerEmail)) {
+      role = 'studio_instructor';
+    } else {
+      console.error('[generate-content] no owner or active-instructor membership on the named studio');
+      return respond(403, { error: 'You do not have access to that studio.' });
+    }
+
+    if (body.client_id != null) {
+      // A client_id must be under the studio named (400), and it must be the CALLER's own row
+      // (403). The generator keys the trial cap, posts_used, the success email and the
+      // delivery's instructor_email on body.email. If a client_id could name any row in the
+      // studio, an owner could run the cap against an instructor's counter, and an instructor
+      // (whose clients row makes the whole studio's clients visible under RLS) could send as
+      // the owner. The app only ever sends the caller's own row.
+      const client = Array.isArray(cl) ? cl.find((r) => r && r.id === body.client_id) : null;
+      if (!client || client.studio_id !== body.studio_id) {
+        return respond(400, { error: 'client_id does not belong to that studio' });
+      }
+      if (lower(client.email) !== callerEmail) {
+        console.error('[generate-content] client_id is not the caller\'s own row');
+        return respond(403, { error: 'You do not have access to that client.' });
+      }
+    }
+  } catch (err) {
+    console.error('[generate-content] role check failed:', err.message);
+    return respond(502, { error: RETRY });
+  }
+
+  body.email = verifiedEmail;
+  body.user_role = role;
 
   // Send request to n8n with a 25s timeout (Netlify Pro max is 26s).
   // n8n webhook is responseMode=lastNode, so it holds the connection open
@@ -139,6 +210,17 @@ exports.handler = async (event) => {
     return respond(502, { error: 'Upstream request failed' });
   }
 };
+
+// Mirrors GenerateModal: a 1-5 post-count select on each of the 5 platforms. Raise these together
+// with the modal, never on their own.
+const MAX_POSTS_PER_PLATFORM = 5;
+const MAX_POSTS_PER_REQUEST = 25;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function lower(v) {
+  return typeof v === 'string' ? v.trim().toLowerCase() : '';
+}
 
 // AG-1.8: the key must be a single header-safe token (printable ASCII, no whitespace). A value
 // with a line break makes fetch throw an error whose message contains the value, so a malformed
