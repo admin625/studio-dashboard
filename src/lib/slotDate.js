@@ -58,7 +58,10 @@ export function localYmd(now = new Date(), timeZone = undefined) {
  */
 export function quarterStartToShow(quarter, today) {
   const qs = quarter && quarter.quarter_start
-  if (!qs || !today) return null
+  // A string comparison of dates is only valid for YYYY-MM-DD on both sides: "10/5/2026" < "2026-…"
+  // would be true forever and bring the C1 bug back in a new form. Anything else shows no line.
+  const ymd = /^\d{4}-\d{2}-\d{2}$/
+  if (!qs || !ymd.test(String(qs)) || !ymd.test(String(today || ''))) return null
   return today < qs ? qs : null
 }
 

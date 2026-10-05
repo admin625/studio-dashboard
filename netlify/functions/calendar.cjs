@@ -189,6 +189,9 @@ async function week(studioId, weekStart, todayYmd = today()) {
   return respond(200, {
     empty: false,
     week: { id: target.id, week_start: target.week_start, starts_later: startsLater },
+    // The date this response was decided by (C2), so the app's header uses the SAME "today" as the
+    // landing-week choice, even when the device clock is wrong or the tab stayed open past midnight.
+    today: t,
     quarter: quarterRow,
     prev_week_start: idx > 0 ? weeks[idx - 1].week_start : null,
     next_week_start: idx >= 0 && idx < weeks.length - 1 ? weeks[idx + 1].week_start : null,

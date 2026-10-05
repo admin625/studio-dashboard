@@ -261,12 +261,15 @@ export default function Calendar() {
 }
 
 // Exported for the C1 paging test (test/calendarQuarterLine.test.jsx). `today` is injectable there.
-export function WeekView({ data, primary, onNav, onOpen, today = localYmd() }) {
+export function WeekView({ data, primary, onNav, onOpen, today }) {
   const { week, slots, prev_week_start, next_week_start, quarter } = data
+  // The server's own "today" (the one it picked the landing week by) wins, so the header and the
+  // landing can't disagree. The device date is only the fallback for an older response.
+  const todayYmd = today || data.today || localYmd()
   // C1 (2026-10-05): the QUARTER's start, only while it is still ahead. It used to print the
   // viewed week's start whenever that week was in the future, so paging forward made every week
   // claim to be the start of the quarter ("Week of December 28 / Your quarter starts December 28").
-  const quarterStart = quarterStartToShow(quarter, today)
+  const quarterStart = quarterStartToShow(quarter, todayYmd)
   return (
     <>
       <div className="flex items-center justify-between mb-4">

@@ -62,4 +62,18 @@ describe('C1: the quarter-start line names the QUARTER, the same on every week',
     expect(quarterStartToShow({ quarter_start: null }, '2026-09-29')).toBeNull()
     expect(quarterStartToShow(QUARTER, '')).toBeNull()
   })
+
+  it('a malformed "today" (e.g. a locale-formatted 10/5/2026) shows NO line, never a line forever', () => {
+    expect(quarterStartToShow(QUARTER, '09/29/2026')).toBeNull()
+    expect(quarterStartToShow(QUARTER, '10/5/2026')).toBeNull()
+    // Control: the unguarded comparison would have shown it ('1' < '2').
+    expect('10/5/2026' < QUARTER.quarter_start).toBe(true)
+  })
+
+  it("the server's today (data.today) drives the header when no prop is given (device clock ignored)", () => {
+    const before = { ...weekData('2026-10-12', true), today: '2026-09-29' }
+    const after = { ...weekData('2026-10-12', true), today: '2026-10-05' }
+    expect(lineFor(before, undefined)).toBe('Your quarter starts October 1.')
+    expect(lineFor(after, undefined)).toBeNull()
+  })
 })
