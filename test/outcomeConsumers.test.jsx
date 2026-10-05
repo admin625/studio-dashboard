@@ -119,7 +119,7 @@ describe('DeliveryView: the WO-4 flag (D4)', () => {
     renderView()
     const box = await screen.findByTestId('quality-flag')
     expect(box.textContent).toContain('Check before posting')
-    expect(box.textContent).toContain("This post uses a phrase you or we flagged: 'beast mode'. Edit it or regenerate.")
+    expect(box.textContent).toContain("Contains a phrase we avoid: 'beast mode'. Edit it or regenerate.")
     expect(document.body.textContent).not.toMatch(PROMISES)
     await act(async () => { screen.getByRole('button', { name: /^regenerate$/i }).click() })
     expect(screen.getByTestId('regen-modal').textContent).toBe('del-1')
@@ -140,7 +140,7 @@ describe('DeliveryView: the WO-4 flag (D4)', () => {
     deliveryRow = flagged({ flag_reason: 'error_fallback', flag_phrase: null, regenerated_from: 'orig-1' })
     renderView()
     const box = await screen.findByTestId('quality-flag')
-    expect(box.textContent).toContain('This is our first draft. Give it a read, or regenerate.')
+    expect(box.textContent).toContain("Our quality check didn't finish, so this is the first draft. Give it a read, or regenerate.")
     expect(screen.queryByRole('button', { name: /^regenerate$/i })).toBeNull()
   })
 

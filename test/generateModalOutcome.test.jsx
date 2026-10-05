@@ -378,7 +378,7 @@ describe('WO-4: a flagged delivery is "Check before posting" + one reason line +
     await submit()
     expect(phase()).toBe('flagged')
     expect(within(panel()).getByText('Check before posting')).toBeTruthy()
-    expect(within(panel()).getByText("This post uses a phrase you or we flagged: 'grind'. Edit it or regenerate.")).toBeTruthy()
+    expect(within(panel()).getByText("Contains a phrase we avoid: 'grind'. Edit it or regenerate.")).toBeTruthy()
     expect(within(panel()).getByRole('button', { name: /^regenerate$/i })).toBeTruthy()
     expect(within(panel()).getByRole('button', { name: /open it/i })).toBeTruthy()
     expect(document.body.textContent).not.toMatch(PROMISES)
@@ -387,9 +387,9 @@ describe('WO-4: a flagged delivery is "Check before posting" + one reason line +
 
   it('each reason code shows its own approved line; an unknown code falls back to the generic line', async () => {
     const cases = [
-      ['quality_unresolved', "We couldn't get this one quite right. Give it a read, or regenerate."],
-      ['error_fallback', 'This is our first draft. Give it a read, or regenerate.'],
-      ['something_new', "We couldn't get this one quite right. Give it a read, or regenerate."],
+      ['quality_unresolved', "Didn't fully pass our quality check. Give it a read, or regenerate."],
+      ['error_fallback', "Our quality check didn't finish, so this is the first draft. Give it a read, or regenerate."],
+      ['something_new', "Didn't fully pass our quality check. Give it a read, or regenerate."],
     ]
     for (const [code, line] of cases) {
       cleanup()
@@ -407,7 +407,7 @@ describe('WO-4: a flagged delivery is "Check before posting" + one reason line +
     attemptRows.push(flaggedRow('banned_phrase', null))
     await submit()
     expect(document.body.textContent).not.toContain("flagged: ''")
-    expect(within(panel()).getByText("We couldn't get this one quite right. Give it a read, or regenerate.")).toBeTruthy()
+    expect(within(panel()).getByText("Didn't fully pass our quality check. Give it a read, or regenerate.")).toBeTruthy()
   })
 
   it('negative control: a first run sends no regenerate_of, and never regenerated_from', async () => {
@@ -437,7 +437,7 @@ describe('WO-4: a flagged delivery is "Check before posting" + one reason line +
     await submit()
     await act(async () => { fireEvent.click(within(panel()).getByRole('button', { name: /^regenerate$/i })) })
     expect(phase()).toBe('flagged')
-    expect(within(panel()).getByText('This is our first draft. Give it a read, or regenerate.')).toBeTruthy()
+    expect(within(panel()).getByText("Our quality check didn't finish, so this is the first draft. Give it a read, or regenerate.")).toBeTruthy()
     expect(within(panel()).queryByRole('button', { name: /^regenerate$/i })).toBeNull()
     expect(within(panel()).getByRole('button', { name: /open it/i })).toBeTruthy()
   })
