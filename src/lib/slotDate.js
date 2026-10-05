@@ -44,8 +44,11 @@ export function slotDatesByPost(rows) {
  * 2026-10-05). The app sends this instead; the server only accepts it within a day of UTC.
  */
 export function localYmd(now = new Date(), timeZone = undefined) {
-  // en-CA formats as YYYY-MM-DD.
-  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+  // Built from parts, not from a locale's formatted string: no browser's locale data can turn this
+  // into "10/5/2026", which would break the string comparison in quarterStartToShow.
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+  const get = (t) => (parts.find((p) => p.type === t) || {}).value
+  return `${get('year')}-${get('month')}-${get('day')}`
 }
 
 /**
