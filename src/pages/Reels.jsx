@@ -366,7 +366,7 @@ function ReelCard({ reel, primary, busy, onApprove, onRerender, onNewReel }) {
           {failLabel && (
             <div>
               <div className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }}>
-                <AlertTriangle size={15} /> {failLabel}. The team has been notified — try again shortly.
+                <AlertTriangle size={15} /> {failLabel}. That didn't work. Try again in a moment.
               </div>
               {onRerender && <RerenderControl reel={reel} primary={primary} busy={busy} onRerender={onRerender} />}
             </div>

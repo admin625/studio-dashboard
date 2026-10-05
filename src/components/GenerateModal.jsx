@@ -10,6 +10,7 @@ import { supabase, getSessionOnce } from '../lib/supabase'
 import { fmtSlotDay } from '../lib/slotDate'
 import { isVoiceEmpty } from '../lib/voice'
 import { pollOutcome, fetchAttempt, classifySyncBody, NO_ANSWER_MS } from '../lib/generationOutcome'
+import { FLAG_TITLE, flagReasonLine } from '../lib/qualityFlag'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
@@ -96,10 +97,16 @@ const FREESTYLE_TEMPLATES = {
  * Deliberately routed through THIS modal rather than a bespoke calendar call: the brand-voice and
  * studioLoadError refusals below are what stop wrong-voice content shipping, and a second
  * generation entry point would have to re-implement them or quietly drop them.
+ *
+ * `regenerateOf` (optional, WO-4): the id of a flagged delivery. The run sends it as
+ * `regenerate_of`, and generate-content.js accepts it only for a flagged ORIGINAL of this studio
+ * that hasn't been regenerated (N2). The same field is sent when the owner taps Regenerate on a
+ * flagged outcome below. The app never sends `regenerated_from`; the generator writes it.
  */
 export default function GenerateModal({
   open, onClose, onSubmitted,
   slotId = null, slotJobLabel = null, slotRationale = null, slotDate = null,
+  regenerateOf = null,
 }) {
   const app = useApp()
   const navigate = useNavigate()
@@ -145,6 +152,9 @@ export default function GenerateModal({
   // loop left sleeping by close-reopen-resubmit can never land an old result on a new run.
   const runRef = useRef(0)
   const platformsRef = useRef([])
+  // Whether the CURRENT run is a regenerate. A regenerate's own flagged outcome offers no further
+  // Regenerate: one per original (the proxy refuses a second either way).
+  const [runIsRegenerate, setRunIsRegenerate] = useState(false)
   useEffect(() => () => { runRef.current += 1 }, [])
   // The modal stays mounted while closed (`open` false returns null), so a finished run's state
   // must be cleared here or it would greet the next slot. Closed mid-run, the caller gets the
@@ -158,6 +168,7 @@ export default function GenerateModal({
     runRef.current += 1
     setOutcome(null)
     setError('')
+    setRunIsRegenerate(false)
     onClose()
     if (wasGenerating && onSubmitted) onSubmitted(platformsRef.current)
   }
@@ -221,7 +232,9 @@ export default function GenerateModal({
       }))
   }
 
-  const handleSubmit = async () => {
+  // `regenOf`: a flagged delivery id when this run is a regenerate (the prop, or the Regenerate
+  // tap on a flagged outcome). Never an event: the button calls handleSubmit() with no argument.
+  const handleSubmit = async (regenOf = regenerateOf) => {
     const activePlatforms = Object.entries(platforms)
       .filter(([_, v]) => v.on)
       .map(([name, v]) => {
@@ -261,6 +274,7 @@ export default function GenerateModal({
 
     setSubmitting(true)
     setError('')
+    setRunIsRegenerate(!!regenOf)
 
     // Item 7: every run that can get an attempt row (Log Attempt needs a studio_id) carries a
     // correlation id, so a 202 can be followed to its end. Individual-scope runs have no studio
@@ -302,6 +316,8 @@ export default function GenerateModal({
       // stamps it on the generation_attempts row it creates and writes the run's terminal there,
       // which is the only way the outcome of a run longer than the proxy's 25s reaches this modal.
       ...(requestId ? { client_request_id: requestId } : {}),
+      // WO-4 N2: a regenerate names its flagged original. The proxy validates it; absent otherwise.
+      ...(regenOf ? { regenerate_of: regenOf } : {}),
     }
 
     if (freestyle) {
@@ -332,7 +348,7 @@ export default function GenerateModal({
     }
 
     // Every run with a studio (HQ 2026-09-21, item 7):
-    //   200 + a terminal body (needs_review / refused) → shown in the modal
+    //   200 + a terminal body (refused; pre-port needs_review, read as failed) → shown in the modal
     //   200 otherwise (a delivery, or any other synchronous answer) → close, as before
     //   202 + requestId → "accepted", never "done": stay open and follow the attempt row
     //   platform 502/504 (no `error` body), or our own 30s abort, + requestId → the proxy lost
@@ -423,8 +439,8 @@ export default function GenerateModal({
         return
       }
 
-      // A needs-review or refused body is SHOWN — it used to be read as success because it
-      // carries no `error` key.
+      // A refused body (or the pre-port needs-review body, read as failed) is SHOWN — it used to
+      // be read as success because it carries no `error` key.
       const sync = classifySyncBody(okBody)
       if (sync) { setSubmitting(false); finish(sync); return }
       if (res.status === 202 && requestId) { await follow(false); return }
@@ -462,7 +478,7 @@ export default function GenerateModal({
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div>
             <h2 className="text-white text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.03em' }}>
-              {slotId ? 'Write this post' : 'Generate New Content'}
+              {regenerateOf ? 'Regenerate this post' : slotId ? 'Write this post' : 'Generate New Content'}
             </h2>
             <p className="text-slate-300 text-xs">
               {slotId
@@ -507,6 +523,9 @@ export default function GenerateModal({
             onOpen={(id) => { close(); navigate(`/delivery/${id}`) }}
             onDeliveries={() => { close(); navigate('/deliveries') }}
             onClose={close}
+            // Same form, same slot, plus regenerate_of. The outcome is cleared first, so a refusal
+            // (validation, or the proxy's 403/409) shows on the form like any other error.
+            onRegenerate={runIsRegenerate || submitting ? null : (id) => { setOutcome(null); handleSubmit(id) }}
           />
         )}
 
@@ -694,7 +713,7 @@ export default function GenerateModal({
           <div className="flex items-center justify-between">
             <button onClick={close} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
             <button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit()}
               disabled={submitting || isVoiceEmpty(brandVoice)}
               className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
               style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
@@ -720,13 +739,17 @@ export default function GenerateModal({
 /**
  * Where a run ended up (item 7) — slot-bound or owner-initiated. Every state says what actually
  * happened, including "we haven't heard back", which is never dressed up as success or as
- * "nothing was created". needs_review offers no retry on purpose: two reflection passes already
- * failed, and the flag is for a human, not a button.
+ * "nothing was created".
+ *
+ * flagged (WO-4): the post WAS delivered, but it wasn't clean after the single refine. The owner
+ * gets "Check before posting", one approved reason line and a one-tap Regenerate (one per
+ * original; `onRegenerate` is null on a regenerate's own outcome). FCA never routes content to a
+ * person to check, so no state here may promise that, and critic output is never rendered (§3).
  *
  * Accessibility: the result text is the live region (actions sit outside it), and focus moves to
  * the heading whenever the phase changes — the form that held focus has just been hidden.
  */
-function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose }) {
+function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose, onRegenerate }) {
   const headingRef = useRef(null)
   useEffect(() => { if (headingRef.current) headingRef.current.focus() }, [outcome.phase])
   const day = slotDate ? fmtSlotDay(slotDate) : null
@@ -763,11 +786,26 @@ function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClos
         </div>
       )
       break
-    case 'needs_review':
-      title = 'This one needs a human look.'
+    case 'flagged': {
+      const flag = outcome.flag || {}
+      title = FLAG_TITLE
       tone = 'text-amber-200'
-      body = `Your ${what}${forDay} didn't pass our quality check after two tries, so nothing was delivered. We've been notified and will look at it.`
+      body = flagReasonLine(flag.reason, flag.phrase)
+      actions = (
+        <div className="flex gap-3 flex-wrap justify-end">
+          {done}
+          {outcome.deliveryId && onRegenerate && (
+            <button onClick={() => onRegenerate(outcome.deliveryId)} className={`${btn} text-slate-200`}
+              style={{ background: 'rgba(255,255,255,0.10)' }}>Regenerate</button>
+          )}
+          {outcome.deliveryId && (
+            <button onClick={() => onOpen(outcome.deliveryId)} className={btn}
+              style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}>{day ? 'Open the post' : 'Open it'}</button>
+          )}
+        </div>
+      )
       break
+    }
     case 'refused':
       // Slot rules refuse slot runs; entitlement and no-studio refusals reach every run.
       title = day ? "This slot can't be written right now." : "We couldn't create this right now."
@@ -788,19 +826,12 @@ function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClos
       tone = 'text-red-300'
       body = <>Something went wrong on our side and nothing was created. {retryWhere} If this keeps happening, contact support at {support}.</>
   }
-  const notes = outcome.phase === 'needs_review' && outcome.detail && outcome.detail.notes
   return (
     <div className="px-6 py-6 space-y-3" data-outcome={outcome.phase}>
       <div role="status" className="space-y-3">
         <h3 ref={headingRef} tabIndex={-1} className={`text-base font-semibold outline-none ${tone}`}>{title}</h3>
         <p className="text-sm text-slate-300 leading-snug">{body}</p>
       </div>
-      {notes && (
-        <details className="text-xs text-slate-400">
-          <summary className="cursor-pointer inline-block py-3">What the check flagged</summary>
-          <p className="mt-1 leading-snug">{notes}</p>
-        </details>
-      )}
       {actions && <div className="pt-2 flex justify-end">{actions}</div>}
     </div>
   )

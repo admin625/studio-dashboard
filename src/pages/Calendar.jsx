@@ -23,6 +23,7 @@ import { getSessionOnce } from '../lib/supabase'
 import { fmtSlotDay, fmtSlotMonthDay } from '../lib/slotDate'
 import Layout from '../components/Layout'
 import GenerateModal from '../components/GenerateModal'
+import { isDeliveredPhase } from '../lib/generationOutcome'
 import { NAV_ACTIVE, NAV_INACTIVE, NAV_ACTIVE_PILL } from '../lib/navColors'
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Lock,
@@ -247,7 +248,7 @@ export default function Calendar() {
           // the slot flip land (Mark Delivered runs first so a failing email can't eat it). A
           // single reload here could show a written slot as unwritten and invite a duplicate, so
           // look again once those have had time to land.
-          if (outcome && outcome.phase === 'delivered') {
+          if (outcome && isDeliveredPhase(outcome.phase)) {
             setTimeout(() => loadWeek(weekStart), 5000)
             setTimeout(() => loadWeek(weekStart), 15000)
           }

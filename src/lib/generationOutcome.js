@@ -11,7 +11,9 @@
  * States, and the only ways to reach them:
  *   generating    — no terminal yet, inside the deadline
  *   delivered     — outcome 'delivered' (a content_deliveries row exists; delivery_id is set)
- *   needs_review  — outcome 'needs_review': two reflection passes failed, NOTHING was delivered
+ *   flagged       — outcome 'delivered_flagged' (WO-4): delivered, but not clean after the single
+ *                   refine. The delivery carries quality_flag + a reason code; the owner sees
+ *                   "Check before posting", one reason line and Regenerate (lib/qualityFlag.js)
  *   refused       — a slot rule (outcome 'refused'), or an entitlement / no-studio refusal
  *                   (synchronous body) stopped it before any model call
  *   failed        — outcome 'failed': the generator itself reported it created nothing
@@ -23,26 +25,51 @@
  * the run carries on and delivers. Both look exactly like "no row", so "nothing was created"
  * would be a false claim that invites a duplicate generation.
  *
- * Deliberately no automatic retry anywhere. A needs-review draft is a human's call, not a
- * transient error, and a retry would bury the one signal this exists to surface.
+ * 'needs_review' (two failed reflection passes, nothing delivered) is no longer a state. Until
+ * the WO-4 Phase 4 port the live generator still writes it, so it is read as `failed` (which is
+ * true: nothing was created), never with the critic's notes. Critic output is internal (doctrine
+ * §3), and get_generation_outcome() strips it as well.
+ *
+ * No automatic retry anywhere. Regenerate on a flagged delivery is the owner's one tap, never ours.
  */
 
 export const POLL_MS = 4000
 /** No terminal after this long: no_answer. AI images add ~1 min each, so be generous. */
 export const NO_ANSWER_MS = 10 * 60 * 1000
 
-export const TERMINAL = ['delivered', 'needs_review', 'refused', 'failed', 'no_answer']
+export const TERMINAL = ['delivered', 'flagged', 'refused', 'failed', 'no_answer']
+
+/** A flagged run DID deliver: every consumer that reacts to a delivery treats both the same (D4). */
+export const isDeliveredPhase = (phase) => phase === 'delivered' || phase === 'flagged'
 
 /** Not terminal yet: still generating until the deadline, then no_answer. The one deadline rule. */
 const pending = (elapsedMs) => (elapsedMs >= NO_ANSWER_MS ? { phase: 'no_answer' } : { phase: 'generating' })
+
+/**
+ * The flag of a flagged run. The delivery's own columns win (get_generation_outcome() returns
+ * them); outcome_detail is the fallback, because the generator writes the reason there too and an
+ * RPC from before the flag columns returns only that.
+ */
+function flagOf(row, detail) {
+  const d = detail && typeof detail === 'object' ? detail : {}
+  return {
+    reason: row.flag_reason || d.flag_reason || null,
+    phrase: row.flag_phrase || d.flag_phrase || null,
+  }
+}
 
 /** Map one attempt row (or null) plus elapsed time to a state. Pure. */
 export function classifyAttempt(row, elapsedMs) {
   if (!row) return pending(elapsedMs)
   const detail = row.outcome_detail || null
   switch (row.outcome) {
-    case 'delivered': return { phase: 'delivered', deliveryId: row.delivery_id || null, detail }
-    case 'needs_review': return { phase: 'needs_review', detail }
+    case 'delivered':
+      // A 'delivered' row whose delivery is flagged is still flagged: the delivery is the truth.
+      if (row.quality_flag === true) return { phase: 'flagged', deliveryId: row.delivery_id || null, flag: flagOf(row, detail) }
+      return { phase: 'delivered', deliveryId: row.delivery_id || null, detail }
+    case 'delivered_flagged': return { phase: 'flagged', deliveryId: row.delivery_id || null, flag: flagOf(row, detail) }
+    // Pre-port live generator only. Nothing was created; the critic's notes are not carried.
+    case 'needs_review': return { phase: 'failed', detail: null }
     case 'refused': return { phase: 'refused', detail }
     case 'failed': return { phase: 'failed', detail }
     default: return pending(elapsedMs)
@@ -55,8 +82,9 @@ export function classifyAttempt(row, elapsedMs) {
  */
 export function classifySyncBody(body) {
   if (!body || typeof body !== 'object') return null
+  // The pre-port live generator's Respond Needs Review body. Read as failed, notes dropped.
   if (body.needs_review === true) {
-    return { phase: 'needs_review', detail: { failed_criteria: body.failed_criteria || [], notes: body.notes || null } }
+    return { phase: 'failed', detail: null }
   }
   if (body.refused === true) {
     return { phase: 'refused', detail: { code: body.code || null, message: body.message || null } }
