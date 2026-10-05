@@ -20,7 +20,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { getSessionOnce } from '../lib/supabase'
-import { fmtSlotDay, fmtSlotMonthDay } from '../lib/slotDate'
+import { fmtSlotDay, fmtSlotMonthDay, localYmd, quarterStartToShow } from '../lib/slotDate'
 import Layout from '../components/Layout'
 import GenerateModal from '../components/GenerateModal'
 import { isDeliveredPhase } from '../lib/generationOutcome'
@@ -72,7 +72,9 @@ export default function Calendar() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ studio_id: app.resolvedStudioId, ...payload }),
+      // C2 (2026-10-05): the app's local date, so the server's "which week is now" isn't a day
+      // ahead every US evening. calendar.cjs accepts it only within a day of UTC.
+      body: JSON.stringify({ studio_id: app.resolvedStudioId, today: localYmd(), ...payload }),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`)
@@ -258,8 +260,16 @@ export default function Calendar() {
   )
 }
 
-function WeekView({ data, primary, onNav, onOpen }) {
+// Exported for the C1 paging test (test/calendarQuarterLine.test.jsx). `today` is injectable there.
+export function WeekView({ data, primary, onNav, onOpen, today }) {
   const { week, slots, prev_week_start, next_week_start, quarter } = data
+  // The server's own "today" (the one it picked the landing week by) wins, so the header and the
+  // landing can't disagree. The device date is only the fallback for an older response.
+  const todayYmd = today || data.today || localYmd()
+  // C1 (2026-10-05): the QUARTER's start, only while it is still ahead. It used to print the
+  // viewed week's start whenever that week was in the future, so paging forward made every week
+  // claim to be the start of the quarter ("Week of December 28 / Your quarter starts December 28").
+  const quarterStart = quarterStartToShow(quarter, todayYmd)
   return (
     <>
       <div className="flex items-center justify-between mb-4">
@@ -272,11 +282,12 @@ function WeekView({ data, primary, onNav, onOpen }) {
 
         <div className="text-center">
           <p className="text-white text-sm font-semibold">Week of {fmtWeek(week.week_start)}</p>
-          {week.starts_later && (
-            // The honest version of an empty "this week". The plan really does start later;
-            // saying so is what stops a correct empty state reading as a broken screen.
-            <p className="text-[11px] mt-0.5" style={{ color: primary }}>
-              Your quarter starts {fmtWeek(week.week_start)}.
+          {quarterStart && (
+            // The honest version of an empty "this week": the plan really does start later, and
+            // saying so stops a correct empty state reading as a broken screen. It names the
+            // quarter's start, so it reads the same on every week.
+            <p className="text-[11px] mt-0.5" style={{ color: primary }} data-testid="quarter-start">
+              Your quarter starts {fmtWeek(quarterStart)}.
             </p>
           )}
         </div>

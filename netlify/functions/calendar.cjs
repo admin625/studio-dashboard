@@ -51,6 +51,20 @@ function today() {
 }
 
 /**
+ * C2 (2026-10-05): "today" for the week view. The UTC date put every US studio a day ahead from
+ * 8pm EDT, so the landing week flipped hours early on Sunday nights. The app now sends its local
+ * YYYY-MM-DD. It is used only if it is a real date within one day of the UTC date (any timezone
+ * on Earth is), so a bad or tampered value can't move the calendar further; otherwise UTC, as before.
+ */
+function resolveToday(clientToday, now = new Date()) {
+  const utc = now.toISOString().slice(0, 10);
+  if (typeof clientToday !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(clientToday)) return utc;
+  const d = new Date(clientToday + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== clientToday) return utc;
+  return (clientToday === utc || clientToday === addDays(utc, -1) || clientToday === addDays(utc, 1)) ? clientToday : utc;
+}
+
+/**
  * Katie's words, not the database's. The DB vocabulary is a lookup table (calendar_jobs) and
  * stays canonical; this is display only. `other` falls back to the slot's own job_other text,
  * which the CHECK guarantees is present exactly when job='other'.
@@ -120,7 +134,7 @@ exports.handler = async (event) => {
   if (!gate.ok) return respond(gate.status, { error: gate.error });
 
   try {
-    if (action === 'week') return await week(studioId, body.week_start);
+    if (action === 'week') return await week(studioId, body.week_start, resolveToday(body.today));
     if (action === 'quarter') return await quarter(studioId);
     if (action === 'act') return await act(studioId, body, gate.email);
     if (action === 'reason') return await reason(studioId, body, gate.email);
@@ -139,13 +153,13 @@ exports.handler = async (event) => {
  * legitimately lands ahead of "now" — an empty current week is the true state of the plan, and
  * showing the next real week beats showing nothing.
  */
-async function week(studioId, weekStart) {
+async function week(studioId, weekStart, todayYmd = today()) {
   const weeks = await getJson(
     'calendar_weeks?studio_id=eq.' + enc(studioId) + '&select=id,week_start,quarter_id&order=week_start.asc'
   );
   if (!weeks || !weeks.length) return respond(200, { empty: true, reason: 'no_quarter' });
 
-  const t = today();
+  const t = todayYmd;
   const slotDates = await getJson(
     'calendar_slots?studio_id=eq.' + enc(studioId) +
     '&status=neq.superseded&select=week_id,slot_date&order=slot_date.asc'
@@ -175,6 +189,9 @@ async function week(studioId, weekStart) {
   return respond(200, {
     empty: false,
     week: { id: target.id, week_start: target.week_start, starts_later: startsLater },
+    // The date this response was decided by (C2), so the app's header uses the SAME "today" as the
+    // landing-week choice, even when the device clock is wrong or the tab stayed open past midnight.
+    today: t,
     quarter: quarterRow,
     prev_week_start: idx > 0 ? weeks[idx - 1].week_start : null,
     next_week_start: idx >= 0 && idx < weeks.length - 1 ? weeks[idx + 1].week_start : null,
@@ -345,3 +362,4 @@ function respond(status, body) {
 }
 
 module.exports.isSkipped = isSkipped;
+module.exports.resolveToday = resolveToday;
