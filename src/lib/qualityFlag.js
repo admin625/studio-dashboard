@@ -13,17 +13,21 @@
 
 export const FLAG_TITLE = 'Check before posting'
 
-// Approved wording (spec v0.7 §2 D4). Change only with HQ approval.
+// Approved wording: v2, picked by Mac 2026-10-05 (replaces spec v0.7 §2 D4's lines). Change only
+// with HQ approval. The delivery email (Render Delivery Email, generator) must match; it still
+// carries the v0.7 lines until its own change ships after the WO-4 watch closes.
 const LINES = {
-  banned_phrase: (phrase) => `This post uses a phrase you or we flagged: '${phrase}'. Edit it or regenerate.`,
-  quality_unresolved: () => "We couldn't get this one quite right. Give it a read, or regenerate.",
-  error_fallback: () => 'This is our first draft. Give it a read, or regenerate.',
+  banned_phrase: (phrase) => `Contains a phrase we avoid: '${phrase}'. Edit it or regenerate.`,
+  quality_unresolved: () => "Didn't fully pass our quality check. Give it a read, or regenerate.",
+  error_fallback: () => "Our quality check didn't finish, so this is the first draft. Give it a read, or regenerate.",
 }
 
 /**
- * The one reason line for a flag. An unknown code, or banned_phrase without a phrase (the line
- * would read "flagged: ''"), falls back to the quality_unresolved line: still approved copy, and
- * it claims nothing specific.
+ * The one reason line for a flag. banned_phrase without a phrase (the line would read "avoid: ''")
+ * falls back to the quality_unresolved line, which is still true: the post did fail a check.
+ * An unknown or null code also falls back to it. The generator emits only the three codes, and a
+ * delivered_flagged row with any other reason trips Sentinel's wo4_watch flag_mismatch alert, so
+ * that path is a monitored anomaly, not normal copy.
  */
 export function flagReasonLine(reason, phrase) {
   if (reason === 'banned_phrase') {
