@@ -11,6 +11,7 @@ import Layout from '../components/Layout'
 import PostCard from '../components/PostCard'
 import GenerateModal from '../components/GenerateModal'
 import { FLAG_TITLE, flagReasonLine, isFlagged, canOfferRegenerate } from '../lib/qualityFlag'
+import { isDeliveredPhase } from '../lib/generationOutcome'
 import { Loader2, ChevronLeft, Lock, Calendar, AlertTriangle } from 'lucide-react'
 
 const PLATFORMS = ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok']
@@ -301,7 +302,9 @@ export default function DeliveryView() {
       )}
 
       {isOwner && canOfferRegenerate(delivery) && (
-        <GenerateModal open={regenOpen} regenerateOf={delivery.id} onClose={() => setRegenOpen(false)} />
+        <GenerateModal open={regenOpen} regenerateOf={delivery.id} onClose={() => setRegenOpen(false)}
+          // Once the regenerate delivers, this original links to it and stops offering another.
+          onSubmitted={(_p, outcome) => { if (outcome && isDeliveredPhase(outcome.phase) && outcome.deliveryId) setRegeneratedId(outcome.deliveryId) }} />
       )}
     </Layout>
   )

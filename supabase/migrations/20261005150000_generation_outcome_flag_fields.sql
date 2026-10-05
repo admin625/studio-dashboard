@@ -11,7 +11,8 @@
 --   2. Critic output never leaves the database (doctrine §3: "Critic output is internal and is
 --      never shown to the owner"). Until now needs_review rows returned the reviewer's notes,
 --      failed_criteria and iterations to the browser, and GenerateModal rendered the notes.
---      They are stripped here, so removing them from the UI isn't the only fence.
+--      outcome_detail is now rebuilt from an allowlist of the keys the app reads, so removing
+--      the notes from the UI isn't the only fence.
 --
 -- The return type changes, so this is a drop and a create. Both are in ONE migration (one
 -- transaction), so a deployed app polling the function never sees it missing. The old app reads
@@ -34,9 +35,18 @@ stable
 security definer
 set search_path = public
 as $$
+  -- An ALLOWLIST, not a denylist: only keys the app reads (refused: code/message; failed:
+  -- error; flagged: flag_reason/flag_phrase; slot_id). A critic key under any new name stays in
+  -- the database. jsonb_strip_nulls drops the ones a row doesn't have.
   select a.outcome,
          case when jsonb_typeof(a.outcome_detail) = 'object'
-              then a.outcome_detail - 'notes' - 'failed_criteria' - 'iterations'
+              then jsonb_strip_nulls(jsonb_build_object(
+                     'code', a.outcome_detail -> 'code',
+                     'message', a.outcome_detail -> 'message',
+                     'error', a.outcome_detail -> 'error',
+                     'flag_reason', a.outcome_detail -> 'flag_reason',
+                     'flag_phrase', a.outcome_detail -> 'flag_phrase',
+                     'slot_id', a.outcome_detail -> 'slot_id'))
               else null end,
          a.delivery_id,
          d.quality_flag,

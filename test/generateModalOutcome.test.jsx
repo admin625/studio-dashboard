@@ -454,6 +454,27 @@ describe('WO-4: a flagged delivery is "Check before posting" + one reason line +
     expect(fromCalls).toEqual([])
   })
 
+  it('closing after a regenerate resets: the next fresh run offers Regenerate again', async () => {
+    setup()
+    attemptRows.push(flaggedRow('quality_unresolved'), flaggedRow('quality_unresolved', null, 'ffffffff-0000-4000-8000-000000000002'), flaggedRow('error_fallback', null, 'ffffffff-0000-4000-8000-000000000003'))
+    await submit()
+    await act(async () => { fireEvent.click(within(panel()).getByRole('button', { name: /^regenerate$/i })) })
+    expect(within(panel()).queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+    fireEvent.click(within(panel()).getByRole('button', { name: /^close$/i }))
+    await submit() // a fresh, non-regenerate run
+    expect(fetchBodies[2]).not.toHaveProperty('regenerate_of')
+    expect(within(panel()).getByRole('button', { name: /^regenerate$/i })).toBeTruthy()
+  })
+
+  it('a flagged row with no delivery id shows the flag but neither Regenerate nor Open', async () => {
+    setup()
+    attemptRows.push({ ...flaggedRow('quality_unresolved'), delivery_id: null })
+    await submit()
+    expect(phase()).toBe('flagged')
+    expect(within(panel()).queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+    expect(within(panel()).queryByRole('button', { name: /open it/i })).toBeNull()
+  })
+
   it('opened with regenerateOf (from the delivery view): says so, and the run carries regenerate_of', async () => {
     setup({ regenerateOf: FLAG_ID })
     expect(screen.getByText('Regenerate this post')).toBeTruthy()

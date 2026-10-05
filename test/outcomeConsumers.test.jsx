@@ -25,8 +25,9 @@ vi.mock('../src/components/DeliveryList', () => ({ default: () => null }))
 vi.mock('../src/components/PostCard', () => ({
   default: ({ platform, index, slotDate }) => <div data-testid={`post-${platform}-${index}`}>{slotDate ? `chip:${slotDate}` : 'no-chip'}</div>,
 }))
+let appRole = 'studio_owner'
 vi.mock('../src/context/AppContext', () => ({
-  useApp: () => ({ authReady: true, role: 'studio_owner', brandColorPrimary: '#bd8276', scopeType: 'studio',
+  useApp: () => ({ authReady: true, role: appRole, brandColorPrimary: '#bd8276', scopeType: 'studio',
     resolvedStudioId: 'st-1', resolvedClientId: null }),
 }))
 
@@ -35,12 +36,13 @@ const DELIVERY = { id: 'del-1', created_at: '2026-09-20T21:50:30Z', studio_id: '
 let deliveryRow = DELIVERY
 let gpResult
 let regenResult // the "has this delivery been regenerated?" lookup (WO-4)
+const eqCalls = [] // [table, column, value] for every .eq(), so a filter's column is under test
 vi.mock('../src/lib/supabase', () => ({
   supabase: {
     rpc: async () => ({ data: [] }),
     from: (table) => {
       const result = () => (table === 'content_deliveries' ? regenResult : gpResult)
-      const q = { select: () => q, eq: () => q, not: () => q, limit: () => q,
+      const q = { select: () => q, eq: (c, v) => { eqCalls.push([table, c, v]); return q }, not: () => q, limit: (n) => { eqCalls.push([table, 'limit', n]); return q },
         single: async () => ({ data: deliveryRow, error: null }),
         then: (res, rej) => { const r = result(); return (typeof r === 'function' ? Promise.reject(r()) : Promise.resolve(r)).then(res, rej) } }
       q.table = table
@@ -52,7 +54,7 @@ vi.mock('../src/lib/supabase', () => ({
 import Dashboard from '../src/pages/Dashboard.jsx'
 import DeliveryView from '../src/pages/DeliveryView.jsx'
 
-beforeEach(() => { submitted = null; deliveryRow = DELIVERY; gpResult = { data: [], error: null }; regenResult = { data: [], error: null } })
+beforeEach(() => { submitted = null; appRole = 'studio_owner'; eqCalls.length = 0; deliveryRow = DELIVERY; gpResult = { data: [], error: null }; regenResult = { data: [], error: null } })
 afterEach(() => cleanup())
 
 describe('Dashboard.handleGenSubmitted', () => {
@@ -146,6 +148,40 @@ describe('DeliveryView: the WO-4 flag (D4)', () => {
     deliveryRow = flagged()
     regenResult = { data: [{ id: 'del-2' }], error: null }
     renderView()
+    const link = await screen.findByRole('link', { name: /open the regenerated post/i })
+    expect(link.getAttribute('href')).toBe('/delivery/del-2')
+    expect(screen.queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+  })
+
+  it('the regenerate lookup filters on regenerated_from = this delivery, limit 1 (the column is under test)', async () => {
+    deliveryRow = flagged()
+    renderView()
+    await screen.findByTestId('quality-flag')
+    await waitFor(() => expect(eqCalls).toContainEqual(['content_deliveries', 'regenerated_from', 'del-1']))
+    expect(eqCalls).toContainEqual(['content_deliveries', 'limit', 1])
+  })
+
+  it('negative control: an unflagged delivery runs no regenerate lookup at all', async () => {
+    renderView()
+    await waitFor(() => expect(screen.getByTestId('post-instagram-0')).toBeTruthy())
+    expect(eqCalls.some(([t, c]) => t === 'content_deliveries' && c === 'regenerated_from')).toBe(false)
+  })
+
+  it('a non-owner (instructor) sees the flag but no Regenerate and no modal', async () => {
+    appRole = 'studio_instructor'
+    deliveryRow = flagged()
+    renderView()
+    await screen.findByTestId('quality-flag')
+    expect(screen.queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+    expect(screen.queryByTestId('regen-modal')).toBeNull()
+  })
+
+  it('once the regenerate delivers, the original links to it instead of offering Regenerate again', async () => {
+    deliveryRow = flagged()
+    renderView()
+    const btn = await screen.findByRole('button', { name: /^regenerate$/i })
+    await act(async () => { btn.click() })
+    await act(async () => { submitted(['instagram'], { phase: 'flagged', deliveryId: 'del-2', flag: {} }) })
     const link = await screen.findByRole('link', { name: /open the regenerated post/i })
     expect(link.getAttribute('href')).toBe('/delivery/del-2')
     expect(screen.queryByRole('button', { name: /^regenerate$/i })).toBeNull()

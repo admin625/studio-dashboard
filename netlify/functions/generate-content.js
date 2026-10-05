@@ -236,8 +236,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // normalized). Both reads use the CALLER's token, so RLS bounds them: another studio's delivery,
 // and an instructor's view of a delivery that isn't theirs, both come back as no row, and that is
 // the same 403 as a wrong studio. Nothing here reads content, only ids and flags.
-// The partial unique index on regenerated_from is the backstop for two regenerates racing past
-// the "already regenerated" read; the second one then fails at the generator's insert.
+// The partial unique index content_deliveries_regenerated_from_uq (WO-4 Phase M, M3; applied on
+// fca-studio 2026-10-01 as migration wo4_m3_content_deliveries_flag_regen) is the backstop for two
+// regenerates racing past the "already regenerated" read: the second fails at the generator's insert.
 async function checkRegenerateOf(rest, body) {
   if (typeof body.regenerate_of !== 'string' || !UUID.test(body.regenerate_of)) {
     return respond(400, { error: 'regenerate_of is invalid' });
