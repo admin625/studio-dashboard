@@ -9,7 +9,10 @@ import { slotDatesByPost, fmtSlotDay } from '../lib/slotDate'
 import { useApp } from '../context/AppContext'
 import Layout from '../components/Layout'
 import PostCard from '../components/PostCard'
-import { Loader2, ChevronLeft, Lock, Calendar } from 'lucide-react'
+import GenerateModal from '../components/GenerateModal'
+import { FLAG_TITLE, flagReasonLine, isFlagged, canOfferRegenerate } from '../lib/qualityFlag'
+import { isDeliveredPhase } from '../lib/generationOutcome'
+import { Loader2, ChevronLeft, Lock, Calendar, AlertTriangle } from 'lucide-react'
 
 const PLATFORMS = ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok']
 const PLATFORM_LABELS = { instagram: 'Instagram', facebook: 'Facebook', twitter: 'X (Twitter)', linkedin: 'LinkedIn', tiktok: 'TikTok' }
@@ -25,6 +28,11 @@ export default function DeliveryView() {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState(null)
   const [slotDates, setSlotDates] = useState({})
+  // WO-4: the id of this delivery's regenerate, when one exists (null = none, or not looked up).
+  const [regeneratedId, setRegeneratedId] = useState(null)
+  const [regenOpen, setRegenOpen] = useState(false)
+  // The original's calendar slot, when it is bound to exactly one (null otherwise).
+  const [origSlot, setOrigSlot] = useState(null)
 
   // 2b — gate on authReady so edit permissions don't flip on a transient null role.
   const isOwner = app.authReady && app.role === 'studio_owner'
@@ -43,7 +51,7 @@ export default function DeliveryView() {
       try {
         const { data, error: err } = await supabase
           .from('content_deliveries')
-          .select('id, created_at, studio_id, client_id, instructor_email, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content, video_url, video_status, video_render_id, video_error')
+          .select('id, created_at, studio_id, client_id, instructor_email, instagram_content, facebook_content, twitter_content, linkedin_content, tiktok_content, video_url, video_status, video_render_id, video_error, quality_flag, flag_reason, flag_phrase, regenerated_from')
           .eq('id', id)
           .single()
 
@@ -72,6 +80,25 @@ export default function DeliveryView() {
 
         setLoading(false)
 
+        // WO-4: a flagged original offers Regenerate once. Look for an existing regenerate so the
+        // button isn't offered where the proxy would refuse it. Display only and never blocking:
+        // a failed lookup leaves the button on, and the proxy is the real check.
+        setRegeneratedId(null)
+        if (isFlagged(data) && data.regenerated_from == null) {
+          try {
+            const { data: rg, error: rgErr } = await supabase
+              .from('content_deliveries')
+              .select('id')
+              .eq('regenerated_from', id)
+              .limit(1)
+            if (!mounted) return
+            if (rgErr) console.warn('[DeliveryView] regenerate lookup failed:', rgErr.message)
+            else if (Array.isArray(rg) && rg.length) setRegeneratedId(rg[0].id)
+          } catch (e) {
+            console.warn('[DeliveryView] regenerate lookup threw:', e && e.message)
+          }
+        }
+
         // Calendar 2d: which day each post was written for, via generation_posts.slot_id.
         // Display only and never blocking — a failed lookup leaves the page exactly as it was
         // before this existed, and says so in the console rather than inventing a date.
@@ -86,13 +113,19 @@ export default function DeliveryView() {
           try {
             const { data: gp, error: gpErr } = await supabase
               .from('generation_posts')
-              .select('platform, post_index, calendar_slots(slot_date)')
+              .select('platform, post_index, slot_id, calendar_slots(slot_date)')
               .eq('delivery_id', id)
               .not('slot_id', 'is', null)
             if (!mounted) return
             if (gpErr) { console.warn('[DeliveryView] slot date lookup failed:', gpErr.message); break }
             const dates = slotDatesByPost(gp)
             setSlotDates(dates)
+            // WO-4 (Mac 2026-10-05): a regenerate keeps the original's slot. Only when the delivery
+            // is bound to exactly ONE slot; a multi-slot or unbound delivery regenerates unbound.
+            const slotIds = [...new Set((gp || []).map((r) => r && r.slot_id).filter(Boolean))]
+            setOrigSlot(slotIds.length === 1
+              ? { id: slotIds[0], date: ((gp || []).find((r) => r.slot_id === slotIds[0]) || {}).calendar_slots?.slot_date || null }
+              : null)
             if (Object.keys(dates).length) break
           } catch (e) {
             console.warn('[DeliveryView] slot date lookup threw:', e && e.message)
@@ -192,6 +225,31 @@ export default function DeliveryView() {
         )}
       </div>
 
+      {/* WO-4 D4: a flagged delivery. Label + one approved reason line + Regenerate (owner only,
+          originals only, once). Rows without flag fields render nothing here. No critic output. */}
+      {isFlagged(delivery) && (
+        <div className="mb-6 px-4 py-3 rounded-xl" data-testid="quality-flag"
+          style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)' }}>
+          <p className="text-sm font-semibold text-amber-200 flex items-center gap-2">
+            <AlertTriangle size={15} /> {FLAG_TITLE}
+          </p>
+          <p className="text-sm text-slate-200 mt-1 leading-snug">{flagReasonLine(delivery.flag_reason, delivery.flag_phrase)}</p>
+          {isOwner && (canOfferRegenerate(delivery, { alreadyRegenerated: !!regeneratedId }) || regeneratedId) && (
+            <div className="mt-3 flex gap-3 flex-wrap">
+              {regeneratedId ? (
+                <Link to={`/delivery/${regeneratedId}`} className="text-sm font-semibold" style={{ color: primary }}>
+                  Open the regenerated post
+                </Link>
+              ) : (
+                <button onClick={() => setRegenOpen(true)}
+                  className="px-4 py-2 rounded-lg text-sm font-bold text-slate-200"
+                  style={{ background: 'rgba(255,255,255,0.10)' }}>Regenerate</button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Platform tabs */}
       {platformsWithContent.length > 1 && (
         <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1">
@@ -249,6 +307,13 @@ export default function DeliveryView() {
             <video src={delivery.video_url} controls className="w-full max-h-96 rounded-lg" />
           </div>
         </div>
+      )}
+
+      {isOwner && canOfferRegenerate(delivery) && (
+        <GenerateModal open={regenOpen} regenerateOf={delivery.id} onClose={() => setRegenOpen(false)}
+          slotId={origSlot ? origSlot.id : null} slotDate={origSlot ? origSlot.date : null}
+          // Once the regenerate delivers, this original links to it and stops offering another.
+          onSubmitted={(_p, outcome) => { if (outcome && isDeliveredPhase(outcome.phase) && outcome.deliveryId) setRegeneratedId(outcome.deliveryId) }} />
       )}
     </Layout>
   )

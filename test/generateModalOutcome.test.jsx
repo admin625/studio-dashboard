@@ -89,7 +89,7 @@ const phase = () => panel() && panel().dataset.outcome
 const submit = async () => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: /create content/i })) }) }
 
 describe('slot run: the outcome reaches the modal', () => {
-  it('202, then the real needs_review row → "needs a human look", nothing hidden, no retry', async () => {
+  it('202, then the real needs_review row (pre-port) → failed, no promise of human review, no critic notes', async () => {
     const p = setup({ slotId: '2073eacd-78ab-4c80-ab88-18e6612b11c7', slotDate: '2026-10-05', slotJobLabel: 'Getting to know us' })
     attemptRows.push(null, { outcome: null, outcome_detail: null, delivery_id: null }, REAL_NEEDS_REVIEW)
     await submit()
@@ -100,13 +100,13 @@ describe('slot run: the outcome reaches the modal', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(3 * 4000) })
 
-    expect(phase()).toBe('needs_review')
-    expect(screen.getByText('This one needs a human look.')).toBeTruthy()
-    expect(screen.getByText(/didn't pass our quality check after two tries, so nothing was delivered/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /try again|retry/i })).toBeNull()
+    expect(phase()).toBe('failed')
+    expect(screen.getByText("We couldn't write this post.")).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/human look|notified|will look|look at it|Deliberate failure|What the check flagged/i)
+    expect(screen.queryByRole('button', { name: /try again|retry|regenerate/i })).toBeNull()
     expect(p.onClose).not.toHaveBeenCalled()
     expect(p.onSubmitted).toHaveBeenCalledTimes(1)
-    expect(p.onSubmitted.mock.calls[0][1].phase).toBe('needs_review')
+    expect(p.onSubmitted.mock.calls[0][1].phase).toBe('failed')
     expect(fromCalls.every((t) => t === 'get_generation_outcome')).toBe(true)
   })
 
@@ -129,11 +129,12 @@ describe('slot run: the outcome reaches the modal', () => {
     expect(screen.getByRole('button', { name: /open the post/i })).toBeTruthy()
   })
 
-  it("a synchronous needs_review body (the 71021 shape, no 'error' key) is shown, not read as success", async () => {
+  it("a synchronous needs_review body (the 71021 shape, no 'error' key) is shown as failed, not read as success", async () => {
     global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: false, needs_review: true, generated: false, delivered: false, iterations: 2, failed_criteria: ['no_generic_cliches'], notes: 'n', message: 'm' }) }))
     const p = setup({ slotId: 's', slotDate: '2026-10-05' })
     await submit()
-    expect(phase()).toBe('needs_review')
+    expect(phase()).toBe('failed')
+    expect(document.body.textContent).not.toMatch(/What the check flagged/)
     expect(fromCalls).toEqual([]) // terminal already known; no poll
     expect(p.onClose).not.toHaveBeenCalled()
   })
@@ -142,7 +143,7 @@ describe('slot run: the outcome reaches the modal', () => {
     const p = setup({ slotId: 's', slotDate: '2026-10-05' })
     attemptRows.push(REAL_NEEDS_REVIEW)
     await submit()
-    expect(phase()).toBe('needs_review')
+    expect(phase()).toBe('failed')
     fireEvent.click(within(panel()).getByRole('button', { name: /^close$/i }))
     expect(p.onClose).toHaveBeenCalled()
     expect(panel()).toBeNull()
@@ -150,7 +151,7 @@ describe('slot run: the outcome reaches the modal', () => {
 })
 
 describe('owner-initiated run: the same modal, the same fix (HQ 2026-09-21)', () => {
-  it('202 → polls → needs review is shown, not a success banner', async () => {
+  it('202 → polls → needs review (pre-port) is shown as failed, not a success banner', async () => {
     const p = setup()
     attemptRows.push({ outcome: null, outcome_detail: null, delivery_id: null }, REAL_NEEDS_REVIEW)
     await submit()
@@ -159,17 +160,17 @@ describe('owner-initiated run: the same modal, the same fix (HQ 2026-09-21)', ()
     expect(phase()).toBe('generating')
     expect(screen.getByText(/Writing your content…/)).toBeTruthy()
     await act(async () => { await vi.advanceTimersByTimeAsync(2 * 4000) })
-    expect(phase()).toBe('needs_review')
-    expect(screen.getByText(/Your content didn't pass our quality check/)).toBeTruthy()
+    expect(phase()).toBe('failed')
+    expect(screen.getByText("We couldn't create this content.")).toBeTruthy()
     expect(p.onClose).not.toHaveBeenCalled()
-    expect(p.onSubmitted.mock.calls[0][1].phase).toBe('needs_review')
+    expect(p.onSubmitted.mock.calls[0][1].phase).toBe('failed')
   })
 
   it('a synchronous needs_review body is shown on the owner-initiated path too', async () => {
     global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: false, needs_review: true, iterations: 2, failed_criteria: ['voice_match'], notes: 'n' }) }))
     const p = setup()
     await submit()
-    expect(phase()).toBe('needs_review')
+    expect(phase()).toBe('failed')
     expect(p.onClose).not.toHaveBeenCalled()
   })
 })
@@ -203,7 +204,7 @@ describe('review findings (2026-09-21 /review)', () => {
     expect(phase()).toBe('delivered')
     await act(async () => { await vi.advanceTimersByTimeAsync(3 * 4000) }) // run 1 wakes
     expect(phase()).toBe('delivered')
-    expect(p.onSubmitted.mock.calls.some((c) => c[1] && c[1].phase === 'needs_review')).toBe(false)
+    expect(p.onSubmitted.mock.calls.some((c) => c[1] && c[1].phase === 'failed')).toBe(false)
   })
 
   it('no crypto.randomUUID: no correlation id, and the modal does not hang on "Creating…"', async () => {
@@ -289,7 +290,7 @@ describe('the proxy lost the answer, not the run (2026-09-21 full /review)', () 
     expect(screen.getByText(/We lost the connection while sending this/)).toBeTruthy()
     expect(screen.queryByText(/couldn't submit/)).toBeNull()
     await act(async () => { await vi.advanceTimersByTimeAsync(2 * 4000) })
-    expect(screen.getByText('This one needs a human look.')).toBeTruthy()
+    expect(phase()).toBe('failed')
   })
   it("negative control: the proxy's OWN 502 (it never reached n8n) is shown as an error, and nothing polls", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 502, json: async () => ({ error: 'Could not verify your studio. Please try again.' }) }))
@@ -333,7 +334,7 @@ describe('lifecycle and focus (2026-09-21 full /review)', () => {
     setup({ slotId: 's', slotDate: '2026-10-05' })
     attemptRows.push(REAL_NEEDS_REVIEW)
     await submit()
-    expect(document.activeElement.textContent).toBe('This one needs a human look.')
+    expect(document.activeElement.textContent).toBe("We couldn't write this post.")
   })
 })
 
@@ -359,5 +360,125 @@ describe('HQ 2026-09-21 item 2: entitlement refusals are shown, not closed as su
     await submit()
     expect(p.onClose).toHaveBeenCalledTimes(1)
     expect(panel()).toBeNull()
+  })
+})
+
+
+describe('WO-4: a flagged delivery is "Check before posting" + one reason line + one Regenerate', () => {
+  const FLAG_ID = 'ffffffff-0000-4000-8000-000000000001'
+  const flaggedRow = (reason, phrase = null, id = FLAG_ID) => ({
+    outcome: 'delivered_flagged', delivery_id: id, quality_flag: true, flag_reason: reason, flag_phrase: phrase,
+    outcome_detail: { flag_reason: reason, flag_phrase: phrase, slot_id: null },
+  })
+  const PROMISES = /human look|notified|will look|look at it|human review|What the check flagged/i
+
+  it('202 → flagged row: the label, the approved banned_phrase line, Regenerate and Open — and no promise of review', async () => {
+    const p = setup()
+    attemptRows.push(flaggedRow('banned_phrase', 'grind'))
+    await submit()
+    expect(phase()).toBe('flagged')
+    expect(within(panel()).getByText('Check before posting')).toBeTruthy()
+    expect(within(panel()).getByText("This post uses a phrase you or we flagged: 'grind'. Edit it or regenerate.")).toBeTruthy()
+    expect(within(panel()).getByRole('button', { name: /^regenerate$/i })).toBeTruthy()
+    expect(within(panel()).getByRole('button', { name: /open it/i })).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(PROMISES)
+    expect(p.onSubmitted.mock.calls[0][1].phase).toBe('flagged')
+  })
+
+  it('each reason code shows its own approved line; an unknown code falls back to the generic line', async () => {
+    const cases = [
+      ['quality_unresolved', "We couldn't get this one quite right. Give it a read, or regenerate."],
+      ['error_fallback', 'This is our first draft. Give it a read, or regenerate.'],
+      ['something_new', "We couldn't get this one quite right. Give it a read, or regenerate."],
+    ]
+    for (const [code, line] of cases) {
+      cleanup()
+      setup()
+      attemptRows.length = 0
+      attemptRows.push(flaggedRow(code))
+      await submit()
+      expect(phase()).toBe('flagged')
+      expect(within(panel()).getByText(line)).toBeTruthy()
+    }
+  })
+
+  it('banned_phrase with no phrase never renders an empty quote', async () => {
+    setup()
+    attemptRows.push(flaggedRow('banned_phrase', null))
+    await submit()
+    expect(document.body.textContent).not.toContain("flagged: ''")
+    expect(within(panel()).getByText("We couldn't get this one quite right. Give it a read, or regenerate.")).toBeTruthy()
+  })
+
+  it('negative control: a first run sends no regenerate_of, and never regenerated_from', async () => {
+    setup()
+    await submit()
+    expect(fetchBodies[0]).not.toHaveProperty('regenerate_of')
+    expect(fetchBodies[0]).not.toHaveProperty('regenerated_from')
+  })
+
+  it('Regenerate is one tap: the same request again, plus regenerate_of = the flagged delivery, with a fresh request id', async () => {
+    setup()
+    attemptRows.push(flaggedRow('quality_unresolved'), { outcome: 'delivered', delivery_id: 'dddddddd-0000-0000-0000-000000000009', outcome_detail: null })
+    await submit()
+    await act(async () => { fireEvent.click(within(panel()).getByRole('button', { name: /^regenerate$/i })) })
+    expect(fetchBodies).toHaveLength(2)
+    const [first, regen] = fetchBodies
+    expect(regen.regenerate_of).toBe(FLAG_ID)
+    expect(regen).not.toHaveProperty('regenerated_from')
+    expect(regen.client_request_id).not.toBe(first.client_request_id)
+    expect(regen.platforms).toEqual(first.platforms)
+    expect(phase()).toBe('delivered')
+  })
+
+  it("a regenerate's own flagged outcome offers no further Regenerate (one per original)", async () => {
+    setup()
+    attemptRows.push(flaggedRow('quality_unresolved'), flaggedRow('error_fallback', null, 'ffffffff-0000-4000-8000-000000000002'))
+    await submit()
+    await act(async () => { fireEvent.click(within(panel()).getByRole('button', { name: /^regenerate$/i })) })
+    expect(phase()).toBe('flagged')
+    expect(within(panel()).getByText('This is our first draft. Give it a read, or regenerate.')).toBeTruthy()
+    expect(within(panel()).queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+    expect(within(panel()).getByRole('button', { name: /open it/i })).toBeTruthy()
+  })
+
+  it("the proxy's refusal of a regenerate (409) is shown on the form, and nothing polls", async () => {
+    setup()
+    attemptRows.push(flaggedRow('quality_unresolved'))
+    await submit()
+    global.fetch = vi.fn(async () => ({ ok: false, status: 409, json: async () => ({ error: 'This post has already been regenerated.' }) }))
+    fromCalls.length = 0
+    await act(async () => { fireEvent.click(within(panel()).getByRole('button', { name: /^regenerate$/i })) })
+    expect(panel()).toBeNull()
+    expect(screen.getByText(/status 409: This post has already been regenerated\./)).toBeTruthy()
+    expect(fromCalls).toEqual([])
+  })
+
+  it('closing after a regenerate resets: the next fresh run offers Regenerate again', async () => {
+    setup()
+    attemptRows.push(flaggedRow('quality_unresolved'), flaggedRow('quality_unresolved', null, 'ffffffff-0000-4000-8000-000000000002'), flaggedRow('error_fallback', null, 'ffffffff-0000-4000-8000-000000000003'))
+    await submit()
+    await act(async () => { fireEvent.click(within(panel()).getByRole('button', { name: /^regenerate$/i })) })
+    expect(within(panel()).queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+    fireEvent.click(within(panel()).getByRole('button', { name: /^close$/i }))
+    await submit() // a fresh, non-regenerate run
+    expect(fetchBodies[2]).not.toHaveProperty('regenerate_of')
+    expect(within(panel()).getByRole('button', { name: /^regenerate$/i })).toBeTruthy()
+  })
+
+  it('a flagged row with no delivery id shows the flag but neither Regenerate nor Open', async () => {
+    setup()
+    attemptRows.push({ ...flaggedRow('quality_unresolved'), delivery_id: null })
+    await submit()
+    expect(phase()).toBe('flagged')
+    expect(within(panel()).queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+    expect(within(panel()).queryByRole('button', { name: /open it/i })).toBeNull()
+  })
+
+  it('opened with regenerateOf (from the delivery view): says so, and the run carries regenerate_of', async () => {
+    setup({ regenerateOf: FLAG_ID })
+    expect(screen.getByText('Regenerate this post')).toBeTruthy()
+    await submit()
+    expect(fetchBodies[0].regenerate_of).toBe(FLAG_ID)
   })
 })

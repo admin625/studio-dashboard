@@ -160,6 +160,27 @@ exports.handler = async (event) => {
     return respond(502, { error: RETRY });
   }
 
+  // --- regenerate lineage (WO-4 N2, HQ 2026-09-29) ---------------------------------------------
+  // The generator writes content_deliveries.regenerated_from straight from body.regenerate_of and
+  // checks nothing itself, so this is the only gate. The entitlement WO will read that link to
+  // decide what is free, so a forged link is a free generation. A regenerate is accepted only for
+  // an ORIGINAL, FLAGGED delivery in the named studio that has not been regenerated yet.
+  // Clients never set regenerated_from: a value sent under that name is dropped.
+  delete body.regenerated_from;
+  if (body.regenerate_of != null) {
+    // Owner-only (Mac 2026-10-05). `role` is the server-derived role above (HQ 2026-09-29,
+    // 7a88fc3); body.user_role was deleted before anything read it, so it can't be claimed.
+    // Also closes the instructor-visibility gap: an instructor can't see an owner's regenerate
+    // under RLS, so the "already regenerated" read below would miss it.
+    if (role !== 'studio_owner') {
+      return respond(403, { error: 'Only the studio owner can regenerate a post.' });
+    }
+    const refusal = await checkRegenerateOf(rest, body);
+    if (refusal) return refusal;
+  } else {
+    delete body.regenerate_of;
+  }
+
   body.email = verifiedEmail;
   body.user_role = role;
 
@@ -217,6 +238,52 @@ const MAX_POSTS_PER_PLATFORM = 5;
 const MAX_POSTS_PER_REQUEST = 25;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// WO-4 N2. Returns a response to send (a refusal) or null (accepted; body.regenerate_of is
+// normalized). Both reads use the CALLER's token, so RLS bounds them: another studio's delivery,
+// and an instructor's view of a delivery that isn't theirs, both come back as no row, and that is
+// the same 403 as a wrong studio. Nothing here reads content, only ids and flags.
+// The partial unique index content_deliveries_regenerated_from_uq (WO-4 Phase M, M3; applied on
+// fca-studio 2026-10-01 as migration wo4_m3_content_deliveries_flag_regen) is the backstop for two
+// regenerates racing past the "already regenerated" read: the second fails at the generator's insert.
+async function checkRegenerateOf(rest, body) {
+  if (typeof body.regenerate_of !== 'string' || !UUID.test(body.regenerate_of)) {
+    return respond(400, { error: 'regenerate_of is invalid' });
+  }
+  body.regenerate_of = body.regenerate_of.toLowerCase();
+  const rid = encodeURIComponent(body.regenerate_of);
+  let original, existing;
+  try {
+    const [oRes, eRes] = await Promise.all([
+      rest('content_deliveries?select=id,studio_id,quality_flag,regenerated_from&id=eq.' + rid),
+      rest('content_deliveries?select=id&regenerated_from=eq.' + rid + '&limit=1'),
+    ]);
+    if (!oRes.ok || !eRes.ok) {
+      console.error('[generate-content] regenerate lookup failed:', oRes.status, eRes.status);
+      return respond(502, { error: 'Could not check that post. Please try again.' });
+    }
+    const [o, e] = await Promise.all([oRes.json(), eRes.json()]);
+    original = Array.isArray(o) ? o.find((r) => r && r.id === body.regenerate_of) : null;
+    existing = Array.isArray(e) && e.length > 0;
+  } catch (err) {
+    console.error('[generate-content] regenerate lookup failed:', err.message);
+    return respond(502, { error: 'Could not check that post. Please try again.' });
+  }
+  if (!original || original.studio_id !== body.studio_id) {
+    console.error('[generate-content] regenerate_of is not a delivery of the named studio');
+    return respond(403, { error: 'You do not have access to that post.' });
+  }
+  if (original.quality_flag !== true) {
+    return respond(409, { error: 'Only a post marked "Check before posting" can be regenerated.' });
+  }
+  if (original.regenerated_from != null) {
+    return respond(409, { error: 'This post is already a regenerate, so it can\'t be regenerated again.' });
+  }
+  if (existing) {
+    return respond(409, { error: 'This post has already been regenerated.' });
+  }
+  return null;
+}
 
 function lower(v) {
   return typeof v === 'string' ? v.trim().toLowerCase() : '';

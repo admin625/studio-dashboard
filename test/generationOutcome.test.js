@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  classifyAttempt, classifySyncBody, pollOutcome, fetchAttempt, NO_ANSWER_MS, POLL_MS,
+  classifyAttempt, classifySyncBody, pollOutcome, fetchAttempt, isDeliveredPhase, NO_ANSWER_MS, POLL_MS,
 } from '../src/lib/generationOutcome.js'
 import { slotDatesByPost } from '../src/lib/slotDate.js'
 
@@ -23,11 +23,39 @@ const REAL_NEEDS_REVIEW = {
   delivery_id: null,
 }
 
+// The shape the WO-4 copy writes (keys read back from generation_attempts on 085fde09, 2026-10-05:
+// outcome_detail {flag_phrase, flag_reason, slot_id}). Values here are synthetic.
+const FLAGGED_ROW = {
+  outcome: 'delivered_flagged',
+  outcome_detail: { flag_reason: 'quality_unresolved', flag_phrase: null, slot_id: null },
+  delivery_id: 'd-flag',
+}
+
 describe('classifyAttempt', () => {
-  it('the real needs_review row is needs_review, never success', () => {
+  it('the real needs_review row (pre-port live generator) is failed, never success, and carries no critic output', () => {
     const s = classifyAttempt(REAL_NEEDS_REVIEW, 46_000)
-    expect(s.phase).toBe('needs_review')
-    expect(s.detail.iterations).toBe(2)
+    expect(s.phase).toBe('failed')
+    expect(s.detail).toBeNull()
+    expect(JSON.stringify(s)).not.toContain('Deliberate failure')
+  })
+  it('delivered_flagged is flagged, with the delivery id and the reason from the RPC columns', () => {
+    const s = classifyAttempt({ ...FLAGGED_ROW, flag_reason: 'banned_phrase', flag_phrase: 'grind' }, 1)
+    expect(s).toEqual({ phase: 'flagged', deliveryId: 'd-flag', flag: { reason: 'banned_phrase', phrase: 'grind' } })
+  })
+  it('flagged falls back to outcome_detail when the RPC has no flag columns (pre-migration RPC)', () => {
+    expect(classifyAttempt(FLAGGED_ROW, 1).flag).toEqual({ reason: 'quality_unresolved', phrase: null })
+  })
+  it("a 'delivered' row whose delivery is flagged is flagged: the delivery is the truth", () => {
+    const s = classifyAttempt({ outcome: 'delivered', delivery_id: 'd2', quality_flag: true, flag_reason: 'error_fallback' }, 1)
+    expect(s.phase).toBe('flagged')
+    expect(s.flag.reason).toBe('error_fallback')
+  })
+  it('negative control: an unflagged delivered row (quality_flag false, or absent) stays delivered', () => {
+    expect(classifyAttempt({ outcome: 'delivered', delivery_id: 'd3', quality_flag: false }, 1).phase).toBe('delivered')
+    expect(classifyAttempt({ outcome: 'delivered', delivery_id: 'd3', quality_flag: null }, 1).phase).toBe('delivered')
+  })
+  it('isDeliveredPhase: delivered and flagged both delivered; nothing else', () => {
+    expect(['delivered', 'flagged', 'failed', 'refused', 'no_answer', 'generating'].filter(isDeliveredPhase)).toEqual(['delivered', 'flagged'])
   })
   it('delivered carries the delivery id', () => {
     expect(classifyAttempt({ outcome: 'delivered', delivery_id: 'd1' }, 1)).toMatchObject({ phase: 'delivered', deliveryId: 'd1' })
@@ -51,11 +79,11 @@ describe('classifyAttempt', () => {
 })
 
 describe('classifySyncBody', () => {
-  it("the generator's own Respond Needs Review body (exec 71021's shape) is needs_review", () => {
+  it("the generator's own Respond Needs Review body (exec 71021's shape) is failed, notes dropped", () => {
     // Verbatim shape of the 2026-09-20 body the modal used to treat as success: no `error` key.
     const body = { ok: false, needs_review: true, generated: false, delivered: false, iterations: 2,
       failed_criteria: ['no_generic_cliches'], notes: 'Post 1 uses …', message: 'Draft did not pass critique after two passes.' }
-    expect(classifySyncBody(body).phase).toBe('needs_review')
+    expect(classifySyncBody(body)).toEqual({ phase: 'failed', detail: null })
   })
   it('Refuse Held Slot body is refused', () => {
     expect(classifySyncBody({ ok: false, refused: true, code: 'slot_held', message: 'This slot is held.' }).phase).toBe('refused')
@@ -71,13 +99,13 @@ describe('pollOutcome', () => {
     let t = 0
     return { now: () => t, sleep: async (ms) => { t += ms } }
   }
-  it('follows a run from open row to the real needs_review row', async () => {
+  it('follows a run from open row to the real needs_review row (read as failed)', async () => {
     const c = clock()
     const rows = [null, { outcome: null }, { outcome: null }, REAL_NEEDS_REVIEW]
     const seen = []
     const final = await pollOutcome({ fetchRow: async () => (rows.length ? rows.shift() : REAL_NEEDS_REVIEW), ...c, onState: (s) => seen.push(s.phase) })
-    expect(final.phase).toBe('needs_review')
-    expect(seen).toEqual(['generating', 'generating', 'generating', 'needs_review'])
+    expect(final.phase).toBe('failed')
+    expect(seen).toEqual(['generating', 'generating', 'generating', 'failed'])
     expect(c.now()).toBe(3 * POLL_MS)
   })
   it('read errors are retried and can never produce "not started"', async () => {
