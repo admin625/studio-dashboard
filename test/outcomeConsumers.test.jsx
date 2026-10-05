@@ -15,9 +15,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
 let submitted = null
 vi.mock('../src/components/GenerateModal', () => ({
-  default: ({ onSubmitted, open, regenerateOf }) => {
+  default: ({ onSubmitted, open, regenerateOf, slotId, slotDate }) => {
     submitted = onSubmitted
-    return open ? <div data-testid="regen-modal">{regenerateOf}</div> : null
+    return open ? <div data-testid="regen-modal" data-slot={slotId || ''} data-slot-date={slotDate || ''}>{regenerateOf}</div> : null
   },
 }))
 vi.mock('../src/components/Layout', () => ({ default: ({ children }) => <div>{children}</div> }))
@@ -185,6 +185,34 @@ describe('DeliveryView: the WO-4 flag (D4)', () => {
     const link = await screen.findByRole('link', { name: /open the regenerated post/i })
     expect(link.getAttribute('href')).toBe('/delivery/del-2')
     expect(screen.queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+  })
+
+  it("a regenerate keeps the original's slot when it is bound to exactly one (Mac 2026-10-05)", async () => {
+    deliveryRow = flagged()
+    gpResult = { data: [{ platform: 'instagram', post_index: 0, slot_id: 'slot-1', calendar_slots: { slot_date: '2026-10-08' } }], error: null }
+    renderView()
+    await waitFor(() => expect(screen.getByTestId('plan-day')).toBeTruthy())
+    await act(async () => { screen.getByRole('button', { name: /^regenerate$/i }).click() })
+    const m = screen.getByTestId('regen-modal')
+    expect(m.dataset.slot).toBe('slot-1')
+    expect(m.dataset.slotDate).toBe('2026-10-08')
+  })
+
+  it('negative control: a delivery bound to two slots, or none, regenerates unbound', async () => {
+    for (const data of [
+      [{ platform: 'instagram', post_index: 0, slot_id: 'slot-1', calendar_slots: { slot_date: '2026-10-08' } },
+        { platform: 'instagram', post_index: 1, slot_id: 'slot-2', calendar_slots: { slot_date: '2026-10-09' } }],
+      [],
+    ]) {
+      cleanup()
+      deliveryRow = flagged()
+      gpResult = { data, error: null }
+      renderView()
+      const btn = await screen.findByRole('button', { name: /^regenerate$/i })
+      await act(async () => {})
+      await act(async () => { btn.click() })
+      expect(screen.getByTestId('regen-modal').dataset.slot).toBe('')
+    }
   })
 
   it('a failed regenerate lookup leaves Regenerate on (the proxy is the real check) and the page intact', async () => {

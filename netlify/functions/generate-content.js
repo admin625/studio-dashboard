@@ -168,6 +168,13 @@ exports.handler = async (event) => {
   // Clients never set regenerated_from: a value sent under that name is dropped.
   delete body.regenerated_from;
   if (body.regenerate_of != null) {
+    // Owner-only (Mac 2026-10-05). `role` is the server-derived role above (HQ 2026-09-29,
+    // 7a88fc3); body.user_role was deleted before anything read it, so it can't be claimed.
+    // Also closes the instructor-visibility gap: an instructor can't see an owner's regenerate
+    // under RLS, so the "already regenerated" read below would miss it.
+    if (role !== 'studio_owner') {
+      return respond(403, { error: 'Only the studio owner can regenerate a post.' });
+    }
     const refusal = await checkRegenerateOf(rest, body);
     if (refusal) return refusal;
   } else {

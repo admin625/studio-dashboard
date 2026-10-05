@@ -47,7 +47,7 @@ function load(db = DB()) {
     calls.push({ url, opts })
     if (url.endsWith('/auth/v1/user')) return { ok: true, json: async () => ({ email: db.who }) }
     if (url.includes('/rest/v1/studio_accounts')) return { ok: true, json: async () => db.studios.filter((s) => s.id === param(url, 'id')) }
-    if (url.includes('/rest/v1/studio_instructors')) return { ok: true, json: async () => [] }
+    if (url.includes('/rest/v1/studio_instructors')) return { ok: true, json: async () => (db.instructors || []).filter((i) => i.studio_id === param(url, 'studio_id')) }
     if (url.includes('/rest/v1/content_deliveries')) {
       if (db.failDeliveries) return { ok: false, status: 500, json: async () => ({}) }
       const byId = param(url, 'id')
@@ -161,6 +161,37 @@ describe('regenerate_of: accepted only for a flagged original of this studio, on
     const res = await handler(event({ regenerate_of: FLAGGED }))
     expect(res.statusCode).toBe(502)
     expect(webhookBody(calls)).toBeNull()
+  })
+
+  it('REFUSED: an active instructor of the studio (owner-only, Mac 2026-10-05), before any delivery is read', async () => {
+    const db = DB(); db.who = 'coach@example.test'
+    db.instructors = [{ studio_id: STUDIO, instructor_email: 'coach@example.test', status: 'active' }]
+    db.rlsLeak = true // even if the instructor could see the original
+    const { handler, calls } = load(db)
+    const res = await handler(event({ regenerate_of: FLAGGED }))
+    expect(res.statusCode).toBe(403)
+    expect(errorOf(res)).toMatch(/studio owner/)
+    expect(deliveryReads(calls)).toHaveLength(0)
+    expect(webhookBody(calls)).toBeNull()
+  })
+
+  it('REFUSED: an instructor claiming user_role "studio_owner" in the body (the role is server-derived)', async () => {
+    const db = DB(); db.who = 'coach@example.test'
+    db.instructors = [{ studio_id: STUDIO, instructor_email: 'coach@example.test', status: 'active' }]
+    db.rlsLeak = true // so only the role check can refuse: the delivery checks would pass
+    const { handler, calls } = load(db)
+    const res = await handler(event({ regenerate_of: FLAGGED, user_role: 'studio_owner' }))
+    expect(res.statusCode).toBe(403)
+    expect(webhookBody(calls)).toBeNull()
+  })
+
+  it('negative control: the same instructor can still run an ordinary generation', async () => {
+    const db = DB(); db.who = 'coach@example.test'
+    db.instructors = [{ studio_id: STUDIO, instructor_email: 'coach@example.test', status: 'active' }]
+    const { handler, calls } = load(db)
+    const res = await handler(event())
+    expect(res.statusCode).toBe(200)
+    expect(webhookBody(calls).user_role).toBe('studio_instructor')
   })
 
   it('membership is checked first: a non-member gets the studio 403 and no delivery is read', async () => {

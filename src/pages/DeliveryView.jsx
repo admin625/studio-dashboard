@@ -31,6 +31,8 @@ export default function DeliveryView() {
   // WO-4: the id of this delivery's regenerate, when one exists (null = none, or not looked up).
   const [regeneratedId, setRegeneratedId] = useState(null)
   const [regenOpen, setRegenOpen] = useState(false)
+  // The original's calendar slot, when it is bound to exactly one (null otherwise).
+  const [origSlot, setOrigSlot] = useState(null)
 
   // 2b — gate on authReady so edit permissions don't flip on a transient null role.
   const isOwner = app.authReady && app.role === 'studio_owner'
@@ -111,13 +113,19 @@ export default function DeliveryView() {
           try {
             const { data: gp, error: gpErr } = await supabase
               .from('generation_posts')
-              .select('platform, post_index, calendar_slots(slot_date)')
+              .select('platform, post_index, slot_id, calendar_slots(slot_date)')
               .eq('delivery_id', id)
               .not('slot_id', 'is', null)
             if (!mounted) return
             if (gpErr) { console.warn('[DeliveryView] slot date lookup failed:', gpErr.message); break }
             const dates = slotDatesByPost(gp)
             setSlotDates(dates)
+            // WO-4 (Mac 2026-10-05): a regenerate keeps the original's slot. Only when the delivery
+            // is bound to exactly ONE slot; a multi-slot or unbound delivery regenerates unbound.
+            const slotIds = [...new Set((gp || []).map((r) => r && r.slot_id).filter(Boolean))]
+            setOrigSlot(slotIds.length === 1
+              ? { id: slotIds[0], date: ((gp || []).find((r) => r.slot_id === slotIds[0]) || {}).calendar_slots?.slot_date || null }
+              : null)
             if (Object.keys(dates).length) break
           } catch (e) {
             console.warn('[DeliveryView] slot date lookup threw:', e && e.message)
@@ -303,6 +311,7 @@ export default function DeliveryView() {
 
       {isOwner && canOfferRegenerate(delivery) && (
         <GenerateModal open={regenOpen} regenerateOf={delivery.id} onClose={() => setRegenOpen(false)}
+          slotId={origSlot ? origSlot.id : null} slotDate={origSlot ? origSlot.date : null}
           // Once the regenerate delivers, this original links to it and stops offering another.
           onSubmitted={(_p, outcome) => { if (outcome && isDeliveredPhase(outcome.phase) && outcome.deliveryId) setRegeneratedId(outcome.deliveryId) }} />
       )}
