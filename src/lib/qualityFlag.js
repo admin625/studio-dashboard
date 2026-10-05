@@ -23,9 +23,11 @@ const LINES = {
 }
 
 /**
- * The one reason line for a flag. An unknown code, or banned_phrase without a phrase (the line
- * would read "flagged: ''"), falls back to the quality_unresolved line: still approved copy, and
- * it claims nothing specific.
+ * The one reason line for a flag. banned_phrase without a phrase (the line would read "avoid: ''")
+ * falls back to the quality_unresolved line, which is still true: the post did fail a check.
+ * An unknown or null code also falls back to it. The generator emits only the three codes, and a
+ * delivered_flagged row with any other reason trips Sentinel's wo4_watch flag_mismatch alert, so
+ * that path is a monitored anomaly, not normal copy.
  */
 export function flagReasonLine(reason, phrase) {
   if (reason === 'banned_phrase') {
