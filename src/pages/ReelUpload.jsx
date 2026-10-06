@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
-  oversizeMessage, oversizeClips, oversizeFailureFields,
+  oversizeMessage, oversizeClips, oversizeFailureFields, limitMb,
 } from '../lib/uploadTelemetry'
 
 /**
@@ -372,6 +372,7 @@ export default function ReelUpload() {
       )}
 
       <input type="file" accept="video/*" multiple onChange={onPick} disabled={busy || !studioId} />
+      <span style={{ marginLeft: 8, fontSize: 13, color: '#666' }}>Up to {limitMb()} MB per clip</span>
       <div style={{ marginTop: 12 }}>
         <button
           onClick={upload}

@@ -19,7 +19,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
-  oversizeMessage, oversizeClips, oversizeFailureFields,
+  oversizeMessage, oversizeClips, oversizeFailureFields, limitMb,
 } from '../lib/uploadTelemetry'
 import { Loader2, X, Sparkles, UploadCloud } from 'lucide-react'
 
@@ -482,7 +482,9 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
 
           {/* Clips */}
           <div>
-            <label className="block text-slate-300 text-xs font-medium mb-1.5">Clips</label>
+            <label className="block text-slate-300 text-xs font-medium mb-1.5">
+              Clips <span className="text-slate-500 font-normal">· Up to {limitMb()} MB per clip</span>
+            </label>
             <label
               className="flex items-center gap-2 rounded-lg px-3 py-3 cursor-pointer text-sm text-slate-300"
               style={{ background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.15)' }}

@@ -116,6 +116,12 @@ describe('NewReelModal controls', () => {
     fireEvent.change(input, { target: { files } })
   }
 
+  it('the limit is shown next to the picker BEFORE anything is picked (Mac 2026-10-06)', () => {
+    render(<NewReelModal studioId={STUDIO} primary="#6d5dfc" onClose={() => {}} onCreated={() => {}} />)
+    expect(screen.getByText(/Up to 314 MB per clip/)).toBeTruthy()
+    expect(screen.getByText(new RegExp('Up to ' + limitMb() + ' MB per clip'))).toBeTruthy()
+  })
+
   it('JUST OVER: refused at selection with the limit and what to do; nothing uploads', async () => {
     const { container } = render(<NewReelModal studioId={STUDIO} primary="#6d5dfc" onClose={() => {}} onCreated={() => {}} />)
     pick(container, [clip('just-over.mov', MAX_CLIP_BYTES + 1)])
