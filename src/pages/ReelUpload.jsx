@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
-  MAX_CLIP_BYTES, mb, oversizeMessage, oversizeClips,
+  oversizeMessage, oversizeClips, oversizeFailureFields,
 } from '../lib/uploadTelemetry'
 
 /**
@@ -186,23 +186,13 @@ export default function ReelUpload() {
       setRows([])
       setPickError(oversizeMessage(over))
       over.forEach((f) => {
+        const fields = oversizeFailureFields(f, picked)
         void emitFailure(attemptId, STAGE.FILE_SELECTED, {
+          ...fields,
           studio_id: studioId || null,
           reel_id: reelId || null,
-          clip_index: picked.indexOf(f) + 1,
-          clip_count: picked.length,
-          file_size_bytes: f.size,
-          mime_type: f.type || null,
           storage_bucket: BUCKET,
-          error_code: 'oversize',
-          error_message: `clip is ${mb(f.size)} MB, limit is ${mb(MAX_CLIP_BYTES)} MB`,
-          payload: {
-            surface: SURFACE,
-            name_hash: nameHash(f.name),
-            limit_bytes: MAX_CLIP_BYTES,
-            over_by_bytes: f.size - MAX_CLIP_BYTES,
-            blocked_client_side: true,
-          },
+          payload: { ...fields.payload, surface: SURFACE },
         })
       })
       return

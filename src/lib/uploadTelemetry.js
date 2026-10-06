@@ -73,26 +73,31 @@ export const APP_VERSION = '2b.1'
 export const BUCKET_LIMIT_BYTES = 314572800
 export const PROJECT_LIMIT_BYTES = 524288000
 
+/** The ceiling storage actually enforces: the smaller of the two limits. */
+export function effectiveLimit(bucketBytes, projectBytes) {
+  return Math.min(bucketBytes, projectBytes)
+}
+
 /**
- * Per-clip ceiling = min(BUCKET_LIMIT_BYTES, PROJECT_LIMIT_BYTES).
+ * Per-clip ceiling = effectiveLimit(BUCKET_LIMIT_BYTES, PROJECT_LIMIT_BYTES).
  *
- * ⚠ A SINGLE BUCKET-ONLY CONSTANT WAS WRONG IN PRACTICE BEFORE THE GLOBAL WAS RAISED, AND
- * THE GATE STILL PASSED. On 2026-09-03 a 113.9 MB clip cleared this check, uploaded for 559.7 SECONDS on an
- * iPhone, and was then rejected by storage — because the global limit was bracketed by
- * evidence between 43 MB and 113.9 MB while this number said 300. The gate did exactly what
- * it was built to do and was useless, because it was pointed at the wrong constraint. A limit
- * that is not the binding one is not a limit.
+ * ⚠ A BUCKET-ONLY GATE WAS WRONG IN PRACTICE, AND IT STILL PASSED. On 2026-09-03 a
+ * 119396805 B (119.4 MB) clip cleared a gate that knew only the 300 MiB bucket limit,
+ * uploaded for 559.7 SECONDS on an iPhone, and was then rejected by storage, because the
+ * project limit at the time was lower (bracketed by evidence between ~45 MB and 119.4 MB).
+ * A limit that is not the binding one is not a limit.
  *
- * So: if the global is ever lowered below 300 MB again, this number silently stops meaning
- * anything and the only symptom is a customer waiting nine minutes for a failure.
+ * The remaining risk is drift: if either Supabase value is lowered without updating
+ * BUCKET_LIMIT_BYTES / PROJECT_LIMIT_BYTES here, the gate silently stops being the binding
+ * limit, and the only symptom is a customer waiting minutes for a failure.
  *
  * THE SERVER REMAINS AUTHORITATIVE either way. This constant ships in a public bundle and a
  * determined caller ignores it. Its job is to save the customer the upload, not to enforce.
  */
-export const MAX_CLIP_BYTES = Math.min(BUCKET_LIMIT_BYTES, PROJECT_LIMIT_BYTES)
+export const MAX_CLIP_BYTES = effectiveLimit(BUCKET_LIMIT_BYTES, PROJECT_LIMIT_BYTES)
 
-/** Bytes to MiB, one decimal. Matches how the storage limit is expressed. Telemetry only:
- *  the owner sees displayMb(), because phones and Finder show decimal MB. */
+/** Bytes to MiB, one decimal, for telemetry. Owner-facing text uses displayMb() (decimal MB,
+ *  as phones show). */
 export function mb(bytes) {
   return (Number(bytes) / 1048576).toFixed(1)
 }
@@ -108,9 +113,29 @@ export function limitMb() {
   return String(Math.floor(MAX_CLIP_BYTES / 1e6))
 }
 
-/** Clips the gate refuses, before anything is sent. Exactly MAX_CLIP_BYTES passes. */
-export function oversizeClips(files) {
-  return files.filter((f) => f.size > MAX_CLIP_BYTES)
+/** Clips the gate refuses, before anything is sent. Exactly the limit passes. */
+export function oversizeClips(files, max = MAX_CLIP_BYTES) {
+  return files.filter((f) => f.size > max)
+}
+
+/** The upload_events fields for one refused clip, shared by both upload surfaces. The
+ *  message uses the same decimal MB the owner sees, plus exact bytes, so a screenshot and
+ *  the row agree. */
+export function oversizeFailureFields(f, picked) {
+  return {
+    clip_index: picked.indexOf(f) + 1,
+    clip_count: picked.length,
+    file_size_bytes: f.size,
+    mime_type: f.type || null,
+    error_code: 'oversize',
+    error_message: `clip is ${displayMb(f.size)} MB (${f.size} B), limit is ${limitMb()} MB (${MAX_CLIP_BYTES} B)`,
+    payload: {
+      name_hash: nameHash(f.name),
+      limit_bytes: MAX_CLIP_BYTES,
+      over_by_bytes: f.size - MAX_CLIP_BYTES,
+      blocked_client_side: true,
+    },
+  }
 }
 
 /** Customer-facing text. Names the file, its size and the limit in MB, and the two things an

@@ -4,7 +4,7 @@ import { render, cleanup, screen, fireEvent, act } from '@testing-library/react'
 import React from 'react'
 import {
   BUCKET_LIMIT_BYTES, PROJECT_LIMIT_BYTES, MAX_CLIP_BYTES,
-  oversizeClips, oversizeMessage, limitMb, displayMb,
+  oversizeClips, oversizeMessage, limitMb, displayMb, effectiveLimit, oversizeFailureFields,
 } from '../src/lib/uploadTelemetry'
 
 /**
@@ -20,10 +20,11 @@ import {
  */
 
 const uploads = []
+const inserts = []
 vi.mock('../src/lib/supabase', () => ({
   getSessionOnce: async () => ({ data: { session: { access_token: 'a.e30.s' } } }),
   supabase: {
-    from: () => ({ insert: async () => ({ error: null }) }),
+    from: (table) => ({ insert: async (row) => { inserts.push({ table, row }); return { error: null } } }),
     storage: {
       from: (bucket) => ({
         upload: async (path, file) => { uploads.push({ bucket, path, size: file.size }); return { error: null } },
@@ -55,6 +56,13 @@ describe('limits', () => {
     expect(oversizeClips([clip('a.mov', MAX_CLIP_BYTES + 1)])).toHaveLength(1)
   })
 
+  it('the effective limit is the SMALLER one, whichever it is (the 09-03 case: project below bucket)', () => {
+    expect(effectiveLimit(314572800, 524288000)).toBe(314572800)
+    expect(effectiveLimit(314572800, 50e6)).toBe(50e6)
+    // With a 50 MB project limit, Katie's 119396805 B clip is refused before upload.
+    expect(oversizeClips([clip('katie.mov', 119396805)], effectiveLimit(314572800, 50e6))).toHaveLength(1)
+  })
+
   it('Katie\'s 09-03 clip (119396805 B) passes today: the bucket, not the project, binds', () => {
     expect(oversizeClips([clip('katie.mov', 119396805)])).toHaveLength(0)
   })
@@ -83,12 +91,21 @@ describe('owner-facing message', () => {
   it('a just-over clip reads as over in the message itself (314.6 MB vs 314 MB)', () => {
     expect(displayMb(MAX_CLIP_BYTES + 1)).toBe('314.6')
   })
+
+  it('the telemetry row uses the same MB as the owner, plus exact bytes', () => {
+    const f = clip('x.mov', MAX_CLIP_BYTES + 1)
+    const fields = oversizeFailureFields(f, [f])
+    expect(fields.error_message).toBe('clip is 314.6 MB (314572801 B), limit is 314 MB (314572800 B)')
+    expect(fields).toMatchObject({ error_code: 'oversize', clip_index: 1, clip_count: 1, file_size_bytes: MAX_CLIP_BYTES + 1 })
+    expect(fields.payload).toMatchObject({ limit_bytes: MAX_CLIP_BYTES, over_by_bytes: 1, blocked_client_side: true })
+  })
 })
 
 describe('NewReelModal controls', () => {
   let NewReelModal
   beforeEach(async () => {
     uploads.length = 0
+    inserts.length = 0
     globalThis.fetch = vi.fn(async () => ({ ok: true, status: 202, json: async () => ({}) }))
     ;({ default: NewReelModal } = await import('../src/components/NewReelModal.jsx'))
   })
@@ -109,25 +126,37 @@ describe('NewReelModal controls', () => {
     expect(create.disabled).toBe(true)
     await act(async () => { fireEvent.click(create) })
     expect(uploads).toHaveLength(0)
+    // The refusal is recorded: one upload_events failure row for the clip, at selection.
+    await act(async () => {})
+    const rows = inserts.filter((i) => i.table === 'upload_events').map((i) => i.row)
+    const refusal = rows.find((r) => r.error_code === 'oversize')
+    expect(refusal).toBeTruthy()
+    expect(refusal.payload).toMatchObject({ limit_bytes: MAX_CLIP_BYTES, over_by_bytes: 1, blocked_client_side: true, surface: 'NewReelModal' })
+    expect(rows.some((r) => r.stage === 'transmit_started')).toBe(false)
   })
 
-  it('JUST UNDER (exactly the limit): no error, and Create uploads it to reel-sources', async () => {
+  for (const [label, size] of [['JUST UNDER (one byte under)', MAX_CLIP_BYTES - 1], ['AT THE LIMIT (exactly)', MAX_CLIP_BYTES]]) {
+  it(label + ': no error, and Create uploads it to reel-sources', async () => {
     const { container } = render(<NewReelModal studioId={STUDIO} primary="#6d5dfc" onClose={() => {}} onCreated={() => {}} />)
-    pick(container, [clip('just-under.mov', MAX_CLIP_BYTES)])
+    pick(container, [clip('just-under.mov', size)])
     expect(screen.queryByText(/Each clip can be up to/)).toBeNull()
     const create = screen.getByRole('button', { name: /Create reel/ })
     expect(create.disabled).toBe(false)
     await act(async () => { fireEvent.click(create) })
     expect(uploads).toHaveLength(1)
-    expect(uploads[0]).toMatchObject({ bucket: 'reel-sources', size: MAX_CLIP_BYTES })
+    expect(uploads[0]).toMatchObject({ bucket: 'reel-sources', size })
     expect(uploads[0].path.startsWith(STUDIO + '/')).toBe(true)
   })
+  }
 
   it('a mix: one over refuses the whole pick (nothing uploads), and names only the over clip', async () => {
     const { container } = render(<NewReelModal studioId={STUDIO} primary="#6d5dfc" onClose={() => {}} onCreated={() => {}} />)
     pick(container, [clip('ok.mov', 10e6), clip('big.mov', MAX_CLIP_BYTES + 5e6)])
     expect(screen.getByText(/“big\.mov”/)).toBeTruthy()
     expect(screen.queryByText(/“ok\.mov”/)).toBeNull()
+    const create = screen.getByRole('button', { name: /Create reel/ })
+    expect(create.disabled).toBe(true)
+    await act(async () => { fireEvent.click(create) })
     expect(uploads).toHaveLength(0)
   })
 })

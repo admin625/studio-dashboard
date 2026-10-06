@@ -19,7 +19,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
-  MAX_CLIP_BYTES, mb, oversizeMessage, oversizeClips,
+  oversizeMessage, oversizeClips, oversizeFailureFields,
 } from '../lib/uploadTelemetry'
 import { Loader2, X, Sparkles, UploadCloud } from 'lucide-react'
 
@@ -90,30 +90,20 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
     progressRef.current = { reel_id: null, clip_index: null, clip_count: picked.length, storage_path: null, t0: Date.now() }
 
     // Client-side size gate, BEFORE transmit_started. Measured 2026-09-02: a 482 MB clip
-    // transmitted for 64.4 SECONDS on mobile before the server returned 400. The bucket limit
-    // stays authoritative server-side — this only stops the customer paying for the upload
-    // twice over in time and cellular data to learn something we already know.
+    // transmitted for 64.4 SECONDS on mobile before the server returned 400. Storage (the
+    // smaller of the bucket and project limits, see MAX_CLIP_BYTES) stays authoritative —
+    // this only stops the customer paying for the upload to learn something we already know.
     const over = oversizeClips(picked)
     if (over.length) {
       setFiles([])
       setError(oversizeMessage(over))
       over.forEach((f) => {
+        const fields = oversizeFailureFields(f, picked)
         void emitFailure(attemptId, STAGE.FILE_SELECTED, {
+          ...fields,
           studio_id: studioId || null,
-          clip_index: picked.indexOf(f) + 1,
-          clip_count: picked.length,
-          file_size_bytes: f.size,
-          mime_type: f.type || null,
           storage_bucket: BUCKET,
-          error_code: 'oversize',
-          error_message: `clip is ${mb(f.size)} MB, limit is ${mb(MAX_CLIP_BYTES)} MB`,
-          payload: {
-            surface: SURFACE,
-            name_hash: nameHash(f.name),
-            limit_bytes: MAX_CLIP_BYTES,
-            over_by_bytes: f.size - MAX_CLIP_BYTES,
-            blocked_client_side: true,
-          },
+          payload: { ...fields.payload, surface: SURFACE },
         })
       })
       return
