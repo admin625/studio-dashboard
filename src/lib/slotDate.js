@@ -65,6 +65,44 @@ export function quarterStartToShow(quarter, today) {
   return today < qs ? qs : null
 }
 
+const YMD = /^\d{4}-\d{2}-\d{2}$/
+
+/** YYYY-MM-DD plus n days, in UTC (dates here are calendar days, never instants). */
+function addDaysYmd(ymd, n) {
+  const d = new Date(ymd + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Empty-weeks line A (Mac 2026-10-06): the week to name in "Your next planned week is …", or null.
+ * Only on the week the app LANDED on by itself, and only when that week starts after today: the
+ * server lands on the first week with slots that hasn't finished, so a landing that starts after
+ * today means this week has nothing planned. A week the owner paged to is never "next" by this
+ * rule (paging forward to any future week would otherwise claim it). Callers hide it while the
+ * "Your quarter starts …" line shows, so the two never stack.
+ */
+export function nextPlannedWeekToShow(week, landedWeekStart, today) {
+  const ws = week && week.week_start
+  if (!ws || !YMD.test(String(ws)) || !YMD.test(String(today || ''))) return null
+  if (ws !== landedWeekStart) return null
+  return ws > today ? ws : null
+}
+
+/**
+ * Empty-weeks line C (Mac 2026-10-06): true when the plan has run out. The viewed week has
+ * finished AND it is the studio's last week (no next week at all). A planned next quarter has
+ * weeks of its own, so it gives this week a next_week_start and the line can't claim "not
+ * planned" wrongly. App-only, so one case is missed by design: a landing on the last week WITH
+ * slots when empty weeks follow it shows no line (the owner sees it on reaching the last week).
+ */
+export function planHasEnded(week, nextWeekStart, today) {
+  const ws = week && week.week_start
+  if (!ws || !YMD.test(String(ws)) || !YMD.test(String(today || ''))) return false
+  if (nextWeekStart) return false
+  return addDaysYmd(ws, 7) <= today
+}
+
 /** "October 5" — used for week headings, where the weekday is noise. */
 export function fmtSlotMonthDay(ymd) {
   if (!ymd) return ''
