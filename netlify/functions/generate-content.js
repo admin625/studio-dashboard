@@ -408,7 +408,8 @@ function openTrace(event) {
 
   // Resolves { ok, status, touched }. The body read sits inside the same timeout as the request.
   const write = (method, query, row, ms) => timed(ms, async (signal) => {
-    const r = await fetch(supabaseUrl + '/rest/v1/generate_proxy_calls' + query, {
+    // THROWAWAY (Mac 2026-10-06): forces the trace write to fail so the alert path fires. Never merge.
+    const r = await fetch(supabaseUrl + '/rest/v1/generate_proxy_calls_does_not_exist' + query, {
       method,
       headers: {
         apikey: serviceKey,
