@@ -19,7 +19,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
-  MAX_CLIP_BYTES, mb, oversizeMessage,
+  MAX_CLIP_BYTES, mb, oversizeMessage, oversizeClips,
 } from '../lib/uploadTelemetry'
 import { Loader2, X, Sparkles, UploadCloud } from 'lucide-react'
 
@@ -93,7 +93,7 @@ export default function NewReelModal({ studioId, primary, onClose, onCreated }) 
     // transmitted for 64.4 SECONDS on mobile before the server returned 400. The bucket limit
     // stays authoritative server-side — this only stops the customer paying for the upload
     // twice over in time and cellular data to learn something we already know.
-    const over = picked.filter((f) => f.size > MAX_CLIP_BYTES)
+    const over = oversizeClips(picked)
     if (over.length) {
       setFiles([])
       setError(oversizeMessage(over))

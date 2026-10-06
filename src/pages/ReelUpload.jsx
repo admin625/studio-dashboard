@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
-  MAX_CLIP_BYTES, mb, oversizeMessage,
+  MAX_CLIP_BYTES, mb, oversizeMessage, oversizeClips,
 } from '../lib/uploadTelemetry'
 
 /**
@@ -181,7 +181,7 @@ export default function ReelUpload() {
 
     // Client-side size gate, BEFORE transmit_started. See MAX_CLIP_BYTES: the server stays
     // authoritative, this only stops a 64-second cellular upload that ends in a 400.
-    const over = picked.filter((f) => f.size > MAX_CLIP_BYTES)
+    const over = oversizeClips(picked)
     if (over.length) {
       setRows([])
       setPickError(oversizeMessage(over))
