@@ -130,12 +130,16 @@ async function handle(event, trace) {
   let role;
   try {
     // One round of parallel reads. The clients read depends only on body.client_id, so it rides
-    // along rather than adding a serial round trip ahead of the 25s generator window.
-    const [saRes, siRes, cRes] = await Promise.all([
+    // along rather than adding a serial round trip ahead of the 25s generator window. The slot read
+    // (C5) only decides whether slot_id is TRUSTED enough to trace; it never refuses a call.
+    const [saRes, siRes, cRes, slotRes] = await Promise.all([
       rest('studio_accounts?select=id,owner_email&id=eq.' + sid),
       rest('studio_instructors?select=instructor_email&status=eq.active&studio_id=eq.' + sid),
       body.client_id != null
         ? rest('clients?select=id,studio_id,email&id=eq.' + encodeURIComponent(body.client_id))
+        : null,
+      isUuid(body.slot_id)
+        ? rest('calendar_slots?select=id,studio_id&id=eq.' + encodeURIComponent(body.slot_id.toLowerCase())).catch(() => null)
         : null,
     ]);
     if (!saRes.ok || !siRes.ok || (cRes && !cRes.ok)) {
@@ -173,6 +177,17 @@ async function handle(event, trace) {
         return refuse(trace, 403, 'client_not_caller', { error: 'You do not have access to that client.' });
       }
     }
+
+    // C5 ruling (Mac 2026-10-06): only VERIFIED ids reach the trace. Membership in body.studio_id
+    // is proven above, and client_id passed its ownership check. client_request_id is the
+    // verified member's own request label. slot_id is kept only if the caller's token can read
+    // that slot in this studio (owners can; instructors can't, so theirs stays null).
+    trace.set({
+      studio_id: body.studio_id,
+      client_id: body.client_id != null ? body.client_id : null,
+      client_request_id: isUuid(body.client_request_id) ? body.client_request_id.toLowerCase() : null,
+      slot_id: await verifiedSlotId(slotRes, body),
+    });
   } catch (err) {
     console.error('[generate-content] role check failed:', err.message);
     return refuse(trace, 502, 'role_check_failed', { error: RETRY });
@@ -195,6 +210,7 @@ async function handle(event, trace) {
     }
     const refusal = await checkRegenerateOf(rest, body, trace);
     if (refusal) return refusal;
+    trace.set({ regenerate_of: body.regenerate_of });
   } else {
     delete body.regenerate_of;
   }
@@ -203,9 +219,11 @@ async function handle(event, trace) {
   body.user_role = role;
   trace.set({ caller_role: role, posts_requested: requested });
 
-  // C5: the in-flight row must exist before n8n is called. A failed insert never blocks the
-  // generation; the trace raises the alert instead (see openTrace).
-  await trace.opened;
+  // C5: the in-flight row must exist before n8n is called, carrying the verified ids and the
+  // forwarded_at mark, so a call that dies mid-run is still attributable. A failed write never
+  // blocks the generation; the trace raises the alert instead (see openTrace).
+  trace.set({ forwarded_at: new Date().toISOString(), generator_key_sent: Boolean(generatorKey) });
+  await trace.checkpoint();
 
   // Send request to n8n. n8n webhook is responseMode=lastNode, so it holds the connection open
   // until the full pipeline completes (~50-85s with Claude). Past the window we return 202
@@ -221,7 +239,6 @@ async function handle(event, trace) {
   let upstreamLogged = false;
   let n8nStatus = null;
   const forwardedAt = Date.now();
-  trace.set({ forwarded_at: new Date(forwardedAt).toISOString(), generator_key_sent: Boolean(generatorKey) });
 
   try {
     const res = await fetch(webhookUrl, {
@@ -339,9 +356,8 @@ async function checkRegenerateOf(rest, body, trace) {
 // let anyone forge the record this exists to provide. The table grants anon and authenticated
 // nothing. A trace failure never changes what the caller gets: generation still runs and an alert
 // fires instead (Slack, plus a `generate_trace_write_failed` log line in case Slack is down too).
-// The ids are recorded AS SENT, before authentication, so an anonymous caller can put any uuid
-// in them: attribute a row to a studio or request only when caller_role is not null.
-const TRACED_IDS = ['client_request_id', 'studio_id', 'slot_id', 'client_id', 'regenerate_of'];
+// No untrusted ids (Mac 2026-10-06): the entry insert carries none. Each id is set by the handler
+// only once the proxy has verified it, so a call with no session leaves every id null.
 const SMALLINT_MAX = 32767; // generate_proxy_calls.platform_count is a smallint
 const ALERT_THROTTLE_MS = 60000;
 const lastAlertAt = {}; // module scope: shared by invocations in one warm container
@@ -355,16 +371,12 @@ function openTrace(event) {
   let reason = null;
   let alerting = null;
 
-  // Ids as SENT, uuid-shaped only (a refusal must record what was asked for); counts as sent.
-  // Parsed separately from the handler so the row can be written before any check runs.
+  // Counts only at entry (no ids): parsed separately so the row is written before any check runs.
   let sent = null;
   try { sent = JSON.parse(event.body); } catch { /* the handler records it as invalid_json */ }
-  const ids = {};
-  if (sent && typeof sent === 'object' && !Array.isArray(sent)) {
-    for (const k of TRACED_IDS) {
-      if (typeof sent[k] === 'string' && UUID.test(sent[k])) ids[k] = sent[k].toLowerCase();
-    }
-    if (Array.isArray(sent.platforms)) ids.platform_count = Math.min(sent.platforms.length, SMALLINT_MAX);
+  const counts = {};
+  if (sent && typeof sent === 'object' && !Array.isArray(sent) && Array.isArray(sent.platforms)) {
+    counts.platform_count = Math.min(sent.platforms.length, SMALLINT_MAX);
   }
 
   // One Slack post per call at most, and one per stage per ALERT_THROTTLE_MS per warm container,
@@ -380,7 +392,7 @@ function openTrace(event) {
     lastAlertAt[stage] = now;
     const lines = [
       ':rotating_light: *Generate trace write failed* (' + stage + '). The generation was NOT blocked; this call has no complete generate_proxy_calls row.',
-      '*Trace:* ' + (id || 'none') + '  *Request:* ' + (ids.client_request_id || 'n/a') + '  *Studio (as sent):* ' + (ids.studio_id || 'n/a'),
+      '*Trace:* ' + (id || 'none') + '  *Request:* ' + (pending.client_request_id || 'n/a') + '  *Studio:* ' + (pending.studio_id || 'n/a'),
       '*Detail:* ' + Object.entries(detail).map(([k, v]) => k + '=' + v).join(' '),
     ];
     alerting = timed(ALERT_TIMEOUT_MS, (signal) => fetch(webhook, {
@@ -413,6 +425,21 @@ function openTrace(event) {
     return { ok: r.ok, status: r.status, touched };
   });
 
+  // One PATCH, capped at TRACE_CLOSE_TIMEOUT_MS. Exactly one row must come back.
+  const patch = async (stage, row) => {
+    const outcomeTag = row.outcome || 'none';
+    try {
+      const r = await write('PATCH', '?id=eq.' + id + '&select=id', row, TRACE_CLOSE_TIMEOUT_MS);
+      if (!r.ok) {
+        alert(stage, { status: r.status, outcome: outcomeTag });
+      } else if (!Array.isArray(r.touched) || r.touched.length !== 1) {
+        alert(stage, { matched: Array.isArray(r.touched) ? r.touched.length : 'unreadable', outcome: outcomeTag });
+      }
+    } catch (e) {
+      alert(stage, { error: e.name, outcome: outcomeTag });
+    }
+  };
+
   // rowMayExist: a timed-out insert can still commit server-side, so the close PATCH is tried
   // then too. The PATCH's returned row count tells a landed row from one that never did.
   let rowMayExist = false;
@@ -422,7 +449,7 @@ function openTrace(event) {
       return;
     }
     try {
-      const r = await write('POST', '', { id, ...ids }, TRACE_INSERT_TIMEOUT_MS);
+      const r = await write('POST', '', { id, ...counts }, TRACE_INSERT_TIMEOUT_MS);
       if (r.ok) rowMayExist = true;
       else alert('insert', { status: r.status });
     } catch (e) {
@@ -436,6 +463,11 @@ function openTrace(event) {
     opened,
     set(fields) { Object.assign(pending, fields); },
     refused(r) { reason = r; },
+    // Awaited before n8n: the insert, then the verified ids + forwarded_at.
+    async checkpoint() {
+      await opened;
+      if (rowMayExist) await patch('checkpoint', { ...pending, updated_at: new Date().toISOString() });
+    },
     async close(res) {
       await opened;
       if (rowMayExist) {
@@ -449,17 +481,7 @@ function openTrace(event) {
           completed_at: new Date(now).toISOString(),
           updated_at: new Date(now).toISOString(),
         };
-        const outcomeTag = row.outcome || 'none';
-        try {
-          const r = await write('PATCH', '?id=eq.' + id + '&select=id', row, TRACE_CLOSE_TIMEOUT_MS);
-          if (!r.ok) {
-            alert('update', { status: r.status, outcome: outcomeTag });
-          } else if (!Array.isArray(r.touched) || r.touched.length !== 1) {
-            alert('update', { matched: Array.isArray(r.touched) ? r.touched.length : 'unreadable', outcome: outcomeTag });
-          }
-        } catch (e) {
-          alert('update', { error: e.name, outcome: outcomeTag });
-        }
+        await patch('update', row);
       }
       if (alerting) await alerting;
     },
@@ -477,6 +499,24 @@ async function timed(ms, fn) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
   try { return await fn(c.signal); } finally { clearTimeout(t); }
+}
+
+function isUuid(v) {
+  return typeof v === 'string' && UUID.test(v);
+}
+
+// The slot id only if the caller's own token can read that slot and it belongs to body.studio_id.
+// Any failure means "not verified" (null), never a refusal.
+async function verifiedSlotId(slotRes, body) {
+  if (!slotRes || !slotRes.ok) return null;
+  try {
+    const rows = await slotRes.json();
+    const want = body.slot_id.toLowerCase();
+    const slot = Array.isArray(rows) ? rows.find((r) => r && r.id === want) : null;
+    return slot && slot.studio_id === body.studio_id ? want : null;
+  } catch {
+    return null;
+  }
 }
 
 function lower(v) {

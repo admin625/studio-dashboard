@@ -6,13 +6,14 @@
 -- retention. generation_attempts is written by the generator, so anything that ends before n8n
 -- runs is invisible there. This table is written by the proxy itself.
 --
--- Write pattern: the proxy INSERTs the row on entry (in flight: outcome null), awaits that insert
--- before it calls n8n, and PATCHes the outcome before it returns. A row whose outcome stays null
--- IS the signal: the function died (platform timeout, crash) between the two writes.
+-- Write pattern: the proxy INSERTs the row on entry (in flight: outcome null, no ids), PATCHes
+-- the verified ids + forwarded_at just before it calls n8n (both awaited), and PATCHes the
+-- outcome before it returns. A row whose outcome stays null IS the signal: the function died
+-- (platform timeout, crash) before the last write.
 --
--- Counts and ids only. No post text, prompts, voice, email addresses or response bodies. The ids
--- are as the caller SENT them (uuid-shaped only), because a refusal must record what was asked for;
--- studio_id is verified only when caller_role is set.
+-- Counts and ids only. No post text, prompts, voice, email addresses or response bodies.
+-- No untrusted ids (Mac 2026-10-06): every id is null until the proxy has verified it. A call with
+-- no session leaves all of them null; see the column comments for what "verified" means per id.
 --
 -- No foreign keys on purpose: a refused call names ids that may not exist, and the trace must
 -- never fail because of what it is recording.
@@ -25,7 +26,7 @@ create table public.generate_proxy_calls (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  -- ids as sent (uuid-shaped or null)
+  -- ids: null until verified by the proxy
   client_request_id uuid,                      -- joins generation_attempts.client_request_id
   studio_id uuid,
   slot_id uuid,
@@ -81,12 +82,18 @@ revoke all on table public.generate_proxy_calls from public;
 revoke all on table public.generate_proxy_calls from anon, authenticated;
 grant select, insert, update on table public.generate_proxy_calls to service_role;
 
--- The ids are recorded AS SENT, before authentication: an anonymous caller can put any uuid in
--- them. Attribute a row to a studio or request only when caller_role is not null.
 comment on column public.generate_proxy_calls.studio_id is
-  'As sent by the caller. Verified only when caller_role is not null.';
+  'Set only after the caller''s owner/active-instructor membership in it is verified.';
 comment on column public.generate_proxy_calls.client_request_id is
-  'As sent by the caller. Joins generation_attempts.client_request_id; trust only when caller_role is not null.';
+  'The verified member''s own request label, set with studio_id. Joins generation_attempts.client_request_id.';
+comment on column public.generate_proxy_calls.slot_id is
+  'Set only if the caller''s own token can read the slot and it belongs to studio_id (owners only, under RLS).';
+comment on column public.generate_proxy_calls.client_id is
+  'Set only after the client row passed the proxy''s ownership check.';
+comment on column public.generate_proxy_calls.regenerate_of is
+  'Set only after the regenerate gate accepted it.';
+comment on column public.generate_proxy_calls.auth_user_id is
+  'GoTrue user id, set only after the session verified. Null = no verified session.';
 
 -- Retention: none yet (one row per generate tap; low volume). A delete schedule is an open
 -- decision, recorded here so the table is not mistaken for one that is pruned.

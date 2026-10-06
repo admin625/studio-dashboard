@@ -57,12 +57,16 @@ function violates(r) {
   return null
 }
 
-function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example.test', who = owner, instructors = [], clients = [], authStatus = 200, slack = 'ok' } = {}) {
+const FOREIGN_SLOT = 'dddddddd-0000-4000-8000-0000000000ff'
+const SLOTS = [{ id: SLOT, studio_id: STUDIO }, { id: FOREIGN_SLOT, studio_id: OTHER }]
+
+function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example.test', who = owner, instructors = [], clients = [], authStatus = 200, slack = 'ok', slots = SLOTS } = {}) {
   const calls = []
   const logs = []
   const table = new Map()
   const order = []
   const timers = []
+  const snapshots = []
   const fetch = async (url, opts = {}) => {
     calls.push({ url, opts })
     if (url.endsWith('/auth/v1/user')) return { ok: authStatus === 200, status: authStatus, json: async () => ({ id: USER, email: who }) }
@@ -89,9 +93,13 @@ function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example
         return { ok: true, status: 201, headers: new Map() }
       }
       if (opts.method === 'PATCH') {
-        order.push('update')
-        if (trace.updateStatus) return { ok: false, status: trace.updateStatus, headers: new Map() }
-        if (trace.updateThrows) throw new TypeError('fetch failed')
+        // The pre-n8n checkpoint PATCH has no completed_at; the close PATCH does.
+        const closing = 'completed_at' in row
+        order.push(closing ? 'close' : 'checkpoint')
+        snapshots.push({ stage: closing ? 'close' : 'checkpoint', row: { ...row } })
+        if (!closing && trace.checkpointStatus) return { ok: false, status: trace.checkpointStatus }
+        if (closing && trace.updateStatus) return { ok: false, status: trace.updateStatus, headers: new Map() }
+        if (closing && trace.updateThrows) throw new TypeError('fetch failed')
         expect(url).toContain('select=id')
         expect(opts.headers.Prefer).toBe('return=representation')
         const id = param(url, 'id')
@@ -111,6 +119,10 @@ function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example
     if (url.includes('/rest/v1/studio_instructors')) return { ok: true, json: async () => instructors }
     if (url.includes('/rest/v1/clients')) return { ok: true, json: async () => clients.filter((c) => c.id === param(url, 'id')) }
     if (url.includes('/rest/v1/content_deliveries')) return { ok: true, json: async () => [] }
+    // RLS as PostgREST applies it: the caller sees only slots of a studio it owns.
+    if (url.includes('/rest/v1/calendar_slots')) {
+      return { ok: true, json: async () => slots.filter((x) => x.id === param(url, 'id') && x.studio_id === STUDIO && who === owner) }
+    }
     if (url === WEBHOOK) { order.push('n8n'); return upstream(opts) }
     if (url === SLACK) {
       if (slack === 'throws') throw new TypeError('fetch failed')
@@ -132,7 +144,7 @@ function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example
   }
   sandbox.crypto = globalThis.crypto
   vm.runInNewContext(SRC, sandbox)
-  return { handler: sandbox.exports.handler, calls, logs, table, order, timers }
+  return { handler: sandbox.exports.handler, calls, logs, table, order, timers, snapshots }
 }
 
 const event = (body = {}, headers = { authorization: 'Bearer user-jwt' }) => ({
@@ -175,7 +187,7 @@ describe('C5 control 1: a normal call leaves a complete row', () => {
   it('the row exists BEFORE n8n is called, even when the insert is slow', async () => {
     const { handler, order } = load({ upstream: ok, trace: { insertDelay: 30 } })
     await handler(event())
-    expect(order).toEqual(['insert', 'n8n', 'update'])
+    expect(order).toEqual(['insert', 'checkpoint', 'n8n', 'close'])
   })
 
   it('a network failure to n8n closes as n8n_network_error, 502', async () => {
@@ -193,17 +205,22 @@ describe('C5 control 2: a proxy refusal leaves a row with the reason', () => {
     const res = await handler(event({ studio_id: OTHER }))
     expect(res.statusCode).toBe(403)
     expect(calls.some((c) => c.url === WEBHOOK)).toBe(false)
+    // Session verified (auth_user_id kept), membership not: the unverified studio id is NOT stored.
     expect(only(table)).toMatchObject({
-      studio_id: OTHER, outcome: 'refused', refusal_reason: 'not_member', response_status: 403,
+      studio_id: null, client_request_id: null, slot_id: null, auth_user_id: USER,
+      outcome: 'refused', refusal_reason: 'not_member', response_status: 403,
       caller_role: null, forwarded_at: null, n8n_status: null,
     })
   })
 
-  it('no token: refused / no_token / 401, with the ids as sent', async () => {
+  it('no token: refused / no_token / 401, and every id is null (Mac ruling 2026-10-06)', async () => {
     const { handler, table } = load({ upstream: ok })
     const res = await handler(event({}, {}))
     expect(res.statusCode).toBe(401)
-    expect(only(table)).toMatchObject({ client_request_id: REQ, outcome: 'refused', refusal_reason: 'no_token', response_status: 401 })
+    expect(only(table)).toMatchObject({
+      outcome: 'refused', refusal_reason: 'no_token', response_status: 401,
+      client_request_id: null, studio_id: null, slot_id: null, client_id: null, regenerate_of: null, auth_user_id: null,
+    })
   })
 
   it('unparseable body: refused / invalid_json / 400, no ids', async () => {
@@ -271,6 +288,14 @@ describe('C5: a trace write failure never blocks generation, and alerts', () => 
       expect(logs.some((l) => l.text.includes('generate_trace_write_failed'))).toBe(true)
     })
   }
+
+  it('checkpoint 500: alert fires, n8n is still called, response unchanged', async () => {
+    const { handler, calls } = load({ upstream: ok, trace: { checkpointStatus: 500 } })
+    const res = await handler(event())
+    expect(res.statusCode).toBe(200)
+    expect(calls.some((c) => c.url === WEBHOOK)).toBe(true)
+    expect(JSON.parse(slackPosts(calls)[0].opts.body).text).toContain('(checkpoint)')
+  })
 
   it('update 500: alert fires, response unchanged', async () => {
     const { handler, calls } = load({ upstream: ok, trace: { updateStatus: 500 } })
@@ -440,5 +465,57 @@ describe('C5 review follow-ups', () => {
     expect(violates({ outcome: 'refused', refusal_reason: 'x', forwarded_at: 'now' })).toBe('refused_not_forwarded')
     expect(violates({ outcome: 'n8n_network_error', n8n_status: 403 })).toBe('n8n_status_iff_response')
     expect(violates({ outcome: 'n8n_response', n8n_status: 200 })).toBeNull()
+  })
+})
+
+describe('C5 ruling (Mac 2026-10-06): no untrusted ids in the table', () => {
+  it('the entry insert carries no ids at all', async () => {
+    const { handler, calls } = load({ upstream: ok })
+    await handler(event())
+    const insert = calls.find((c) => c.url.includes('generate_proxy_calls') && c.opts.method === 'POST')
+    expect(Object.keys(JSON.parse(insert.opts.body)).sort()).toEqual(['id', 'platform_count'])
+  })
+
+  it('the checkpoint before n8n carries the verified ids and forwarded_at', async () => {
+    const { handler, snapshots } = load({ upstream: ok })
+    await handler(event())
+    const cp = snapshots.find((x) => x.stage === 'checkpoint').row
+    expect(cp).toMatchObject({ studio_id: STUDIO, client_request_id: REQ, slot_id: SLOT, auth_user_id: USER, caller_role: 'studio_owner' })
+    expect(typeof cp.forwarded_at).toBe('string')
+  })
+
+  it('a slot of ANOTHER studio is not stored (the call still runs)', async () => {
+    const { handler, table, calls } = load({ upstream: ok })
+    const res = await handler(event({ slot_id: FOREIGN_SLOT }))
+    expect(res.statusCode).toBe(200)
+    expect(calls.some((c) => c.url === WEBHOOK)).toBe(true)
+    expect(only(table)).toMatchObject({ studio_id: STUDIO, slot_id: null })
+  })
+
+  it('an instructor cannot read slots under RLS, so their slot_id stays null', async () => {
+    const { handler, table } = load({ upstream: ok, who: 'teacher@example.test', instructors: [{ instructor_email: 'teacher@example.test' }] })
+    await handler(event())
+    expect(only(table)).toMatchObject({ caller_role: 'studio_instructor', studio_id: STUDIO, slot_id: null })
+  })
+
+  it('a slot read failure is "not verified", never a refusal', async () => {
+    const { handler, table } = load({ upstream: ok, slots: null })
+    const res = await handler(event())
+    expect(res.statusCode).toBe(200)
+    expect(only(table).slot_id).toBeNull()
+  })
+
+  it('regenerate_of is stored only after the gate passes; a refused regenerate stores none', async () => {
+    const ROW = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    const { handler, table } = load({ upstream: ok })
+    await handler(event({ regenerate_of: ROW }))
+    expect(only(table)).toMatchObject({ refusal_reason: 'regenerate_not_visible', regenerate_of: null, studio_id: STUDIO })
+  })
+
+  it('a client_id that fails its check is not stored', async () => {
+    const ROW = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    const { handler, table } = load({ upstream: ok, clients: [{ id: ROW, studio_id: STUDIO, email: 'someone@example.test' }] })
+    await handler(event({ client_id: ROW }))
+    expect(only(table)).toMatchObject({ refusal_reason: 'client_not_caller', client_id: null, studio_id: null })
   })
 })
