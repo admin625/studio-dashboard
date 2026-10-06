@@ -60,41 +60,95 @@ export const FAIL = 'fail'
 export const APP_VERSION = '2b.1'
 
 /**
- * Per-clip ceiling. SOURCE: the `reel-sources` bucket's `file_size_limit`, 314572800 B
- * (300 MiB). PREREQUISITE: the Supabase PROJECT-LEVEL global file size limit must be at
- * least this value, because the effective ceiling is min(bucket, global) and the global wins.
+ * The two storage limits a reel clip must clear. Storage enforces min(bucket, project), so
+ * the gate is that minimum, and BOTH inputs are written down so neither can be forgotten.
  *
- * ⚠ THIS CONSTANT WAS WRONG IN PRACTICE BEFORE THE GLOBAL WAS RAISED, AND THE GATE STILL
- * PASSED. On 2026-09-03 a 113.9 MB clip cleared this check, uploaded for 559.7 SECONDS on an
- * iPhone, and was then rejected by storage — because the global limit was bracketed by
- * evidence between 43 MB and 113.9 MB while this number said 300. The gate did exactly what
- * it was built to do and was useless, because it was pointed at the wrong constraint. A limit
- * that is not the binding one is not a limit.
+ * Measured 2026-10-06 (read-only):
+ *   BUCKET:  storage.buckets 'reel-sources'.file_size_limit = 314572800 B (300 MiB).
+ *   PROJECT: Management API GET /v1/projects/fidhmvuurygpknhshpml/config/storage
+ *            fileSizeLimit = 524288000 B (500 MiB). Org plan = pro (Free caps this at 50 MB).
+ * So today the BUCKET binds. If either value changes in Supabase, change it here too; a
+ * stale number here is invisible until a customer waits minutes for a rejection (below).
+ */
+export const BUCKET_LIMIT_BYTES = 314572800
+export const PROJECT_LIMIT_BYTES = 524288000
+
+/** The ceiling storage actually enforces: the smaller of the two limits. */
+export function effectiveLimit(bucketBytes, projectBytes) {
+  return Math.min(bucketBytes, projectBytes)
+}
+
+/**
+ * Per-clip ceiling = effectiveLimit(BUCKET_LIMIT_BYTES, PROJECT_LIMIT_BYTES).
  *
- * So: if the global is ever lowered below 300 MB again, this number silently stops meaning
- * anything and the only symptom is a customer waiting nine minutes for a failure.
+ * ⚠ A BUCKET-ONLY GATE WAS WRONG IN PRACTICE, AND IT STILL PASSED. On 2026-09-03 a
+ * 119396805 B (119.4 MB) clip cleared a gate that knew only the 300 MiB bucket limit,
+ * uploaded for 559.7 SECONDS on an iPhone, and was then rejected by storage, because the
+ * project limit at the time was lower (bracketed by evidence between ~45 MB and 119.4 MB).
+ * A limit that is not the binding one is not a limit.
+ *
+ * The remaining risk is drift: if either Supabase value is lowered without updating
+ * BUCKET_LIMIT_BYTES / PROJECT_LIMIT_BYTES here, the gate silently stops being the binding
+ * limit, and the only symptom is a customer waiting minutes for a failure.
  *
  * THE SERVER REMAINS AUTHORITATIVE either way. This constant ships in a public bundle and a
  * determined caller ignores it. Its job is to save the customer the upload, not to enforce.
  */
-export const MAX_CLIP_BYTES = 314572800
+export const MAX_CLIP_BYTES = effectiveLimit(BUCKET_LIMIT_BYTES, PROJECT_LIMIT_BYTES)
 
-/** Bytes to MiB, one decimal. Matches how the storage limit is expressed. */
+/** Bytes to MiB, one decimal, for telemetry. Owner-facing text uses displayMb() (decimal MB,
+ *  as phones show). */
 export function mb(bytes) {
   return (Number(bytes) / 1048576).toFixed(1)
 }
 
-/** Customer-facing text. Names the actual file and both numbers, because "file too large"
- *  without the limit is an error message that cannot be acted on. */
-export function oversizeMessage(files) {
-  const limit = mb(MAX_CLIP_BYTES)
-  if (files.length === 1) {
-    return `“${files[0].name}” is ${mb(files[0].size)} MB. The limit is ${limit} MB per clip — ` +
-      'please trim it or pick a shorter clip.'
+/** Bytes to decimal MB (10^6), one decimal: the number the owner's phone shows for the file. */
+export function displayMb(bytes) {
+  return (Number(bytes) / 1e6).toFixed(1)
+}
+
+/** The limit as the owner sees it, in whole decimal MB rounded DOWN, so the app never names
+ *  a size the server would reject. 314572800 B -> "314". */
+export function limitMb() {
+  return String(Math.floor(MAX_CLIP_BYTES / 1e6))
+}
+
+/** Clips the gate refuses, before anything is sent. Exactly the limit passes. */
+export function oversizeClips(files, max = MAX_CLIP_BYTES) {
+  return files.filter((f) => f.size > max)
+}
+
+/** The upload_events fields for one refused clip, shared by both upload surfaces. The
+ *  message uses the same decimal MB the owner sees, plus exact bytes, so a screenshot and
+ *  the row agree. */
+export function oversizeFailureFields(f, picked) {
+  return {
+    clip_index: picked.indexOf(f) + 1,
+    clip_count: picked.length,
+    file_size_bytes: f.size,
+    mime_type: f.type || null,
+    error_code: 'oversize',
+    error_message: `clip is ${displayMb(f.size)} MB (${f.size} B), limit is ${limitMb()} MB (${MAX_CLIP_BYTES} B)`,
+    payload: {
+      name_hash: nameHash(f.name),
+      limit_bytes: MAX_CLIP_BYTES,
+      over_by_bytes: f.size - MAX_CLIP_BYTES,
+      blocked_client_side: true,
+    },
   }
-  const names = files.map((f) => `“${f.name}” (${mb(f.size)} MB)`).join(', ')
-  return `${files.length} clips are over the ${limit} MB per-clip limit: ${names}. ` +
-    'Please trim them or pick shorter clips.'
+}
+
+/** Customer-facing text. Names the file, its size and the limit in MB, and the two things an
+ *  owner can actually do about it: trim the clip, or export it at a lower quality. */
+export function oversizeMessage(files) {
+  const limit = limitMb()
+  const fix = 'Trim it, or export it at a lower quality (for example 1080p instead of 4K), then add it again.'
+  if (files.length === 1) {
+    return `“${files[0].name}” is ${displayMb(files[0].size)} MB. Each clip can be up to ${limit} MB. ${fix}`
+  }
+  const names = files.map((f) => `“${f.name}” (${displayMb(f.size)} MB)`).join(', ')
+  return `${files.length} clips are over the ${limit} MB limit per clip: ${names}. ` +
+    'Trim them, or export them at a lower quality (for example 1080p instead of 4K), then add them again.'
 }
 
 /** Stamped at FIRST FILE SELECT, not at submit. An attempt that is abandoned before submit
