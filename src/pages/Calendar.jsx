@@ -58,8 +58,9 @@ export default function Calendar() {
   const [weekData, setWeekData] = useState(null)
   const [quarterData, setQuarterData] = useState(null)
   const [weekStart, setWeekStart] = useState(null)
-  // The week the app chose by itself (a load with no week requested). Line A names it only there.
-  const [landedWeek, setLandedWeek] = useState(null)
+  // The week the app chose by itself (a load with no week requested), with the studio it was for,
+  // so a different studio never inherits it. Line A names that week only.
+  const [landed, setLanded] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [openSlot, setOpenSlot] = useState(null)
@@ -90,14 +91,14 @@ export default function Calendar() {
       setWeekData(d)
       if (!d.empty) {
         setWeekStart(d.week.week_start)
-        if (!ws) setLandedWeek(d.week.week_start)
+        if (!ws) setLanded({ studioId: app.resolvedStudioId, week: d.week.week_start })
       }
     } catch (e) {
       setError(e.message === 'SESSION'
         ? 'Your session has expired. Reload the page and sign in again.'
         : "We couldn't load your calendar. Please try again.")
     } finally { setLoading(false) }
-  }, [call])
+  }, [call, app.resolvedStudioId])
 
   const loadQuarter = useCallback(async () => {
     setLoading(true); setError('')
@@ -179,7 +180,7 @@ export default function Calendar() {
               primary={primary}
               onNav={(ws) => { setWeekStart(ws); loadWeek(ws) }}
               onOpen={setOpenSlot}
-              landedWeek={landedWeek}
+              landedWeek={landed && landed.studioId === app.resolvedStudioId ? landed.week : null}
             />
       )}
 
@@ -266,7 +267,8 @@ export default function Calendar() {
   )
 }
 
-// Exported for the C1 paging test (test/calendarQuarterLine.test.jsx). `today` is injectable there.
+// Exported for the C1 paging test (test/calendarQuarterLine.test.jsx) and the empty-weeks test
+// (test/calendarEmptyWeeksLine.test.jsx). `today` and `landedWeek` are injectable there.
 export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
   const { week, slots, prev_week_start, next_week_start, quarter } = data
   // The server's own "today" (the one it picked the landing week by) wins, so the header and the
@@ -278,7 +280,9 @@ export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
   const quarterStart = quarterStartToShow(quarter, todayYmd)
   // Empty-weeks lines (Mac 2026-10-06). A: the app jumped past an empty current week. C: the plan
   // has run out. Neither shows while the quarter-start line does, so at most one line appears.
-  const nextPlanned = quarterStart ? null : nextPlannedWeekToShow(week, landedWeek, todayYmd)
+  // A also needs slots on the week it names: with every slot superseded the server falls back to
+  // the first week row, which must never be called "your next planned week".
+  const nextPlanned = quarterStart || !slots.length ? null : nextPlannedWeekToShow(week, landedWeek, todayYmd)
   const ended = !quarterStart && !nextPlanned && planHasEnded(week, next_week_start, todayYmd)
   return (
     <>

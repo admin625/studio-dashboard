@@ -80,7 +80,8 @@ function addDaysYmd(ymd, n) {
  * server lands on the first week with slots that hasn't finished, so a landing that starts after
  * today means this week has nothing planned. A week the owner paged to is never "next" by this
  * rule (paging forward to any future week would otherwise claim it). Callers hide it while the
- * "Your quarter starts …" line shows, so the two never stack.
+ * "Your quarter starts …" line shows, so the two never stack, and when the week has no slots
+ * (the server's no-slots fallback lands on the first week row).
  */
 export function nextPlannedWeekToShow(week, landedWeekStart, today) {
   const ws = week && week.week_start

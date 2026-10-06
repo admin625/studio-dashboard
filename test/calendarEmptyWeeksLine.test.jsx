@@ -42,7 +42,7 @@ const lines = (d, landedWeek, today) => {
   return ['quarter-start', 'next-planned-week', 'plan-ended']
     .map((id) => screen.queryByTestId(id)).filter(Boolean).map((el) => el.textContent)
 }
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('rules', () => {
   it('A: only the landed week, only when it starts after today', () => {
@@ -84,6 +84,14 @@ describe('WeekView lines', () => {
     expect(lines(data('2026-12-28', { prev: '2026-12-21', today: '2027-01-06' }), '2026-12-28', '2027-01-06')).toEqual([C])
   })
 
+  it('A is not shown when the landed week has NO slots (server no-slots fallback to the first week row)', () => {
+    expect(lines(data('2026-10-05', { next: '2026-10-12', slots: [], today: '2026-10-02' }), '2026-10-05', '2026-10-02')).toEqual([])
+  })
+
+  it('C is not shown on a finished week that has later (empty) weeks', () => {
+    expect(lines(data('2026-12-21', { prev: '2026-12-14', next: '2026-12-28', today: '2027-01-06' }), null, '2027-01-06')).toEqual([])
+  })
+
   it('C is not shown when a next quarter is planned (its weeks exist)', () => {
     expect(lines(data('2026-12-28', { prev: '2026-12-21', next: '2027-01-04', today: '2027-01-06' }), null, '2027-01-06')).toEqual([])
   })
@@ -105,11 +113,11 @@ describe('Calendar page: the landed week is remembered through real loads', () =
       '2026-10-19': data('2026-10-19', { prev: '2026-10-12', next: '2026-10-26' }),
     }
     const asked = []
-    globalThis.fetch = vi.fn(async (_url, opts) => {
+    vi.stubGlobal('fetch', vi.fn(async (_url, opts) => {
       const b = JSON.parse(opts.body)
       asked.push(b.week_start || null)
       return { ok: true, json: async () => (b.week_start ? weeks[b.week_start] : weeks.landing) }
-    })
+    }))
     await act(async () => { render(<MemoryRouter><Calendar /></MemoryRouter>) })
     expect(asked).toEqual([null])
     expect(screen.getByTestId('next-planned-week').textContent).toBe(A)
@@ -118,8 +126,28 @@ describe('Calendar page: the landed week is remembered through real loads', () =
     expect(asked).toEqual([null, '2026-10-26'])
     expect(screen.queryByTestId('next-planned-week')).toBeNull()
 
+    // Paging back to the landed week shows A again: the claim is about that week and is still true.
     await act(async () => { fireEvent.click(screen.getByLabelText('Previous week')) })
     expect(asked).toEqual([null, '2026-10-26', '2026-10-19'])
     expect(screen.getByTestId('next-planned-week').textContent).toBe(A)
+
+    // A reload of that week (as after a slot action) asks for it by date and keeps the landing.
+    await act(async () => { fireEvent.click(screen.getByLabelText('Next week')) })
+    await act(async () => { fireEvent.click(screen.getByLabelText('Previous week')) })
+    expect(asked.slice(-1)).toEqual(['2026-10-19'])
+    expect(screen.getByTestId('next-planned-week').textContent).toBe(A)
+  })
+
+  it('once today reaches the landed week (server today rolls forward), A disappears on reload', async () => {
+    const rolled = data('2026-10-19', { prev: '2026-10-12', next: '2026-10-26', today: '2026-10-19' })
+    const asked = []
+    vi.stubGlobal('fetch', vi.fn(async (_url, opts) => {
+      const b = JSON.parse(opts.body); asked.push(b.week_start || null)
+      return { ok: true, json: async () => (asked.length === 1 ? data('2026-10-19', { prev: '2026-10-12', next: '2026-10-26' }) : rolled) }
+    }))
+    await act(async () => { render(<MemoryRouter><Calendar /></MemoryRouter>) })
+    expect(screen.getByTestId('next-planned-week')).toBeTruthy()
+    await act(async () => { fireEvent.click(screen.getByLabelText('Next week')) })
+    expect(screen.queryByTestId('next-planned-week')).toBeNull()
   })
 })
