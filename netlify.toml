@@ -17,6 +17,11 @@
 [functions."proxy-webhook"]
   timeout = 26
 
+# C5 (Mac 2026-10-06): declared, not assumed. The proxy's 202 window and its trace close budget
+# (UPSTREAM_DEADLINE_MS 25s) depend on this 26s limit.
+[functions."generate-content"]
+  timeout = 26
+
 # Ten concurrent vision calls. Each is ~3-5s and they overlap, but the default 10s window is not
 # enough headroom for a full batch plus the Supabase read.
 [functions."derive-photo-keywords"]

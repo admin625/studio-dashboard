@@ -6,6 +6,23 @@ exports.handler = async (event) => {
     return respond(405, { error: 'Method not allowed' });
   }
 
+  // C5: every POST gets a durable generate_proxy_calls row. The insert starts now, runs alongside
+  // the checks in handle(), and is awaited before n8n is called; the outcome is written before we return.
+  // An unexpected throw still closes the row (response_status 500, no outcome) and still awaits a
+  // pending alert, rather than leaving a row that reads as "the function died".
+  const trace = openTrace(event);
+  let res = respond(500, { error: 'Content generation failed. Please try again.' });
+  try {
+    res = await handle(event, trace);
+  } catch (err) {
+    console.error('[generate-content] unhandled error:', err && err.name);
+  } finally {
+    await trace.close(res);
+  }
+  return res;
+};
+
+async function handle(event, trace) {
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
   const supabaseUrl = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
@@ -16,7 +33,7 @@ exports.handler = async (event) => {
       !anonKey && 'SUPABASE_ANON_KEY',
     ].filter(Boolean).join(', ');
     console.error('[generate-content] missing env:', missing);
-    return respond(500, { error: 'Content generation is not configured.' });
+    return refuse(trace, 500, 'not_configured', { error: 'Content generation is not configured.' });
   }
 
   // AG-1.8: shared-secret header for the generator webhook. Production-only by design:
@@ -28,11 +45,11 @@ exports.handler = async (event) => {
   try {
     body = JSON.parse(event.body);
   } catch {
-    return respond(400, { error: 'Invalid JSON' });
+    return refuse(trace, 400, 'invalid_json', { error: 'Invalid JSON' });
   }
   // JSON.parse('null') and friends succeed; everything below needs an object.
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return respond(400, { error: 'Invalid JSON' });
+    return refuse(trace, 400, 'invalid_json', { error: 'Invalid JSON' });
   }
 
   // --- authenticate the caller (session only; membership and role are derived below) ---------
@@ -43,7 +60,7 @@ exports.handler = async (event) => {
   const authHeader = event.headers.authorization || event.headers.Authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   if (!token) {
-    return respond(401, { error: 'Sign in again to generate content.' });
+    return refuse(trace, 401, 'no_token', { error: 'Sign in again to generate content.' });
   }
 
   // verifiedEmail is forwarded as GoTrue stored it; callerEmail is the lowercased copy used only
@@ -53,15 +70,16 @@ exports.handler = async (event) => {
     const who = await fetch(supabaseUrl.replace(/\/+$/, '') + '/auth/v1/user', {
       headers: { apikey: anonKey, Authorization: 'Bearer ' + token },
     });
-    if (!who.ok) return respond(401, { error: 'Your session has expired. Reload and sign in again.' });
+    if (!who.ok) return refuse(trace, 401, 'session_rejected', { error: 'Your session has expired. Reload and sign in again.' });
     const user = await who.json();
     verifiedEmail = (user && typeof user.email === 'string') ? user.email.trim() : '';
+    trace.set({ auth_user_id: user && typeof user.id === 'string' && UUID.test(user.id) ? user.id.toLowerCase() : null });
   } catch (err) {
     console.error('[generate-content] session check failed:', err.message);
-    return respond(502, { error: 'Could not verify your session. Please try again.' });
+    return refuse(trace, 502, 'session_check_failed', { error: 'Could not verify your session. Please try again.' });
   }
   if (!verifiedEmail) {
-    return respond(401, { error: 'Your session has expired. Reload and sign in again.' });
+    return refuse(trace, 401, 'session_no_email', { error: 'Your session has expired. Reload and sign in again.' });
   }
   const callerEmail = verifiedEmail.toLowerCase();
 
@@ -75,13 +93,13 @@ exports.handler = async (event) => {
   delete body.user_role;
 
   if (typeof body.studio_id !== 'string' || !UUID.test(body.studio_id)) {
-    return respond(400, { error: 'studio_id is required' });
+    return refuse(trace, 400, 'bad_studio_id', { error: 'studio_id is required' });
   }
   if (body.client_id != null && (typeof body.client_id !== 'string' || !UUID.test(body.client_id))) {
-    return respond(400, { error: 'client_id is invalid' });
+    return refuse(trace, 400, 'bad_client_id', { error: 'client_id is invalid' });
   }
   if (!Array.isArray(body.platforms) || body.platforms.length === 0) {
-    return respond(400, { error: 'At least one platform is required' });
+    return refuse(trace, 400, 'no_platforms', { error: 'At least one platform is required' });
   }
   // HQ 2026-09-29: postCount decides how many posts one run writes (Claude spend), and the trial
   // cap is checked BEFORE the run against posts already used, never against posts requested. So
@@ -91,12 +109,12 @@ exports.handler = async (event) => {
   for (const p of body.platforms) {
     const n = p && typeof p === 'object' && !Array.isArray(p) ? p.postCount : undefined;
     if (!Number.isInteger(n) || n < 1 || n > MAX_POSTS_PER_PLATFORM) {
-      return respond(400, { error: 'Each platform needs a post count from 1 to ' + MAX_POSTS_PER_PLATFORM + '.' });
+      return refuse(trace, 400, 'bad_post_count', { error: 'Each platform needs a post count from 1 to ' + MAX_POSTS_PER_PLATFORM + '.' });
     }
     requested += n;
   }
   if (requested > MAX_POSTS_PER_REQUEST) {
-    return respond(400, { error: 'At most ' + MAX_POSTS_PER_REQUEST + ' posts per request.' });
+    return refuse(trace, 400, 'too_many_posts', { error: 'At most ' + MAX_POSTS_PER_REQUEST + ' posts per request.' });
   }
   // Postgres returns uuids lowercase; compare like with like.
   body.studio_id = body.studio_id.toLowerCase();
@@ -112,17 +130,21 @@ exports.handler = async (event) => {
   let role;
   try {
     // One round of parallel reads. The clients read depends only on body.client_id, so it rides
-    // along rather than adding a serial round trip ahead of the 25s generator window.
-    const [saRes, siRes, cRes] = await Promise.all([
+    // along rather than adding a serial round trip ahead of the 25s generator window. The slot read
+    // (C5) only decides whether slot_id is TRUSTED enough to trace; it never refuses a call.
+    const [saRes, siRes, cRes, slotRes] = await Promise.all([
       rest('studio_accounts?select=id,owner_email&id=eq.' + sid),
       rest('studio_instructors?select=instructor_email&status=eq.active&studio_id=eq.' + sid),
       body.client_id != null
         ? rest('clients?select=id,studio_id,email&id=eq.' + encodeURIComponent(body.client_id))
         : null,
+      isUuid(body.slot_id)
+        ? rest('calendar_slots?select=id,studio_id&id=eq.' + encodeURIComponent(body.slot_id.toLowerCase())).catch(() => null)
+        : null,
     ]);
     if (!saRes.ok || !siRes.ok || (cRes && !cRes.ok)) {
       console.error('[generate-content] role lookup failed:', saRes.status, siRes.status, cRes ? cRes.status : '-');
-      return respond(502, { error: RETRY });
+      return refuse(trace, 502, 'membership_lookup_failed', { error: RETRY });
     }
     const [sa, si, cl] = await Promise.all([saRes.json(), siRes.json(), cRes ? cRes.json() : null]);
     const studio = Array.isArray(sa) ? sa.find((r) => r && r.id === body.studio_id) : null;
@@ -136,7 +158,7 @@ exports.handler = async (event) => {
       role = 'studio_instructor';
     } else {
       console.error('[generate-content] no owner or active-instructor membership on the named studio');
-      return respond(403, { error: 'You do not have access to that studio.' });
+      return refuse(trace, 403, 'not_member', { error: 'You do not have access to that studio.' });
     }
 
     if (body.client_id != null) {
@@ -148,16 +170,27 @@ exports.handler = async (event) => {
       // the owner. The app only ever sends the caller's own row.
       const client = Array.isArray(cl) ? cl.find((r) => r && r.id === body.client_id) : null;
       if (!client || client.studio_id !== body.studio_id) {
-        return respond(400, { error: 'client_id does not belong to that studio' });
+        return refuse(trace, 400, 'client_not_in_studio', { error: 'client_id does not belong to that studio' });
       }
       if (lower(client.email) !== callerEmail) {
         console.error('[generate-content] client_id is not the caller\'s own row');
-        return respond(403, { error: 'You do not have access to that client.' });
+        return refuse(trace, 403, 'client_not_caller', { error: 'You do not have access to that client.' });
       }
     }
+
+    // C5 ruling (Mac 2026-10-06): only VERIFIED ids reach the trace. Membership in body.studio_id
+    // is proven above, and client_id passed its ownership check. client_request_id is the
+    // verified member's own request label. slot_id is kept only if the caller's token can read
+    // that slot in this studio (owners can; instructors can't, so theirs stays null).
+    trace.set({
+      studio_id: body.studio_id,
+      client_id: body.client_id != null ? body.client_id : null,
+      client_request_id: isUuid(body.client_request_id) ? body.client_request_id.toLowerCase() : null,
+      slot_id: await verifiedSlotId(slotRes, body),
+    });
   } catch (err) {
     console.error('[generate-content] role check failed:', err.message);
-    return respond(502, { error: RETRY });
+    return refuse(trace, 502, 'role_check_failed', { error: RETRY });
   }
 
   // --- regenerate lineage (WO-4 N2, HQ 2026-09-29) ---------------------------------------------
@@ -173,25 +206,39 @@ exports.handler = async (event) => {
     // Also closes the instructor-visibility gap: an instructor can't see an owner's regenerate
     // under RLS, so the "already regenerated" read below would miss it.
     if (role !== 'studio_owner') {
-      return respond(403, { error: 'Only the studio owner can regenerate a post.' });
+      return refuse(trace, 403, 'regenerate_not_owner', { error: 'Only the studio owner can regenerate a post.' });
     }
-    const refusal = await checkRegenerateOf(rest, body);
+    const refusal = await checkRegenerateOf(rest, body, trace);
     if (refusal) return refusal;
+    trace.set({ regenerate_of: body.regenerate_of });
   } else {
     delete body.regenerate_of;
   }
 
   body.email = verifiedEmail;
   body.user_role = role;
+  trace.set({ caller_role: role, posts_requested: requested });
 
-  // Send request to n8n with a 25s timeout (Netlify Pro max is 26s).
-  // n8n webhook is responseMode=lastNode, so it holds the connection open
-  // until the full pipeline completes (~35-60s with Claude). If it takes
-  // longer than 25s, we return 202 Accepted — n8n keeps processing and
-  // saves results to content_deliveries. The React app polls for results.
+  // C5: the in-flight row must exist before n8n is called, carrying the verified ids and the
+  // forwarded_at mark, so a call that dies mid-run is still attributable. A failed write never
+  // blocks the generation; the trace raises the alert instead (see openTrace).
+  trace.set({ forwarded_at: new Date().toISOString(), generator_key_sent: Boolean(generatorKey) });
+  await trace.checkpoint();
+
+  // Send request to n8n. n8n webhook is responseMode=lastNode, so it holds the connection open
+  // until the full pipeline completes (~50-85s with Claude). Past the window we return 202
+  // Accepted: n8n keeps processing and saves results to content_deliveries, and the React app
+  // polls for results. The window is measured from the START of this invocation, not from here,
+  // and leaves CLOSE_RESERVE_MS for the trace's outcome write: a function killed at Netlify's 26s
+  // limit before that write would leave every normal run looking like a crash.
+  // MIN_UPSTREAM_WINDOW_MS still gives n8n a chance when the checks above were pathologically slow
+  // (>21s); in that case alone the close can overrun and the row may stay outcome null.
+  const upstreamWindowMs = Math.max(MIN_UPSTREAM_WINDOW_MS, UPSTREAM_DEADLINE_MS - CLOSE_RESERVE_MS - (Date.now() - trace.startedAt));
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), upstreamWindowMs);
   let upstreamLogged = false;
+  let n8nStatus = null;
+  const forwardedAt = Date.now();
 
   try {
     const res = await fetch(webhookUrl, {
@@ -207,6 +254,8 @@ exports.handler = async (event) => {
       redirect: 'error',
     });
     clearTimeout(timeout);
+    n8nStatus = res.status;
+    trace.set({ outcome: 'n8n_response', n8n_status: res.status, n8n_ms: Date.now() - forwardedAt });
     if (!res.ok) {
       // AG-1.8(c), HQ 09-28: surface upstream rejections (e.g. 403 once header auth is on). Status only.
       logUpstreamError({ status: res.status });
@@ -221,16 +270,31 @@ exports.handler = async (event) => {
     if (err.name === 'AbortError') {
       // Timeout — n8n is still processing, will save results when done. This is the NORMAL path
       // (runs take ~50-85s), so it gets its own tag and never counts as an upstream error.
+      trace.set({ outcome: 'n8n_timeout', n8n_ms: Date.now() - forwardedAt });
       console.log(JSON.stringify({ tag: 'generate_upstream_pending' }));
       return respond(202, { success: true, message: 'Content generation in progress. Results will appear in your deliveries.' });
     }
     // A body-read failure after a non-2xx was already logged with its status: log once, not twice.
+    // n8n did answer in that case, so the trace keeps outcome n8n_response with its status.
     if (!upstreamLogged) logUpstreamError({ kind: 'network' });
+    if (n8nStatus == null) trace.set({ outcome: 'n8n_network_error', n8n_ms: Date.now() - forwardedAt });
     console.error('[generate-content] Upstream fetch failed:', err.message);
     // err.message stays server-side only: it can carry the webhook URL. The modal shows `error`.
     return respond(502, { error: 'Upstream request failed' });
   }
-};
+}
+
+// --- timing budget (C5) ------------------------------------------------------------------------
+// The whole invocation must finish inside Netlify's 26s sync-function limit (declared as
+// timeout = 26 in netlify.toml since C5; the live 202s on 10-05 showed it was already >= 25s). The n8n
+// window ends CLOSE_RESERVE_MS before UPSTREAM_DEADLINE_MS, and the reserve covers the worst
+// close: the outcome PATCH timing out AND the Slack alert that follows it. Keep these together.
+const UPSTREAM_DEADLINE_MS = 25000;
+const TRACE_INSERT_TIMEOUT_MS = 3000;
+const TRACE_CLOSE_TIMEOUT_MS = 1200;
+const ALERT_TIMEOUT_MS = 1500;
+const CLOSE_RESERVE_MS = TRACE_CLOSE_TIMEOUT_MS + ALERT_TIMEOUT_MS + 300;
+const MIN_UPSTREAM_WINDOW_MS = 1000;
 
 // Mirrors GenerateModal: a 1-5 post-count select on each of the 5 platforms. Raise these together
 // with the modal, never on their own.
@@ -246,9 +310,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The partial unique index content_deliveries_regenerated_from_uq (WO-4 Phase M, M3; applied on
 // fca-studio 2026-10-01 as migration wo4_m3_content_deliveries_flag_regen) is the backstop for two
 // regenerates racing past the "already regenerated" read: the second fails at the generator's insert.
-async function checkRegenerateOf(rest, body) {
+async function checkRegenerateOf(rest, body, trace) {
   if (typeof body.regenerate_of !== 'string' || !UUID.test(body.regenerate_of)) {
-    return respond(400, { error: 'regenerate_of is invalid' });
+    return refuse(trace, 400, 'regenerate_invalid', { error: 'regenerate_of is invalid' });
   }
   body.regenerate_of = body.regenerate_of.toLowerCase();
   const rid = encodeURIComponent(body.regenerate_of);
@@ -260,29 +324,203 @@ async function checkRegenerateOf(rest, body) {
     ]);
     if (!oRes.ok || !eRes.ok) {
       console.error('[generate-content] regenerate lookup failed:', oRes.status, eRes.status);
-      return respond(502, { error: 'Could not check that post. Please try again.' });
+      return refuse(trace, 502, 'regenerate_lookup_failed', { error: 'Could not check that post. Please try again.' });
     }
     const [o, e] = await Promise.all([oRes.json(), eRes.json()]);
     original = Array.isArray(o) ? o.find((r) => r && r.id === body.regenerate_of) : null;
     existing = Array.isArray(e) && e.length > 0;
   } catch (err) {
     console.error('[generate-content] regenerate lookup failed:', err.message);
-    return respond(502, { error: 'Could not check that post. Please try again.' });
+    return refuse(trace, 502, 'regenerate_lookup_failed', { error: 'Could not check that post. Please try again.' });
   }
   if (!original || original.studio_id !== body.studio_id) {
     console.error('[generate-content] regenerate_of is not a delivery of the named studio');
-    return respond(403, { error: 'You do not have access to that post.' });
+    return refuse(trace, 403, 'regenerate_not_visible', { error: 'You do not have access to that post.' });
   }
   if (original.quality_flag !== true) {
-    return respond(409, { error: 'Only a post marked "Check before posting" can be regenerated.' });
+    return refuse(trace, 409, 'regenerate_not_flagged', { error: 'Only a post marked "Check before posting" can be regenerated.' });
   }
   if (original.regenerated_from != null) {
-    return respond(409, { error: 'This post is already a regenerate, so it can\'t be regenerated again.' });
+    return refuse(trace, 409, 'regenerate_is_regenerate', { error: 'This post is already a regenerate, so it can\'t be regenerated again.' });
   }
   if (existing) {
-    return respond(409, { error: 'This post has already been regenerated.' });
+    return refuse(trace, 409, 'regenerate_already_done', { error: 'This post has already been regenerated.' });
   }
   return null;
+}
+
+// --- C5 trace: one generate_proxy_calls row per call (Mac 2026-10-05) -------------------------
+// Counts and ids only: never post text, prompts, email addresses, response bodies or the key.
+// Written with the service role because the row must exist for callers the proxy refuses before
+// it knows who they are (no token, bad JSON), and because a table the browser could write would
+// let anyone forge the record this exists to provide. The table grants anon and authenticated
+// nothing. A trace failure never changes what the caller gets: generation still runs and an alert
+// fires instead (Slack, plus a `generate_trace_write_failed` log line in case Slack is down too).
+// No untrusted ids (Mac 2026-10-06): the entry insert carries none. Each id is set by the handler
+// only once the proxy has verified it, so a call with no session leaves every id null.
+const SMALLINT_MAX = 32767; // generate_proxy_calls.platform_count is a smallint
+const ALERT_THROTTLE_MS = 60000;
+const lastAlertAt = {}; // module scope: shared by invocations in one warm container
+
+function openTrace(event) {
+  const startedAt = Date.now();
+  const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const id = globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function' ? globalThis.crypto.randomUUID() : null;
+  const pending = {};
+  let reason = null;
+  let alerting = null;
+
+  // Counts only at entry (no ids): parsed separately so the row is written before any check runs.
+  let sent = null;
+  try { sent = JSON.parse(event.body); } catch { /* the handler records it as invalid_json */ }
+  const counts = {};
+  if (sent && typeof sent === 'object' && !Array.isArray(sent) && Array.isArray(sent.platforms)) {
+    counts.platform_count = Math.min(sent.platforms.length, SMALLINT_MAX);
+  }
+
+  // One Slack post per call at most, and one per stage per ALERT_THROTTLE_MS per warm container,
+  // so a broken table or a flood of anonymous POSTs can't bury the channel (or trip Slack's own
+  // rate limit and drop real alerts). Every failure still gets its log line. detail carries
+  // statuses, error names and the outcome, never a body.
+  const alert = (stage, detail) => {
+    const webhook = process.env.SLACK_WEBHOOK_URL;
+    const now = Date.now();
+    const throttled = Boolean(webhook) && !alerting && now - (lastAlertAt[stage] || 0) < ALERT_THROTTLE_MS;
+    console.error(JSON.stringify({ tag: 'generate_trace_write_failed', stage, ...detail, trace_id: id, ...(throttled ? { slack: 'throttled' } : {}) }));
+    if (alerting || !webhook || throttled) return;
+    lastAlertAt[stage] = now;
+    const lines = [
+      ':rotating_light: *Generate trace write failed* (' + stage + '). The generation was NOT blocked; this call has no complete generate_proxy_calls row.',
+      '*Trace:* ' + (id || 'none') + '  *Request:* ' + (pending.client_request_id || 'n/a') + '  *Studio:* ' + (pending.studio_id || 'n/a'),
+      '*Detail:* ' + Object.entries(detail).map(([k, v]) => k + '=' + v).join(' '),
+    ];
+    alerting = timed(ALERT_TIMEOUT_MS, (signal) => fetch(webhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: lines.join('\n') }),
+      signal,
+    })).then((r) => {
+      // Status only: a webhook error body can echo the URL back.
+      if (!r.ok) console.error('[generate-content] trace alert rejected by Slack:', r.status);
+    }).catch((e) => console.error('[generate-content] trace alert failed:', e.name));
+  };
+
+  // Resolves { ok, status, touched }. The body read sits inside the same timeout as the request.
+  const write = (method, query, row, ms) => timed(ms, async (signal) => {
+    const r = await fetch(supabaseUrl + '/rest/v1/generate_proxy_calls' + query, {
+      method,
+      headers: {
+        apikey: serviceKey,
+        Authorization: 'Bearer ' + serviceKey,
+        'Content-Type': 'application/json',
+        // PostgREST answers 2xx to a PATCH that matched nothing, so the PATCH returns the ids it
+        // touched (select=id) and close() counts them. No reliance on Content-Range.
+        Prefer: method === 'POST' ? 'return=minimal' : 'return=representation',
+      },
+      body: JSON.stringify(row),
+      signal,
+    });
+    const touched = r.ok && method === 'PATCH' ? await r.json().catch(() => null) : null;
+    return { ok: r.ok, status: r.status, touched };
+  });
+
+  // One PATCH, capped at TRACE_CLOSE_TIMEOUT_MS. Exactly one row must come back.
+  const patch = async (stage, row) => {
+    const outcomeTag = row.outcome || 'none';
+    try {
+      const r = await write('PATCH', '?id=eq.' + id + '&select=id', row, TRACE_CLOSE_TIMEOUT_MS);
+      if (!r.ok) {
+        alert(stage, { status: r.status, outcome: outcomeTag });
+      } else if (!Array.isArray(r.touched) || r.touched.length !== 1) {
+        alert(stage, { matched: Array.isArray(r.touched) ? r.touched.length : 'unreadable', outcome: outcomeTag });
+      }
+    } catch (e) {
+      alert(stage, { error: e.name, outcome: outcomeTag });
+    }
+  };
+
+  // rowMayExist: a timed-out insert can still commit server-side, so the close PATCH is tried
+  // then too. The PATCH's returned row count tells a landed row from one that never did.
+  let rowMayExist = false;
+  const opened = (async () => {
+    if (!supabaseUrl || !serviceKey || !id) {
+      alert('insert', { reason: 'not_configured' });
+      return;
+    }
+    try {
+      const r = await write('POST', '', { id, ...counts }, TRACE_INSERT_TIMEOUT_MS);
+      if (r.ok) rowMayExist = true;
+      else alert('insert', { status: r.status });
+    } catch (e) {
+      if (e.name === 'AbortError') rowMayExist = true;
+      alert('insert', { error: e.name });
+    }
+  })();
+
+  return {
+    startedAt,
+    opened,
+    set(fields) { Object.assign(pending, fields); },
+    refused(r) { reason = r; },
+    // Awaited before n8n: the insert, then the verified ids + forwarded_at.
+    async checkpoint() {
+      await opened;
+      if (rowMayExist) await patch('checkpoint', { ...pending, updated_at: new Date().toISOString() });
+    },
+    async close(res) {
+      await opened;
+      if (rowMayExist) {
+        const now = Date.now();
+        const row = {
+          ...pending,
+          outcome: reason ? 'refused' : (pending.outcome || null),
+          refusal_reason: reason,
+          response_status: res && Number.isInteger(res.statusCode) ? res.statusCode : null,
+          duration_ms: now - startedAt,
+          completed_at: new Date(now).toISOString(),
+          updated_at: new Date(now).toISOString(),
+        };
+        await patch('update', row);
+      }
+      if (alerting) await alerting;
+    },
+  };
+}
+
+// Records the reason on the trace and builds the same response respond() would.
+function refuse(trace, status, reason, body) {
+  trace.refused(reason);
+  return respond(status, body);
+}
+
+// Runs fn(signal) and aborts it after ms. Rejects with an AbortError on timeout.
+async function timed(ms, fn) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try { return await fn(c.signal); } finally { clearTimeout(t); }
+}
+
+function isUuid(v) {
+  return typeof v === 'string' && UUID.test(v);
+}
+
+// The slot id only if the caller's own token can read that slot and it belongs to body.studio_id.
+// Any failure means "not verified" (null), never a refusal.
+async function verifiedSlotId(slotRes, body) {
+  if (!slotRes || !slotRes.ok) {
+    // Status only, so a broken slot read is visible rather than reading as "slot not owned".
+    console.warn(JSON.stringify({ tag: 'generate_slot_verify', status: slotRes ? slotRes.status : 'fetch_failed' }));
+    return null;
+  }
+  try {
+    const rows = await slotRes.json();
+    const want = body.slot_id.toLowerCase();
+    const slot = Array.isArray(rows) ? rows.find((r) => r && r.id === want) : null;
+    return slot && slot.studio_id === body.studio_id ? want : null;
+  } catch {
+    return null;
+  }
 }
 
 function lower(v) {
