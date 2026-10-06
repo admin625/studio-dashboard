@@ -7,10 +7,18 @@ exports.handler = async (event) => {
   }
 
   // C5: every POST gets a durable generate_proxy_calls row. The insert starts now, runs alongside
-  // the checks below, and is awaited before n8n is called; the outcome is written before we return.
+  // the checks in handle(), and is awaited before n8n is called; the outcome is written before we return.
+  // An unexpected throw still closes the row (response_status 500, no outcome) and still awaits a
+  // pending alert, rather than leaving a row that reads as "the function died".
   const trace = openTrace(event);
-  const res = await handle(event, trace);
-  await trace.close(res);
+  let res = respond(500, { error: 'Content generation failed. Please try again.' });
+  try {
+    res = await handle(event, trace);
+  } catch (err) {
+    console.error('[generate-content] unhandled error:', err && err.name);
+  } finally {
+    await trace.close(res);
+  }
   return res;
 };
 
@@ -205,7 +213,9 @@ async function handle(event, trace) {
   // polls for results. The window is measured from the START of this invocation, not from here,
   // and leaves CLOSE_RESERVE_MS for the trace's outcome write: a function killed at Netlify's 26s
   // limit before that write would leave every normal run looking like a crash.
-  const upstreamWindowMs = Math.max(1000, UPSTREAM_DEADLINE_MS - CLOSE_RESERVE_MS - (Date.now() - trace.startedAt));
+  // MIN_UPSTREAM_WINDOW_MS still gives n8n a chance when the checks above were pathologically slow
+  // (>21s); in that case alone the close can overrun and the row may stay outcome null.
+  const upstreamWindowMs = Math.max(MIN_UPSTREAM_WINDOW_MS, UPSTREAM_DEADLINE_MS - CLOSE_RESERVE_MS - (Date.now() - trace.startedAt));
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), upstreamWindowMs);
   let upstreamLogged = false;
@@ -257,9 +267,17 @@ async function handle(event, trace) {
   }
 }
 
-// The whole invocation must finish inside Netlify's 26s sync-function limit.
+// --- timing budget (C5) ------------------------------------------------------------------------
+// The whole invocation must finish inside Netlify's 26s sync-function limit (the live 202s on
+// 10-05 prove the effective limit is at least 25s; netlify.toml does not declare it). The n8n
+// window ends CLOSE_RESERVE_MS before UPSTREAM_DEADLINE_MS, and the reserve covers the worst
+// close: the outcome PATCH timing out AND the Slack alert that follows it. Keep these together.
 const UPSTREAM_DEADLINE_MS = 25000;
-const CLOSE_RESERVE_MS = 1500;
+const TRACE_INSERT_TIMEOUT_MS = 3000;
+const TRACE_CLOSE_TIMEOUT_MS = 1200;
+const ALERT_TIMEOUT_MS = 1500;
+const CLOSE_RESERVE_MS = TRACE_CLOSE_TIMEOUT_MS + ALERT_TIMEOUT_MS + 300;
+const MIN_UPSTREAM_WINDOW_MS = 1000;
 
 // Mirrors GenerateModal: a 1-5 post-count select on each of the 5 platforms. Raise these together
 // with the modal, never on their own.
@@ -321,10 +339,12 @@ async function checkRegenerateOf(rest, body, trace) {
 // let anyone forge the record this exists to provide. The table grants anon and authenticated
 // nothing. A trace failure never changes what the caller gets: generation still runs and an alert
 // fires instead (Slack, plus a `generate_trace_write_failed` log line in case Slack is down too).
-const TRACE_INSERT_TIMEOUT_MS = 3000;
-const TRACE_CLOSE_TIMEOUT_MS = 1200;
-const ALERT_TIMEOUT_MS = 1500;
+// The ids are recorded AS SENT, before authentication, so an anonymous caller can put any uuid
+// in them: attribute a row to a studio or request only when caller_role is not null.
 const TRACED_IDS = ['client_request_id', 'studio_id', 'slot_id', 'client_id', 'regenerate_of'];
+const SMALLINT_MAX = 32767; // generate_proxy_calls.platform_count is a smallint
+const ALERT_THROTTLE_MS = 60000;
+const lastAlertAt = {}; // module scope: shared by invocations in one warm container
 
 function openTrace(event) {
   const startedAt = Date.now();
@@ -334,7 +354,6 @@ function openTrace(event) {
   const pending = {};
   let reason = null;
   let alerting = null;
-  let insertedOk = false;
 
   // Ids as SENT, uuid-shaped only (a refusal must record what was asked for); counts as sent.
   // Parsed separately from the handler so the row can be written before any check runs.
@@ -345,14 +364,20 @@ function openTrace(event) {
     for (const k of TRACED_IDS) {
       if (typeof sent[k] === 'string' && UUID.test(sent[k])) ids[k] = sent[k].toLowerCase();
     }
-    if (Array.isArray(sent.platforms)) ids.platform_count = Math.min(sent.platforms.length, 32767);
+    if (Array.isArray(sent.platforms)) ids.platform_count = Math.min(sent.platforms.length, SMALLINT_MAX);
   }
 
-  // One alert per call at most. detail carries statuses, error names and the outcome, never a body.
+  // One Slack post per call at most, and one per stage per ALERT_THROTTLE_MS per warm container,
+  // so a broken table or a flood of anonymous POSTs can't bury the channel (or trip Slack's own
+  // rate limit and drop real alerts). Every failure still gets its log line. detail carries
+  // statuses, error names and the outcome, never a body.
   const alert = (stage, detail) => {
-    console.error(JSON.stringify({ tag: 'generate_trace_write_failed', stage, ...detail, trace_id: id }));
     const webhook = process.env.SLACK_WEBHOOK_URL;
-    if (alerting || !webhook) return;
+    const now = Date.now();
+    const throttled = Boolean(webhook) && !alerting && now - (lastAlertAt[stage] || 0) < ALERT_THROTTLE_MS;
+    console.error(JSON.stringify({ tag: 'generate_trace_write_failed', stage, ...detail, trace_id: id, ...(throttled ? { slack: 'throttled' } : {}) }));
+    if (alerting || !webhook || throttled) return;
+    lastAlertAt[stage] = now;
     const lines = [
       ':rotating_light: *Generate trace write failed* (' + stage + '). The generation was NOT blocked; this call has no complete generate_proxy_calls row.',
       '*Trace:* ' + (id || 'none') + '  *Request:* ' + (ids.client_request_id || 'n/a') + '  *Studio (as sent):* ' + (ids.studio_id || 'n/a'),
@@ -369,19 +394,28 @@ function openTrace(event) {
     }).catch((e) => console.error('[generate-content] trace alert failed:', e.name));
   };
 
-  const write = (method, query, row, ms) => timed(ms, (signal) => fetch(supabaseUrl + '/rest/v1/generate_proxy_calls' + query, {
-    method,
-    headers: {
-      apikey: serviceKey,
-      Authorization: 'Bearer ' + serviceKey,
-      'Content-Type': 'application/json',
-      // On the PATCH, count=exact makes a 0-row match visible: PostgREST answers 2xx either way.
-      Prefer: method === 'POST' ? 'return=minimal' : 'return=minimal,count=exact',
-    },
-    body: JSON.stringify(row),
-    signal,
-  }));
+  // Resolves { ok, status, touched }. The body read sits inside the same timeout as the request.
+  const write = (method, query, row, ms) => timed(ms, async (signal) => {
+    const r = await fetch(supabaseUrl + '/rest/v1/generate_proxy_calls' + query, {
+      method,
+      headers: {
+        apikey: serviceKey,
+        Authorization: 'Bearer ' + serviceKey,
+        'Content-Type': 'application/json',
+        // PostgREST answers 2xx to a PATCH that matched nothing, so the PATCH returns the ids it
+        // touched (select=id) and close() counts them. No reliance on Content-Range.
+        Prefer: method === 'POST' ? 'return=minimal' : 'return=representation',
+      },
+      body: JSON.stringify(row),
+      signal,
+    });
+    const touched = r.ok && method === 'PATCH' ? await r.json().catch(() => null) : null;
+    return { ok: r.ok, status: r.status, touched };
+  });
 
+  // rowMayExist: a timed-out insert can still commit server-side, so the close PATCH is tried
+  // then too. The PATCH's returned row count tells a landed row from one that never did.
+  let rowMayExist = false;
   const opened = (async () => {
     if (!supabaseUrl || !serviceKey || !id) {
       alert('insert', { reason: 'not_configured' });
@@ -389,9 +423,10 @@ function openTrace(event) {
     }
     try {
       const r = await write('POST', '', { id, ...ids }, TRACE_INSERT_TIMEOUT_MS);
-      if (r.ok) insertedOk = true;
+      if (r.ok) rowMayExist = true;
       else alert('insert', { status: r.status });
     } catch (e) {
+      if (e.name === 'AbortError') rowMayExist = true;
       alert('insert', { error: e.name });
     }
   })();
@@ -403,7 +438,7 @@ function openTrace(event) {
     refused(r) { reason = r; },
     async close(res) {
       await opened;
-      if (insertedOk) {
+      if (rowMayExist) {
         const now = Date.now();
         const row = {
           ...pending,
@@ -414,13 +449,16 @@ function openTrace(event) {
           completed_at: new Date(now).toISOString(),
           updated_at: new Date(now).toISOString(),
         };
+        const outcomeTag = row.outcome || 'none';
         try {
-          const r = await write('PATCH', '?id=eq.' + id, row, TRACE_CLOSE_TIMEOUT_MS);
-          const range = r.headers && typeof r.headers.get === 'function' ? r.headers.get('content-range') : null;
-          if (!r.ok) alert('update', { status: r.status, outcome: row.outcome || 'none' });
-          else if (range && /\/0$/.test(range)) alert('update', { matched: 0, outcome: row.outcome || 'none' });
+          const r = await write('PATCH', '?id=eq.' + id + '&select=id', row, TRACE_CLOSE_TIMEOUT_MS);
+          if (!r.ok) {
+            alert('update', { status: r.status, outcome: outcomeTag });
+          } else if (!Array.isArray(r.touched) || r.touched.length !== 1) {
+            alert('update', { matched: Array.isArray(r.touched) ? r.touched.length : 'unreadable', outcome: outcomeTag });
+          }
         } catch (e) {
-          alert('update', { error: e.name, outcome: row.outcome || 'none' });
+          alert('update', { error: e.name, outcome: outcomeTag });
         }
       }
       if (alerting) await alerting;

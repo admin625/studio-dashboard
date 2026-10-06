@@ -80,3 +80,16 @@ alter table public.generate_proxy_calls enable row level security;
 revoke all on table public.generate_proxy_calls from public;
 revoke all on table public.generate_proxy_calls from anon, authenticated;
 grant select, insert, update on table public.generate_proxy_calls to service_role;
+
+-- The ids are recorded AS SENT, before authentication: an anonymous caller can put any uuid in
+-- them. Attribute a row to a studio or request only when caller_role is not null.
+comment on column public.generate_proxy_calls.studio_id is
+  'As sent by the caller. Verified only when caller_role is not null.';
+comment on column public.generate_proxy_calls.client_request_id is
+  'As sent by the caller. Joins generation_attempts.client_request_id; trust only when caller_role is not null.';
+
+-- Retention: none yet (one row per generate tap; low volume). A delete schedule is an open
+-- decision, recorded here so the table is not mistaken for one that is pruned.
+-- Rollback order: revert the proxy code FIRST, then `drop table public.generate_proxy_calls;`.
+-- Dropping the table while the C5 code is live makes every call alert (throttled to 1/min per
+-- warm container) and leaves no trace.

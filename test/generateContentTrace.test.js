@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 
@@ -41,14 +41,31 @@ const COLUMNS = new Set([
 
 const param = (url, name) => { const m = url.match(new RegExp('[?&]' + name + '=eq\\.([^&]+)')); return m ? decodeURIComponent(m[1]) : null }
 
-function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example.test' } = {}) {
+// The migration's CHECK constraints, applied to the merged row the way Postgres would. A close
+// that breaks one fails in production (PATCH 400, row stays outcome null), so it fails here too.
+const REASON_RE = /^[a-z0-9_]{1,48}$/
+function violates(r) {
+  const n = (v) => v === undefined || v === null
+  if (!n(r.caller_role) && !['studio_owner', 'studio_instructor'].includes(r.caller_role)) return 'caller_role'
+  if (!n(r.outcome) && !['refused', 'n8n_response', 'n8n_timeout', 'n8n_network_error'].includes(r.outcome)) return 'outcome'
+  if (!n(r.refusal_reason) && !REASON_RE.test(r.refusal_reason)) return 'refusal_reason'
+  for (const k of ['platform_count', 'posts_requested', 'n8n_ms', 'duration_ms']) if (!n(r[k]) && r[k] < 0) return k
+  // A CHECK passes when it evaluates to NULL, so these only bite once outcome is set.
+  if (!n(r.outcome) && (r.outcome === 'refused') !== !n(r.refusal_reason)) return 'reason_iff_refused'
+  if (!n(r.outcome) && (r.outcome === 'n8n_response') !== !n(r.n8n_status)) return 'n8n_status_iff_response'
+  if (r.outcome === 'refused' && !n(r.forwarded_at)) return 'refused_not_forwarded'
+  return null
+}
+
+function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example.test', who = owner, instructors = [], clients = [], authStatus = 200, slack = 'ok' } = {}) {
   const calls = []
   const logs = []
   const table = new Map()
   const order = []
+  const timers = []
   const fetch = async (url, opts = {}) => {
     calls.push({ url, opts })
-    if (url.endsWith('/auth/v1/user')) return { ok: true, json: async () => ({ id: USER, email: owner }) }
+    if (url.endsWith('/auth/v1/user')) return { ok: authStatus === 200, status: authStatus, json: async () => ({ id: USER, email: who }) }
     if (url.includes('/rest/v1/generate_proxy_calls')) {
       expect(opts.headers.Authorization).toBe('Bearer ' + SERVICE)
       const row = JSON.parse(opts.body)
@@ -57,6 +74,14 @@ function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example
         // Logged when the insert COMMITS (after the delay), so the order assertion measures
         // "row exists before n8n", not merely "insert was started before n8n".
         if (trace.insertDelay) await new Promise((r) => setTimeout(r, trace.insertDelay))
+        // Hangs until the proxy's own timeout aborts it. 'committed' means the database took the
+        // row anyway and only the reply was lost.
+        if (trace.insertHangs) {
+          if (trace.insertHangs === 'committed') table.set(row.id, { ...row })
+          return new Promise((_, reject) => opts.signal.addEventListener('abort', () => {
+            const e = new Error('aborted'); e.name = 'AbortError'; reject(e)
+          }))
+        }
         order.push('insert')
         if (trace.insertThrows) throw new TypeError('fetch failed')
         if (trace.insertStatus) return { ok: false, status: trace.insertStatus, headers: new Map() }
@@ -66,18 +91,31 @@ function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example
       if (opts.method === 'PATCH') {
         order.push('update')
         if (trace.updateStatus) return { ok: false, status: trace.updateStatus, headers: new Map() }
+        if (trace.updateThrows) throw new TypeError('fetch failed')
+        expect(url).toContain('select=id')
+        expect(opts.headers.Prefer).toBe('return=representation')
         const id = param(url, 'id')
         const hit = trace.updateMisses ? null : table.get(id)
-        if (hit) Object.assign(hit, row)
-        return { ok: true, status: 204, headers: new Map([['content-range', '*/' + (hit ? 1 : 0)]]) }
+        if (hit) {
+          const bad = violates({ ...hit, ...row })
+          if (bad) return { ok: false, status: 400, json: async () => ({ code: '23514', violated: bad }) }
+          Object.assign(hit, row)
+        }
+        // return=representation with select=id: the touched rows' ids, [] when nothing matched.
+        return { ok: true, status: 200, json: async () => (hit ? [{ id }] : []) }
       }
     }
     if (url.includes('/rest/v1/studio_accounts')) {
       return { ok: true, json: async () => [{ id: STUDIO, owner_email: owner }].filter((s) => s.id === param(url, 'id')) }
     }
-    if (url.includes('/rest/v1/studio_instructors')) return { ok: true, json: async () => [] }
+    if (url.includes('/rest/v1/studio_instructors')) return { ok: true, json: async () => instructors }
+    if (url.includes('/rest/v1/clients')) return { ok: true, json: async () => clients.filter((c) => c.id === param(url, 'id')) }
+    if (url.includes('/rest/v1/content_deliveries')) return { ok: true, json: async () => [] }
     if (url === WEBHOOK) { order.push('n8n'); return upstream(opts) }
-    if (url === SLACK) return { ok: true, status: 200 }
+    if (url === SLACK) {
+      if (slack === 'throws') throw new TypeError('fetch failed')
+      return { ok: slack === 'ok', status: slack === 'ok' ? 200 : 500 }
+    }
     throw new Error('unexpected url ' + url)
   }
   const env = {
@@ -86,13 +124,15 @@ function load({ upstream, trace = {}, env: envExtra = {}, owner = 'owner@example
   }
   for (const k of Object.keys(env)) if (env[k] == null) delete env[k]
   const record = (level) => (...a) => logs.push({ level, text: a.map(String).join(' ') })
+  // Records every timer the proxy schedules, so the n8n window can be asserted.
+  const spySetTimeout = (fn, ms, ...a) => { timers.push(ms); return setTimeout(fn, ms, ...a) }
   const sandbox = {
-    exports: {}, process: { env }, fetch, AbortController, setTimeout, clearTimeout,
+    exports: {}, process: { env }, fetch, AbortController, setTimeout: spySetTimeout, clearTimeout,
     console: { log: record('log'), warn: record('warn'), error: record('error') },
   }
   sandbox.crypto = globalThis.crypto
   vm.runInNewContext(SRC, sandbox)
-  return { handler: sandbox.exports.handler, calls, logs, table, order }
+  return { handler: sandbox.exports.handler, calls, logs, table, order, timers }
 }
 
 const event = (body = {}, headers = { authorization: 'Bearer user-jwt' }) => ({
@@ -125,7 +165,7 @@ describe('C5 control 1: a normal call leaves a complete row', () => {
     for (const k of ['n8n_ms', 'duration_ms']) expect(Number.isInteger(row[k]) && row[k] >= 0).toBe(true)
   })
 
-  it('the 25s abort (the usual path) closes as n8n_timeout with response 202', async () => {
+  it('the upstream-window abort (the usual path) closes as n8n_timeout with response 202', async () => {
     const { handler, table } = load({ upstream: abort })
     const res = await handler(event())
     expect(res.statusCode).toBe(202)
@@ -271,5 +311,134 @@ describe('C5: counts and ids only', () => {
       const surfaces = [JSON.stringify([...table.values()]), ...traceWrites, ...slackPosts(calls).map((c) => c.opts.body), ...logs.map((l) => l.text)]
       for (const s of surfaces) for (const f of forbidden) expect(s.includes(f), f + ' leaked').toBe(false)
     }
+  })
+})
+
+describe('C5 review follow-ups', () => {
+  // Every refusal path a caller can reach, with the reason it must record.
+  const TEACHER = { instructor_email: 'teacher@example.test' }
+  const ROW = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+  const cases = [
+    ['session_rejected', 401, { authStatus: 401 }, {}],
+    ['session_no_email', 401, { who: '' }, {}],
+    ['bad_studio_id', 400, {}, { studio_id: 'nope' }],
+    ['bad_client_id', 400, {}, { client_id: 'nope' }],
+    ['no_platforms', 400, {}, { platforms: [] }],
+    ['too_many_posts', 400, {}, { platforms: Array.from({ length: 6 }, () => ({ name: 'instagram', postCount: 5 })) }],
+    ['client_not_in_studio', 400, { clients: [{ id: ROW, studio_id: OTHER, email: 'owner@example.test' }] }, { client_id: ROW }],
+    ['client_not_caller', 403, { clients: [{ id: ROW, studio_id: STUDIO, email: 'someone@example.test' }] }, { client_id: ROW }],
+    ['regenerate_not_owner', 403, { who: 'teacher@example.test', instructors: [TEACHER] }, { regenerate_of: ROW }],
+    ['regenerate_invalid', 400, {}, { regenerate_of: 'nope' }],
+    ['regenerate_not_visible', 403, {}, { regenerate_of: ROW }],
+    ['not_configured', 500, { env: { N8N_WEBHOOK_URL: null } }, {}],
+  ]
+  for (const [reason, code, opts, body] of cases) {
+    it('refusal ' + reason + ' records its reason and status', async () => {
+      const { handler, table, calls } = load({ upstream: ok, ...opts })
+      const res = await handler(event(body))
+      expect(res.statusCode).toBe(code)
+      expect(calls.some((c) => c.url === WEBHOOK)).toBe(false)
+      expect(only(table)).toMatchObject({ outcome: 'refused', refusal_reason: reason, response_status: code, forwarded_at: null })
+      expect(slackPosts(calls)).toHaveLength(0)
+    })
+  }
+
+  it('every refusal reason in the source satisfies the column CHECK', () => {
+    const reasons = [...SRC.matchAll(/refuse\(trace, \d+, '([^']+)'/g)].map((m) => m[1])
+    expect(reasons.length).toBeGreaterThan(20)
+    for (const r of reasons) expect(REASON_RE.test(r), r).toBe(true)
+  })
+
+  it('an instructor caller is recorded as studio_instructor', async () => {
+    const { handler, table } = load({ upstream: ok, who: 'teacher@example.test', instructors: [TEACHER] })
+    await handler(event())
+    expect(only(table)).toMatchObject({ caller_role: 'studio_instructor', outcome: 'n8n_response' })
+  })
+
+  it('n8n 403 whose body read then fails stays n8n_response/403 (response 502), no alert', async () => {
+    const up = () => ({ ok: false, status: 403, text: async () => { throw new TypeError('terminated') } })
+    const { handler, table, calls } = load({ upstream: up })
+    const res = await handler(event())
+    expect(res.statusCode).toBe(502)
+    expect(only(table)).toMatchObject({ outcome: 'n8n_response', n8n_status: 403, response_status: 502 })
+    expect(slackPosts(calls)).toHaveLength(0)
+  })
+
+  it('the n8n window is 25s minus the close reserve minus time already spent', async () => {
+    const { handler, timers } = load({ upstream: ok, trace: { insertDelay: 40 } })
+    await handler(event())
+    const windowMs = Math.max(...timers.filter((t) => t > 5000))
+    // reserve = PATCH cap 1200 + alert cap 1500 + 300 margin = 3000
+    expect(windowMs).toBeLessThanOrEqual(25000 - 3000 - 40)
+    expect(windowMs).toBeGreaterThan(25000 - 3000 - 1000)
+  })
+
+  it('a hung insert times out at 3s, alerts, and n8n is still called', async () => {
+    vi.useFakeTimers()
+    try {
+      const { handler, calls, table } = load({ upstream: ok, trace: { insertHangs: true } })
+      const p = handler(event())
+      await vi.advanceTimersByTimeAsync(3100)
+      const res = await p
+      expect(res.statusCode).toBe(200)
+      expect(calls.some((c) => c.url === WEBHOOK)).toBe(true)
+      expect(table.size).toBe(0)
+      expect(JSON.parse(slackPosts(calls)[0].opts.body).text).toContain('error=AbortError')
+    } finally { vi.useRealTimers() }
+  })
+
+  it('a timed-out insert that committed anyway still gets its outcome written', async () => {
+    vi.useFakeTimers()
+    try {
+      const { handler, table } = load({ upstream: ok, trace: { insertHangs: 'committed' } })
+      const p = handler(event())
+      await vi.advanceTimersByTimeAsync(3100)
+      await p
+      expect(only(table)).toMatchObject({ outcome: 'n8n_response', n8n_status: 200, response_status: 200 })
+    } finally { vi.useRealTimers() }
+  })
+
+  it('a PATCH that throws alerts; the response is unchanged', async () => {
+    const { handler, calls } = load({ upstream: ok, trace: { updateThrows: true } })
+    const res = await handler(event())
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(slackPosts(calls)[0].opts.body).text).toContain('error=TypeError')
+  })
+
+  for (const slack of ['rejects', 'throws']) {
+    it('Slack ' + slack + ': the call still completes with the same response and a log line', async () => {
+      const { handler, logs } = load({ upstream: ok, trace: { insertStatus: 500 }, slack })
+      const res = await handler(event())
+      expect(res.statusCode).toBe(200)
+      expect(logs.some((l) => l.text.includes('generate_trace_write_failed'))).toBe(true)
+      expect(logs.some((l) => l.text.includes('trace alert'))).toBe(true)
+    })
+  }
+
+  it('alerts are throttled across calls in one warm container; each failure is still logged', async () => {
+    const { handler, calls, logs } = load({ upstream: ok, trace: { insertStatus: 500 } })
+    await handler(event())
+    await handler(event())
+    await handler(event())
+    expect(slackPosts(calls)).toHaveLength(1)
+    const failures = logs.filter((l) => l.text.includes('generate_trace_write_failed')).map((l) => JSON.parse(l.text))
+    expect(failures).toHaveLength(3)
+    expect(failures.filter((f) => f.slack === 'throttled')).toHaveLength(2)
+  })
+
+  it('an unexpected throw still closes the row with response 500', async () => {
+    const { handler, table } = load({ upstream: ok })
+    const ev = event()
+    ev.headers = null // handle() reads event.headers.authorization and throws
+    const res = await handler(ev)
+    expect(res.statusCode).toBe(500)
+    expect(only(table)).toMatchObject({ outcome: null, response_status: 500 })
+    expect(typeof only(table).completed_at).toBe('string')
+  })
+
+  it('the fake enforces the CHECKs it mirrors', () => {
+    expect(violates({ outcome: 'refused', refusal_reason: 'x', forwarded_at: 'now' })).toBe('refused_not_forwarded')
+    expect(violates({ outcome: 'n8n_network_error', n8n_status: 403 })).toBe('n8n_status_iff_response')
+    expect(violates({ outcome: 'n8n_response', n8n_status: 200 })).toBeNull()
   })
 })
