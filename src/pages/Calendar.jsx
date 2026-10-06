@@ -20,7 +20,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { getSessionOnce } from '../lib/supabase'
-import { fmtSlotDay, fmtSlotMonthDay, localYmd, quarterStartToShow } from '../lib/slotDate'
+import { fmtSlotDay, fmtSlotMonthDay, localYmd, quarterStartToShow, nextPlannedWeekToShow, planHasEnded } from '../lib/slotDate'
 import Layout from '../components/Layout'
 import GenerateModal from '../components/GenerateModal'
 import { isDeliveredPhase } from '../lib/generationOutcome'
@@ -58,6 +58,9 @@ export default function Calendar() {
   const [weekData, setWeekData] = useState(null)
   const [quarterData, setQuarterData] = useState(null)
   const [weekStart, setWeekStart] = useState(null)
+  // The week the app chose by itself (a load with no week requested), with the studio it was for,
+  // so a different studio never inherits it. Line A names that week only.
+  const [landed, setLanded] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [openSlot, setOpenSlot] = useState(null)
@@ -86,13 +89,16 @@ export default function Calendar() {
     try {
       const d = await call({ action: 'week', week_start: ws || undefined })
       setWeekData(d)
-      if (!d.empty) setWeekStart(d.week.week_start)
+      if (!d.empty) {
+        setWeekStart(d.week.week_start)
+        if (!ws) setLanded({ studioId: app.resolvedStudioId, week: d.week.week_start })
+      }
     } catch (e) {
       setError(e.message === 'SESSION'
         ? 'Your session has expired. Reload the page and sign in again.'
         : "We couldn't load your calendar. Please try again.")
     } finally { setLoading(false) }
-  }, [call])
+  }, [call, app.resolvedStudioId])
 
   const loadQuarter = useCallback(async () => {
     setLoading(true); setError('')
@@ -174,6 +180,7 @@ export default function Calendar() {
               primary={primary}
               onNav={(ws) => { setWeekStart(ws); loadWeek(ws) }}
               onOpen={setOpenSlot}
+              landedWeek={landed && landed.studioId === app.resolvedStudioId ? landed.week : null}
             />
       )}
 
@@ -260,8 +267,9 @@ export default function Calendar() {
   )
 }
 
-// Exported for the C1 paging test (test/calendarQuarterLine.test.jsx). `today` is injectable there.
-export function WeekView({ data, primary, onNav, onOpen, today }) {
+// Exported for the C1 paging test (test/calendarQuarterLine.test.jsx) and the empty-weeks test
+// (test/calendarEmptyWeeksLine.test.jsx). `today` and `landedWeek` are injectable there.
+export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
   const { week, slots, prev_week_start, next_week_start, quarter } = data
   // The server's own "today" (the one it picked the landing week by) wins, so the header and the
   // landing can't disagree. The device date is only the fallback for an older response.
@@ -270,6 +278,12 @@ export function WeekView({ data, primary, onNav, onOpen, today }) {
   // viewed week's start whenever that week was in the future, so paging forward made every week
   // claim to be the start of the quarter ("Week of December 28 / Your quarter starts December 28").
   const quarterStart = quarterStartToShow(quarter, todayYmd)
+  // Empty-weeks lines (Mac 2026-10-06). A: the app jumped past an empty current week. C: the plan
+  // has run out. Neither shows while the quarter-start line does, so at most one line appears.
+  // A also needs slots on the week it names: with every slot superseded the server falls back to
+  // the first week row, which must never be called "your next planned week".
+  const nextPlanned = quarterStart || !slots.length ? null : nextPlannedWeekToShow(week, landedWeek, todayYmd)
+  const ended = !quarterStart && !nextPlanned && planHasEnded(week, next_week_start, todayYmd)
   return (
     <>
       <div className="flex items-center justify-between mb-4">
@@ -288,6 +302,16 @@ export function WeekView({ data, primary, onNav, onOpen, today }) {
             // quarter's start, so it reads the same on every week.
             <p className="text-[11px] mt-0.5" style={{ color: primary }} data-testid="quarter-start">
               Your quarter starts {fmtWeek(quarterStart)}.
+            </p>
+          )}
+          {nextPlanned && (
+            <p className="text-[11px] mt-0.5" style={{ color: primary }} data-testid="next-planned-week">
+              Nothing is planned for this week. Your next planned week is {fmtWeek(nextPlanned)}.
+            </p>
+          )}
+          {ended && (
+            <p className="text-[11px] mt-0.5" style={{ color: primary }} data-testid="plan-ended">
+              Your planned weeks have ended. Your next quarter isn't planned yet.
             </p>
           )}
         </div>
