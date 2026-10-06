@@ -48,6 +48,7 @@ describe('rules', () => {
   it('A: only the landed week, only when it starts after today', () => {
     expect(nextPlannedWeekToShow({ week_start: '2026-10-19' }, '2026-10-19', '2026-10-06')).toBe('2026-10-19')
     expect(nextPlannedWeekToShow({ week_start: '2026-10-05' }, '2026-10-05', '2026-10-06')).toBeNull() // this week has slots
+    expect(nextPlannedWeekToShow({ week_start: '2026-10-05' }, '2026-10-05', '2026-10-05')).toBeNull() // Monday: it IS this week
     expect(nextPlannedWeekToShow({ week_start: '2026-10-26' }, '2026-10-19', '2026-10-06')).toBeNull() // paged to
     expect(nextPlannedWeekToShow({ week_start: '2026-10-19' }, null, '2026-10-06')).toBeNull()
     expect(nextPlannedWeekToShow({ week_start: '2026-10-19' }, '2026-10-19', '10/6/2026')).toBeNull() // bad date shows nothing
