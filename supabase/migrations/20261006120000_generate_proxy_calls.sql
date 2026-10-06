@@ -46,7 +46,7 @@ create table public.generate_proxy_calls (
   refusal_reason text check (refusal_reason ~ '^[a-z0-9_]{1,48}$'),
   response_status smallint,                    -- what the proxy returned to the browser
   generator_key_sent boolean,                  -- was X-FCA-Proxy-Key attached (never the value)
-  forwarded_at timestamptz,                    -- set only if n8n was called
+  forwarded_at timestamptz,                    -- "about to call n8n": set at the pre-n8n checkpoint
   n8n_status smallint,                         -- n8n's HTTP status, when it answered
   n8n_ms integer check (n8n_ms >= 0),
   duration_ms integer check (duration_ms >= 0),
@@ -85,7 +85,7 @@ grant select, insert, update on table public.generate_proxy_calls to service_rol
 comment on column public.generate_proxy_calls.studio_id is
   'Set only after the caller''s owner/active-instructor membership in it is verified.';
 comment on column public.generate_proxy_calls.client_request_id is
-  'The verified member''s own request label, set with studio_id. Joins generation_attempts.client_request_id.';
+  'The verified member''s own request label, set with studio_id. Not unique: join generation_attempts on client_request_id AND studio_id.';
 comment on column public.generate_proxy_calls.slot_id is
   'Set only if the caller''s own token can read the slot and it belongs to studio_id (owners only, under RLS).';
 comment on column public.generate_proxy_calls.client_id is

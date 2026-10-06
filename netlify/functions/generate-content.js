@@ -285,8 +285,8 @@ async function handle(event, trace) {
 }
 
 // --- timing budget (C5) ------------------------------------------------------------------------
-// The whole invocation must finish inside Netlify's 26s sync-function limit (the live 202s on
-// 10-05 prove the effective limit is at least 25s; netlify.toml does not declare it). The n8n
+// The whole invocation must finish inside Netlify's 26s sync-function limit (declared as
+// timeout = 26 in netlify.toml since C5; the live 202s on 10-05 showed it was already >= 25s). The n8n
 // window ends CLOSE_RESERVE_MS before UPSTREAM_DEADLINE_MS, and the reserve covers the worst
 // close: the outcome PATCH timing out AND the Slack alert that follows it. Keep these together.
 const UPSTREAM_DEADLINE_MS = 25000;
@@ -508,7 +508,11 @@ function isUuid(v) {
 // The slot id only if the caller's own token can read that slot and it belongs to body.studio_id.
 // Any failure means "not verified" (null), never a refusal.
 async function verifiedSlotId(slotRes, body) {
-  if (!slotRes || !slotRes.ok) return null;
+  if (!slotRes || !slotRes.ok) {
+    // Status only, so a broken slot read is visible rather than reading as "slot not owned".
+    console.warn(JSON.stringify({ tag: 'generate_slot_verify', status: slotRes ? slotRes.status : 'fetch_failed' }));
+    return null;
+  }
   try {
     const rows = await slotRes.json();
     const want = body.slot_id.toLowerCase();
