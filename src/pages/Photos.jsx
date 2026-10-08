@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, authedJsonHeaders } from '../lib/supabase'
 import { downscaleToBase64 } from '../lib/image'
 import { useApp } from '../context/AppContext'
+import { useModalOpen } from '../lib/modalOpen'
 import Layout from '../components/Layout'
 import {
   Upload, Image as ImageIcon, Trash2, X, Check,
@@ -23,6 +24,7 @@ export default function Photos() {
   const [dragOver, setDragOver] = useState(false)
   const [deleting, setDeleting] = useState(null)
   const [lightbox, setLightbox] = useState(null)
+  useModalOpen(!!lightbox) // 2c: the help bubble and phone tab bar step aside
   const [filter, setFilter] = useState('all')
   const fileRef = useRef(null)
 

@@ -18,12 +18,17 @@ vi.mock('../src/context/AppContext', () => ({
 vi.mock('../src/hooks/useAuth', () => ({ useAuth: () => ({ signOut: vi.fn() }) }))
 vi.mock('../src/lib/supabase', () => ({ supabase: {}, getSessionOnce: async () => ({ data: { session: null } }) }))
 
+let mmListeners = new Set()
+let phoneNow = false
 const setPhone = (on) => {
+  phoneNow = on
   window.matchMedia = vi.fn().mockImplementation((q) => ({
-    matches: on && /max-width: 639px/.test(q), media: q,
-    addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {},
+    get matches() { return phoneNow && /max-width: 639px/.test(q) }, media: q,
+    addEventListener: (_e, l) => mmListeners.add(l), removeEventListener: (_e, l) => mmListeners.delete(l),
+    addListener: (l) => mmListeners.add(l), removeListener: (l) => mmListeners.delete(l),
   }))
 }
+const rotate = (on) => act(() => { phoneNow = on; mmListeners.forEach((l) => l()) })
 
 const { default: Layout } = await import('../src/components/Layout.jsx')
 const { default: HelpChatWidget } = await import('../src/components/HelpChatWidget.jsx')
@@ -32,7 +37,7 @@ const { useModalOpen, modalOpenCount } = await import('../src/lib/modalOpen.js')
 function FakeModal({ open }) { useModalOpen(open); return null }
 
 const REAL_MM = window.matchMedia
-afterEach(() => { cleanup(); window.matchMedia = REAL_MM })
+afterEach(() => { cleanup(); window.matchMedia = REAL_MM; mmListeners = new Set() })
 
 describe('phone nav: a bottom bar with every tab', () => {
   it('at phone width: all six tabs in the bottom bar, no swipe row, the studio name up top', () => {
@@ -44,7 +49,7 @@ describe('phone nav: a bottom bar with every tab', () => {
     expect(bar.querySelector('[aria-current="page"]').textContent).toBe('Plan')
     expect(screen.queryByTestId('nav-tabs')).toBeNull()
     expect(document.body.textContent).toContain('Mac Test Studio v2')
-    for (const a of bar.querySelectorAll('a')) expect(a.className).toContain('min-h-[56px]')
+    for (const a of bar.querySelectorAll('a')) expect(a.style.minHeight).toBe('56px')
     expect(document.querySelector('main').className).toContain('pb-36')
   })
 
@@ -83,13 +88,53 @@ describe('help bubble', () => {
     expect(screen.queryByTitle('Help')).toBeNull()
   })
 
-  it('on a phone it sits above the bottom bar; on desktop at the old spot', () => {
+  it('it lifts above the bar only while the bar is really there', () => {
     setPhone(true)
-    render(<HelpChatWidget currentPage="x" />)
+    render(<MemoryRouter><Layout><div /></Layout><HelpChatWidget currentPage="x" /></MemoryRouter>)
     expect(screen.getByTitle('Help').style.bottom).toBe('88px')
     cleanup()
-    setPhone(false)
+    // a phone page without Layout (e.g. /reels/upload) has no bar: no lift
     render(<HelpChatWidget currentPage="x" />)
     expect(screen.getByTitle('Help').style.bottom).toBe('24px')
+    cleanup()
+    setPhone(false)
+    render(<MemoryRouter><Layout><div /></Layout><HelpChatWidget currentPage="x" /></MemoryRouter>)
+    expect(screen.getByTitle('Help').style.bottom).toBe('24px')
+  })
+})
+
+describe('2c review: the bar and real modals', () => {
+  it('the bottom bar steps aside while a modal is open (it painted over the slot sheet at z-50)', () => {
+    setPhone(true)
+    const { rerender } = render(<MemoryRouter initialEntries={['/calendar']}><Layout><FakeModal open={false} /></Layout></MemoryRouter>)
+    expect(screen.getByTestId('nav-bottom')).toBeTruthy()
+    rerender(<MemoryRouter initialEntries={['/calendar']}><Layout><FakeModal open /></Layout></MemoryRouter>)
+    expect(screen.queryByTestId('nav-bottom')).toBeNull()
+    rerender(<MemoryRouter initialEntries={['/calendar']}><Layout><FakeModal open={false} /></Layout></MemoryRouter>)
+    expect(screen.getByTestId('nav-bottom')).toBeTruthy()
+  })
+
+  it('rotating across 640px swaps the bottom bar and the top row (the listener is live)', () => {
+    setPhone(false)
+    render(<MemoryRouter><Layout><div /></Layout></MemoryRouter>)
+    expect(screen.getByTestId('nav-tabs')).toBeTruthy()
+    rotate(true)
+    expect(screen.getByTestId('nav-bottom')).toBeTruthy()
+    expect(screen.queryByTestId('nav-tabs')).toBeNull()
+    rotate(false)
+    expect(screen.queryByTestId('nav-bottom')).toBeNull()
+  })
+
+  it('an OPEN chat also steps aside for a modal, and comes back with what was typed', () => {
+    setPhone(false)
+    const { rerender } = render(<><HelpChatWidget currentPage="x" /><FakeModal open={false} /></>)
+    fireEvent.click(screen.getByTitle('Help'))
+    const field = () => document.querySelector('input, textarea')
+    fireEvent.change(field(), { target: { value: 'how do I add an instructor' } })
+    rerender(<><HelpChatWidget currentPage="x" /><FakeModal open /></>)
+    expect(field()).toBeNull()
+    expect(screen.queryByTitle('Help')).toBeNull()
+    rerender(<><HelpChatWidget currentPage="x" /><FakeModal open={false} /></>)
+    expect(field().value).toBe('how do I add an instructor')
   })
 })

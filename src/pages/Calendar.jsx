@@ -520,7 +520,7 @@ export function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate 
           {/* aria-label because the only child is an icon — without it the control is
               nameless to a screen reader, and to any test that asks for it by name. */}
           <button type="button" aria-label="Close" onClick={attemptClose}
-            className="text-slate-500 hover:text-white p-1"><X size={18} /></button>
+            className="text-slate-500 hover:text-white p-3 -m-2 min-w-[44px] min-h-[44px] flex items-center justify-center"><X size={18} /></button>
         </div>
 
         <label className="block text-[11px] text-slate-400 mb-1.5" htmlFor="slot-reason">Why this post?</label>
@@ -632,7 +632,7 @@ export function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate 
 function Action({ icon: Icon, label, onClick, disabled, bg, solid }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40"
+      className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40"
       style={solid
         ? { background: bg, color: '#0A0B0D' }
         : { background: 'rgba(255,255,255,0.05)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)' }}>

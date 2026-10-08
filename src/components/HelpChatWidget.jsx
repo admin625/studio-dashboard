@@ -1,4 +1,5 @@
-import { useAnyModalOpen, usePhoneWidth } from '../lib/modalOpen'
+import { useAnyModalOpen } from '../lib/modalOpen'
+import { usePhoneWidth, PHONE_TAB_BAR_PX, useBottomBarShown } from '../lib/viewport'
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase, getSessionOnce } from '../lib/supabase'
@@ -18,9 +19,10 @@ const SUGGESTIONS = [
 
 export default function HelpChatWidget({ currentPage }) {
   const [open, setOpen] = useState(false)
-  // 2c: a phone has the bottom tab bar (56px + safe area), so the bubble and panel sit above it.
+  // 2c: a phone has the bottom tab bar, so the bubble and panel sit above it (bar + an 8px gap).
+  // No safe-area term: index.html has no viewport-fit=cover, so env(safe-area-inset-bottom) is 0.
   const phone = usePhoneWidth()
-  const lift = phone ? 64 : 0
+  const lift = useBottomBarShown() ? PHONE_TAB_BAR_PX + 8 : 0
   const modalOpen = useAnyModalOpen()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -100,9 +102,10 @@ export default function HelpChatWidget({ currentPage }) {
 
   // Render via portal directly into document.body so position:fixed
   // is never broken by a parent with overflow/transform/will-change.
-  // UX ruling 2c: on a phone the bubble sits above the bottom tab bar, and it steps aside while a
-  // modal is open (it covered the slot sheet's "Skip this one" and the Create form's footer).
-  if (modalOpen && !open) return null
+  // UX ruling 2c: on a phone the bubble sits above the bottom tab bar, and it (and an open panel)
+  // steps aside while a modal is open: it covered the slot sheet's "Skip this one" and the Create
+  // form. Hooks above still run, so the conversation is kept and comes back after.
+  if (modalOpen) return null
   return createPortal(
     <>
       {/* Chat panel */}

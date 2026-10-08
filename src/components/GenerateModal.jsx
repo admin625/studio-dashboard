@@ -510,7 +510,7 @@ export default function GenerateModal({
     <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto py-4 sm:py-10 px-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
       <div
         data-testid="generate-modal"
-        className="w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)] sm:max-h-none"
+        className="w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-sm:max-h-[calc(100vh-2rem)] max-sm:supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]"
         style={{ background: '#0A0B0D', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         {/* Header */}
@@ -555,6 +555,7 @@ export default function GenerateModal({
         )}
 
         {outcome && (
+          <div className="flex-1 min-h-0 overflow-y-auto">
           <OutcomePanel
             outcome={outcome}
             slotDate={slotDate}
@@ -569,6 +570,7 @@ export default function GenerateModal({
             fromSheet={sheet}
             ask={runAskRef.current}
           />
+          </div>
         )}
 
         {/* UX ruling 2a: the Regenerate sheet. What the new version is for, what it will be (the

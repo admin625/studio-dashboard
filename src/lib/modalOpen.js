@@ -28,18 +28,3 @@ export function useModalOpen(open) {
 export function useAnyModalOpen() {
   return useSyncExternalStore(subscribeModalOpen, () => count > 0, () => false)
 }
-
-/** True on a phone-width screen (Tailwind's sm breakpoint is 640px). */
-export function usePhoneWidth() {
-  const q = '(max-width: 639px)'
-  return useSyncExternalStore(
-    (l) => {
-      if (typeof window === 'undefined' || !window.matchMedia) return () => {}
-      const m = window.matchMedia(q)
-      m.addEventListener ? m.addEventListener('change', l) : m.addListener(l)
-      return () => (m.removeEventListener ? m.removeEventListener('change', l) : m.removeListener(l))
-    },
-    () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false),
-    () => false,
-  )
-}

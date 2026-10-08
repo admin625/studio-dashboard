@@ -1164,7 +1164,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
                     {promptExpanded || effectivePrompt.length <= PROMPT_LIMIT ? effectivePrompt : effectivePrompt.slice(0, PROMPT_LIMIT).trimEnd() + '…'}
                     {effectivePrompt.length > PROMPT_LIMIT && (
                       <button type="button" onClick={() => setPromptExpanded(v => !v)}
-                        className="ml-1.5 font-semibold py-2 -my-2" style={{ color: primary }}>
+                        className="ml-1.5 font-semibold inline-flex items-center min-h-[44px] -my-3 align-middle" style={{ color: primary }}>
                         {promptExpanded ? 'show less' : 'show more'}
                       </button>
                     )}
