@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, cleanup, screen } from '@testing-library/react'
+import { render, cleanup, screen, fireEvent } from '@testing-library/react'
 import React from 'react'
 
 /**
@@ -38,9 +38,33 @@ describe('plan card line', () => {
     expect(screen.getByTestId('plan-line').textContent).toBe('Bring a friend Saturday')
   })
 
-  it('a held event slot names the event and offers no "Why this post?" (it does not open)', () => {
+})
+
+describe('held event card (Mac 2026-10-08): "Why this post?" opens read-only', () => {
+  it('closed by default; opens the full planner reasoning inline; nothing to edit; the card is not a button', () => {
     view([slot({ job: 'event_conversion', job_label: 'Events', event_title: 'SHOP Fashion Show', held: true, status: 'held' })])
     expect(screen.getByTestId('plan-line').textContent).toBe('Goal: fill the room for SHOP Fashion Show.')
-    expect(screen.queryByText(/Why this post\?/)).toBeNull()
+    expect(screen.getByTestId('held-card').tagName).toBe('DIV')
+    expect(screen.queryByTestId('held-why')).toBeNull()
+    const t = screen.getByRole('button', { name: /why this post/i })
+    expect(t.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(t)
+    expect(screen.getByTestId('held-why').textContent).toBe(PLANNER)
+    expect(t.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('textarea')).toBeNull()
+    fireEvent.click(t)
+    expect(screen.queryByTestId('held-why')).toBeNull()
+  })
+
+  it('negative control: an open card is still one button that opens the sheet, with no inline toggle', () => {
+    let opened = null
+    render(
+      <WeekView data={{ empty: false, quarter: QUARTER, slots: [slot()], today: '2026-10-08', week: { id: 'w', week_start: '2026-10-05', starts_later: false }, prev_week_start: null, next_week_start: null }}
+        primary="#bd8276" onNav={() => {}} onOpen={(x) => { opened = x }} today="2026-10-08" landedWeek="2026-10-05" />,
+    )
+    expect(screen.queryByTestId('held-card')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /why this post/i }))
+    expect(opened && opened.id).toBe('s')
+    expect(screen.queryByTestId('held-why')).toBeNull()
   })
 })

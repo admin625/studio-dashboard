@@ -27,7 +27,7 @@ import { isDeliveredPhase } from '../lib/generationOutcome'
 import { planLine } from '../lib/planLine'
 import { NAV_ACTIVE, NAV_INACTIVE, NAV_ACTIVE_PILL } from '../lib/navColors'
 import {
-  Calendar as CalendarIcon, ChevronLeft, ChevronRight, Lock,
+  Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Lock,
   Check, SkipForward, PenLine, Loader2, X,
 } from 'lucide-react'
 
@@ -271,6 +271,8 @@ export default function Calendar() {
 // Exported for the C1 paging test (test/calendarQuarterLine.test.jsx) and the empty-weeks test
 // (test/calendarEmptyWeeksLine.test.jsx). `today` and `landedWeek` are injectable there.
 export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
+  // Held cards: which ones have their full reasoning open (read-only, inline).
+  const [whyOpen, setWhyOpen] = useState({})
   const { week, slots, prev_week_start, next_week_start, quarter } = data
   // The server's own "today" (the one it picked the landing week by) wins, so the header and the
   // landing can't disagree. The device date is only the fallback for an older response.
@@ -334,19 +336,9 @@ export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
       {!slots.length && <Empty title="Nothing planned this week" body="Use the arrows to look at another week." />}
 
       <div className="space-y-2">
-        {slots.map(s => (
-          <button
-            key={s.id}
-            onClick={() => !s.held && onOpen(s)}
-            disabled={s.held}
-            className="w-full text-left rounded-xl px-4 py-3 transition-all"
-            style={{
-              background: s.held ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              opacity: s.held ? 0.55 : 1,
-              cursor: s.held ? 'default' : 'pointer',
-            }}
-          >
+        {slots.map(s => {
+          // Shared by both card kinds below.
+          const head = (
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="text-[11px] text-slate-400">{fmtDay(s.slot_date)}</span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
@@ -358,19 +350,47 @@ export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
               {s.status === 'generated' && <Chip text="Written" color={primary} />}
               {s.reason_source === 'owner' && <Chip text="Your words" color="#a78bfa" />}
             </div>
-            {/* UX ruling 2b: one plain line naming the goal (Katie: the why stays visible). The
-                planner's full reasoning is behind "Why this post?", in the sheet this card opens. */}
-            <p className="text-sm text-slate-200 leading-snug" data-testid="plan-line">{planLine(s)}</p>
-            {!s.held && (
+          )
+          // UX ruling 2b: one plain line naming the goal (Katie: the why stays visible). The
+          // planner's full reasoning is behind "Why this post?": in the sheet an open card opens,
+          // or inline and read-only on a held card (Mac 2026-10-08), which cannot open the sheet.
+          const line = <p className="text-sm text-slate-200 leading-snug" data-testid="plan-line">{planLine(s)}</p>
+          if (s.held) {
+            const open = !!whyOpen[s.id]
+            return (
+              <div key={s.id} className="w-full text-left rounded-xl px-4 py-3" data-testid="held-card"
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ opacity: 0.55 }}>
+                  {head}
+                  {line}
+                </div>
+                <button type="button" aria-expanded={open} aria-controls={`why-${s.id}`}
+                  onClick={() => setWhyOpen(o => ({ ...o, [s.id]: !o[s.id] }))}
+                  className="flex items-center gap-1 min-h-[44px] -mb-2 text-[11px] text-slate-400 hover:text-white">
+                  Why this post? {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                </button>
+                {open && (
+                  <p id={`why-${s.id}`} className="text-[12px] text-slate-300 leading-snug mt-1 mb-2" data-testid="held-why">{s.reason}</p>
+                )}
+                <p className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1.5" style={{ opacity: 0.8 }}>
+                  <Lock size={11} /> opens when you confirm
+                </p>
+              </div>
+            )
+          }
+          return (
+            <button
+              key={s.id}
+              onClick={() => onOpen(s)}
+              className="w-full text-left rounded-xl px-4 py-3 transition-all"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }}
+            >
+              {head}
+              {line}
               <p className="text-[11px] text-slate-400 mt-1">Why this post? <ChevronRight size={11} className="inline -mt-px" /></p>
-            )}
-            {s.held && (
-              <p className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1.5">
-                <Lock size={11} /> opens when you confirm
-              </p>
-            )}
-          </button>
-        ))}
+            </button>
+          )
+        })}
       </div>
     </>
   )
