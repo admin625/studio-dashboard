@@ -153,3 +153,18 @@ describe('Regenerate sheet', () => {
     expect(screen.queryByTestId('regenerate-sheet')).toBeNull()
   })
 })
+
+describe('2c: the footer is never inside the scrolling body', () => {
+  it('full form and sheet: the footer is a sibling of the scroll area, and the modal is capped at the screen on a phone', () => {
+    render(<MemoryRouter><GenerateModal open onClose={() => {}} onSubmitted={() => {}} /></MemoryRouter>)
+    const modal = screen.getByTestId('generate-modal')
+    const body = screen.getByTestId('generate-body')
+    const footer = screen.getByTestId('generate-footer')
+    expect(modal.className).toMatch(/max-h-\[calc\(100dvh-2rem\)\]/)
+    expect(modal.className).toContain('flex-col')
+    expect(body.contains(footer)).toBe(false)
+    expect(body.className).toContain('overflow-y-auto')
+    expect(footer.className).toContain('flex-shrink-0')
+    expect(footer.contains(screen.getByRole('button', { name: /create content/i }))).toBe(true)
+  })
+})

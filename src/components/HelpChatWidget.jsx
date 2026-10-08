@@ -1,3 +1,4 @@
+import { useAnyModalOpen, usePhoneWidth } from '../lib/modalOpen'
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase, getSessionOnce } from '../lib/supabase'
@@ -17,6 +18,10 @@ const SUGGESTIONS = [
 
 export default function HelpChatWidget({ currentPage }) {
   const [open, setOpen] = useState(false)
+  // 2c: a phone has the bottom tab bar (56px + safe area), so the bubble and panel sit above it.
+  const phone = usePhoneWidth()
+  const lift = phone ? 64 : 0
+  const modalOpen = useAnyModalOpen()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -95,6 +100,9 @@ export default function HelpChatWidget({ currentPage }) {
 
   // Render via portal directly into document.body so position:fixed
   // is never broken by a parent with overflow/transform/will-change.
+  // UX ruling 2c: on a phone the bubble sits above the bottom tab bar, and it steps aside while a
+  // modal is open (it covered the slot sheet's "Skip this one" and the Create form's footer).
+  if (modalOpen && !open) return null
   return createPortal(
     <>
       {/* Chat panel */}
@@ -102,9 +110,9 @@ export default function HelpChatWidget({ currentPage }) {
         <div
           style={{
             position: 'fixed',
-            bottom: 88,
-            right: 24,
-            width: 360,
+            bottom: lift + 88,
+            right: phone ? 12 : 24,
+            width: phone ? 'calc(100vw - 24px)' : 360,
             height: 460,
             zIndex: 99999,
             display: 'flex',
@@ -296,8 +304,8 @@ export default function HelpChatWidget({ currentPage }) {
         onClick={() => setOpen((o) => !o)}
         style={{
           position: 'fixed',
-          bottom: 24,
-          right: 24,
+          bottom: lift + 24,
+          right: phone ? 12 : 24,
           width: 56,
           height: 56,
           borderRadius: '50%',

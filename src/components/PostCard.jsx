@@ -682,8 +682,8 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
             <div className="px-5 py-2" style={{ background: 'rgba(255,255,255,0.02)', borderBottom: editorOpen ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
               <button
                 onClick={() => setEditorOpen(v => !v)}
-                className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors"
-                style={{ color: editorOpen ? primary : '#64748b' }}
+                className="flex items-center gap-1.5 min-h-[44px] text-[11px] font-semibold uppercase tracking-wider transition-colors"
+                style={{ color: editorOpen ? primary : '#94a3b8' }}
               >
                 <Pencil size={11} />
                 {editorOpen ? 'Close photo editor' : 'Edit Photo'}
@@ -1208,7 +1208,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
             <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{captionText || 'No caption'}</p>
             {!readOnly && (
               <button onClick={() => setEditing('caption')}
-                className="mt-1 opacity-0 group-hover:opacity-100 text-[10px] font-semibold text-slate-500 hover:text-white transition-all flex items-center gap-1">
+                className="mt-1 min-h-[44px] sm:min-h-0 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 text-[12px] sm:text-[10px] font-semibold text-slate-400 sm:text-slate-500 hover:text-white transition-all flex items-center gap-1">
                 <Pencil size={10} /> Edit caption
               </button>
             )}
@@ -1237,7 +1237,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
                 <p className="text-xs text-blue-400/60 leading-relaxed">{hashtagText}</p>
                 {!readOnly && (
                   <button onClick={() => setEditing('hashtags')}
-                    className="mt-1 opacity-0 group-hover:opacity-100 text-[10px] font-semibold text-slate-500 hover:text-white transition-all flex items-center gap-1">
+                    className="mt-1 min-h-[44px] sm:min-h-0 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 text-[12px] sm:text-[10px] font-semibold text-slate-400 sm:text-slate-500 hover:text-white transition-all flex items-center gap-1">
                     <Pencil size={10} /> Edit hashtags
                   </button>
                 )}
@@ -1277,7 +1277,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
         )}
         {currentPhotoUrl && (
           <a href={withDownloadParam(currentPhotoUrl, photoDownloadName({ studioName, platform, index, url: currentPhotoUrl, createdAt }))} download target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:-translate-y-0.5"
+            className="flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg text-xs font-semibold transition-all hover:-translate-y-0.5"
             style={{ background: 'rgba(255,255,255,0.04)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', textDecoration: 'none' }}>
             <Download size={12} /> Image
           </a>

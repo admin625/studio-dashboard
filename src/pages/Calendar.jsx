@@ -25,6 +25,7 @@ import Layout from '../components/Layout'
 import GenerateModal from '../components/GenerateModal'
 import { isDeliveredPhase } from '../lib/generationOutcome'
 import { planLine } from '../lib/planLine'
+import { useModalOpen } from '../lib/modalOpen'
 import { NAV_ACTIVE, NAV_INACTIVE, NAV_ACTIVE_PILL } from '../lib/navColors'
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Lock,
@@ -293,7 +294,7 @@ export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
         <button
           disabled={!prev_week_start}
           onClick={() => onNav(prev_week_start)}
-          className="p-2 rounded-lg disabled:opacity-25 transition-colors hover:bg-white/5"
+          className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg disabled:opacity-25 transition-colors hover:bg-white/5"
           aria-label="Previous week"
         ><ChevronLeft size={18} className="text-slate-300" /></button>
 
@@ -322,7 +323,7 @@ export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
         <button
           disabled={!next_week_start}
           onClick={() => onNav(next_week_start)}
-          className="p-2 rounded-lg disabled:opacity-25 transition-colors hover:bg-white/5"
+          className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg disabled:opacity-25 transition-colors hover:bg-white/5"
           aria-label="Next week"
         ><ChevronRight size={18} className="text-slate-300" /></button>
       </div>
@@ -464,6 +465,7 @@ function QuarterView({ data }) {
 // mode is SILENT — the panel looked identical whether it saved or discarded. That is not
 // a class of bug a pure-function test can reach, so it is render-tested.
 export function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate }) {
+  useModalOpen(true) // mounted only while open
   // TWO states, not one. `saved` is what is persisted; `text` is the draft. A single
   // variable cannot tell an untouched field from an edited one, which is precisely
   // the distinction "unsaved changes" depends on.
