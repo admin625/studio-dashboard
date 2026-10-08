@@ -13,7 +13,7 @@ const post = (o = {}) => ({ caption: 'x', hashtags: '#a', format: 'feed_post', p
 describe('originalShape', () => {
   it("TLK c8787c0a's shape: 1 Instagram post with a photo", () => {
     const s = originalShape({ instagram_content: [post({ photo_url: 'https://x/a.jpg' })], facebook_content: null })
-    expect(s).toEqual({ instagram: { count: 1, images: true, formats: ['feed_post'] } })
+    expect(s).toEqual({ instagram: { count: 1, images: true } })
     expect(describeShape(s)).toBe('1 Instagram post with a photo')
   })
 
@@ -42,12 +42,20 @@ describe('originalShape', () => {
     expect(originalShape({ instagram_content: [], facebook_content: [null] })).toBeNull()
   })
 
-  it('an odd format value falls back to feed_post, never passed through', () => {
-    expect(originalShape({ instagram_content: [post({ format: 'x"; drop' })] }).instagram.formats).toEqual(['feed_post'])
+  it('format is never carried from post rows (the modal only sends feed_post)', () => {
+    expect(originalShape({ instagram_content: [post({ format: 'story' })] }).instagram).toEqual({ count: 1, images: false })
   })
 })
 
 describe('flag copy for a second pass', () => {
+  it('no new line promises a person will check the post (doctrine §3)', () => {
+    const HUMAN = /person|human|team|someone|we('ll| will) (review|look)/i
+    for (const r of ['banned_phrase', 'quality_unresolved', 'error_fallback', null]) {
+      expect(regenerateIntroLine(r, 'x')).not.toMatch(HUMAN)
+      expect(flagReasonLine(r, 'x', { secondPass: true })).not.toMatch(HUMAN)
+    }
+  })
+
   it("Mac's approved line for a still-flagged regenerate", () => {
     expect(flagReasonLine('quality_unresolved', null, { secondPass: true }))
       .toBe("We've already given this one a second pass. Have a read and tweak anything that doesn't sound like you.")
@@ -66,7 +74,9 @@ describe('flag copy for a second pass', () => {
   })
 
   it('the sheet names the reason', () => {
-    expect(regenerateIntroLine('banned_phrase', 'no excuses')).toBe("We'll write a fresh version without 'no excuses'.")
+    expect(regenerateIntroLine('banned_phrase', 'no excuses')).toBe("We'll write a fresh version and steer clear of 'no excuses'.")
+    expect(regenerateIntroLine('error_fallback')).toBe("We'll write a fresh version and run our quality check on it.")
+    expect(regenerateIntroLine(null)).toBe(regenerateIntroLine('quality_unresolved'))
     expect(regenerateIntroLine('banned_phrase', '')).toBe("We'll write a fresh version and run it through our quality check again.")
     expect(regenerateIntroLine('quality_unresolved')).toBe("We'll write a fresh version and run it through our quality check again.")
   })

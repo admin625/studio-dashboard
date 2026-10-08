@@ -23,18 +23,19 @@ const LINES = {
 }
 
 // A regenerate that is still flagged (Mac 2026-10-08, UX ruling 2a). There is no second
-// Regenerate (one per original), so these lines must not point at one. The quality_unresolved
-// line is Mac's approved wording; the banned_phrase and error_fallback variants follow it.
+// Regenerate (one per original), so these lines must not point at one. quality_unresolved is
+// Mac's approved wording (10-08). banned_phrase and error_fallback: PENDING Mac's approval at the
+// 2a stop. The delivery email still says "or regenerate" here until the email copy change ships.
 const SECOND_PASS_LINES = {
   banned_phrase: (phrase) => `Contains a phrase we avoid: '${phrase}'. We've already given this one a second pass, so edit that line before you post.`,
   quality_unresolved: () => "We've already given this one a second pass. Have a read and tweak anything that doesn't sound like you.",
   error_fallback: () => "Our quality check didn't finish on this second pass. Have a read and tweak anything that doesn't sound like you.",
 }
 
-// What the Regenerate sheet promises before the run (UX ruling 2a). Says what the new version is
-// for, never that a person will check it.
+// What the Regenerate sheet says before the run (UX ruling 2a). An intent, never a guarantee (a
+// regenerate can still be flagged), and never that a person will check it. PENDING Mac's approval.
 const INTRO_LINES = {
-  banned_phrase: (phrase) => `We'll write a fresh version without '${phrase}'.`,
+  banned_phrase: (phrase) => `We'll write a fresh version and steer clear of '${phrase}'.`,
   quality_unresolved: () => "We'll write a fresh version and run it through our quality check again.",
   error_fallback: () => "We'll write a fresh version and run our quality check on it.",
 }

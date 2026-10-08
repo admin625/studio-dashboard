@@ -21,10 +21,10 @@ import {
  * freestyle users to "type one here" on a screen with no field to type in. `canTypeHere` only in
  * standard mode, where the Brand Voice field above really does accept a one-off voice.
  */
-function VoiceMissingHint({ canTypeHere = false, centered = false, onOpenBrand }) {
+function VoiceMissingHint({ canTypeHere = false, centered = false, onOpenBrand, action = 'Create Content' }) {
   return (
     <p className={`text-xs text-amber-300 mt-2 leading-snug ${centered ? 'text-center' : ''}`} role="note">
-      Create Content needs your studio's brand voice.{' '}
+      {action} needs your studio's brand voice.{' '}
       <button type="button" onClick={onOpenBrand} className="underline font-semibold hover:text-amber-200">
         Add it in Brand Settings
       </button>
@@ -113,7 +113,7 @@ const FREESTYLE_TEMPLATES = {
 export default function GenerateModal({
   open, onClose, onSubmitted,
   slotId = null, slotJobLabel = null, slotRationale = null, slotDate = null,
-  regenerateOf = null, regenerateShape = null, regenerateReason = null,
+  regenerateOf = null, regenerateShape = null, regenerateReason = null, regenerateReady = true,
 }) {
   const sheet = !!(regenerateOf && regenerateShape)
   const app = useApp()
@@ -140,19 +140,21 @@ export default function GenerateModal({
   const [freestylePrompt, setFreestylePrompt] = useState('')
   // The Regenerate sheet asks for the original's shape on every open. Declared after the count
   // reset above, so it runs after it and wins. Every platform is set, so one the original didn't
-  // use is OFF even if a previous run here switched it on. Keyed on the shape's VALUE: a caller
-  // that rebuilds the object each render must not wipe a topic being typed.
-  const shapeKey = sheet ? JSON.stringify(regenerateShape) : ''
+  // use is OFF even if a previous run here switched it on. Runs on the OPEN TRANSITION only, so a
+  // shape that changes mid-open (a late row load, a rebuilt object) never wipes a topic being typed.
+  const wasOpen = useRef(false)
   useEffect(() => {
-    if (!open || !sheet) return
+    const opening = open && !wasOpen.current
+    wasOpen.current = open
+    if (!opening || !sheet) return
     setPlatforms(p => Object.fromEntries(Object.entries(p).map(([k, v]) => {
       const o = regenerateShape[k]
       if (!o) return [k, { ...v, on: false }]
-      return [k, { ...v, on: true, count: o.count, images: o.images, ...(o.formats ? { formats: o.formats } : {}) }]
+      return [k, { ...v, on: true, count: o.count, images: o.images }]
     })))
     setFreestyle(false)
     setFreestylePrompt('')
-  }, [open, shapeKey])
+  }, [open, sheet, regenerateShape])
   const [sessionVibe, setSessionVibe] = useState(app.aiPhotoPrompt || app.brandVoice || '')
   const [brandVoice, setBrandVoice] = useState(app.brandVoice || '')
   const [targetAudience, setTargetAudience] = useState('Fitness enthusiasts and local community members')
@@ -550,6 +552,7 @@ export default function GenerateModal({
             // (validation, or the proxy's 403/409) shows on the form like any other error.
             onRegenerate={runIsRegenerate || submitting ? null : (id) => { setOutcome(null); handleSubmit(id) }}
             secondPass={runIsRegenerate}
+            fromSheet={sheet}
           />
         )}
 
@@ -561,7 +564,7 @@ export default function GenerateModal({
               {regenerateIntroLine(regenerateReason && regenerateReason.reason, regenerateReason && regenerateReason.phrase)}
             </p>
             <p className="text-sm text-slate-400">Same as before: {describeShape(regenerateShape)}.</p>
-            {isOwner && (
+            {isOwner && !slotId && (
               <div>
                 <label htmlFor="regen-topic" className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Anything this post should be about? <span className="text-slate-500 font-normal">(optional)</span>
@@ -572,12 +575,13 @@ export default function GenerateModal({
                   onChange={e => { setFreestylePrompt(e.target.value); setFreestyle(!!e.target.value.trim()) }}
                   rows={3}
                   placeholder="e.g. our October music themes for Core and Cycling"
-                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-slate-600 resize-y focus:outline-none"
+                  // 16px on phones: iOS Safari zooms the page into any input under 16px.
+                  className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-slate-600 resize-y focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
                 />
               </div>
             )}
-            {isVoiceEmpty(brandVoice) && <VoiceMissingHint centered onOpenBrand={openBrandSettings} />}
+            {isVoiceEmpty(brandVoice) && <VoiceMissingHint centered action="Write a new version" onOpenBrand={openBrandSettings} />}
             {error && (
               <div className="px-4 py-3 rounded-lg text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.1)' }}>{error}</div>
             )}
@@ -769,7 +773,8 @@ export default function GenerateModal({
             <button onClick={close} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
             <button
               onClick={() => handleSubmit()}
-              disabled={submitting || isVoiceEmpty(brandVoice)}
+              // A sheet waits for the caller's slot lookup, so a slot-bound original never regenerates unbound.
+              disabled={submitting || isVoiceEmpty(brandVoice) || (sheet && !regenerateReady)}
               className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
               style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
             >
@@ -786,7 +791,7 @@ export default function GenerateModal({
           )}
           <p className="text-[10px] text-slate-500 text-center mt-3">
             {sheet
-              ? 'Usually takes about a minute.'
+              ? (Object.values(regenerateShape).some(p => p.images) ? 'Usually a minute or two with photos.' : 'Usually takes about a minute.')
               : 'FCA generates premium content — great things take a moment. Ready within 20 minutes.'}
           </p>
         </div>
@@ -808,13 +813,15 @@ export default function GenerateModal({
  * Accessibility: the result text is the live region (actions sit outside it), and focus moves to
  * the heading whenever the phase changes — the form that held focus has just been hidden.
  */
-function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose, onRegenerate, secondPass = false }) {
+function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose, onRegenerate, secondPass = false, fromSheet = false }) {
   const headingRef = useRef(null)
   useEffect(() => { if (headingRef.current) headingRef.current.focus() }, [outcome.phase])
   const day = slotDate ? fmtSlotDay(slotDate) : null
   const forDay = day ? ` for ${day}` : ''
   const what = day ? 'post' : 'content' // a slot is one post; an owner-initiated run is a batch
-  const retryWhere = day ? 'Close this and tap the day on your plan to try again.' : 'Close this and choose Create Content to try again.'
+  // A run from the Regenerate sheet is retried from the post's own Regenerate button.
+  const retryWhere = fromSheet ? 'Close this and tap Regenerate on the post to try again.'
+    : day ? 'Close this and tap the day on your plan to try again.' : 'Close this and choose Create Content to try again.'
   const btn = 'px-5 py-2.5 rounded-xl text-sm font-bold'
   const done = (
     <button onClick={onClose} className={`${btn} text-slate-300`} style={{ background: 'rgba(255,255,255,0.06)' }}>Close</button>

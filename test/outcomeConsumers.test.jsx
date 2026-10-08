@@ -15,9 +15,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
 let submitted = null
 vi.mock('../src/components/GenerateModal', () => ({
-  default: ({ onSubmitted, open, regenerateOf, slotId, slotDate, regenerateShape, regenerateReason }) => {
+  default: ({ onSubmitted, open, regenerateOf, slotId, slotDate, regenerateShape, regenerateReason, regenerateReady }) => {
     submitted = onSubmitted
-    return open ? <div data-testid="regen-modal" data-slot={slotId || ''} data-slot-date={slotDate || ''}
+    return open ? <div data-testid="regen-modal" data-slot={slotId || ''} data-slot-date={slotDate || ''} data-ready={String(regenerateReady)}
       data-shape={JSON.stringify(regenerateShape ?? null)} data-reason={JSON.stringify(regenerateReason ?? null)}>{regenerateOf}</div> : null
   },
 }))
@@ -153,8 +153,30 @@ describe('DeliveryView: the WO-4 flag (D4)', () => {
     await screen.findByTestId('quality-flag')
     await act(async () => { screen.getByRole('button', { name: /^regenerate$/i }).click() })
     const m = screen.getByTestId('regen-modal')
-    expect(JSON.parse(m.dataset.shape)).toEqual({ instagram: { count: 1, images: false, formats: ['feed_post'] } })
+    expect(JSON.parse(m.dataset.shape)).toEqual({ instagram: { count: 1, images: false } })
     expect(JSON.parse(m.dataset.reason)).toEqual({ reason: 'banned_phrase', phrase: 'beast mode' })
+    await waitFor(() => expect(screen.getByTestId('regen-modal').dataset.ready).toBe('true'))
+  })
+
+  it('a failed slot lookup still lets the sheet run (unbound), rather than blocking it forever', async () => {
+    deliveryRow = flagged()
+    gpResult = { data: null, error: { message: 'boom' } }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    renderView()
+    await screen.findByTestId('quality-flag')
+    await act(async () => { screen.getByRole('button', { name: /^regenerate$/i }).click() })
+    await waitFor(() => expect(screen.getByTestId('regen-modal').dataset.ready).toBe('true'))
+    warn.mockRestore()
+  })
+
+  it('a FRESH delivery whose post rows are not written yet keeps the sheet waiting (no unbound regenerate)', async () => {
+    deliveryRow = flagged({ created_at: new Date().toISOString() })
+    gpResult = { data: [], error: null }
+    renderView()
+    await screen.findByTestId('quality-flag')
+    await act(async () => { screen.getByRole('button', { name: /^regenerate$/i }).click() })
+    await act(async () => {})
+    expect(screen.getByTestId('regen-modal').dataset.ready).toBe('false')
   })
 
   it('an original that was already regenerated links to the regenerate instead of offering another', async () => {

@@ -5,7 +5,11 @@
  *
  * Read from the delivery row the browser already holds: one entry per platform whose content is a
  * non-empty array. count = posts delivered (clamped to the proxy's 1–5); images = any post carries
- * a photo_url (an images-off run never sets one). Returns null when nothing usable is found
+ * a photo_url. The request itself is not readable from the browser, so both are inferred: an
+ * images-ON run whose image step produced nothing reads as images-off, a photo swapped in after
+ * delivery reads as images-on, and a short delivery reads as its delivered count. The sheet says
+ * what it will ask for, so the owner sees it. Instagram format is not carried: the modal only
+ * ever sends feed_post. Returns null when nothing usable is found
  * (a legacy object-shaped row, or no content): the caller then falls back to the full form, the
  * old behaviour, rather than guessing a shape.
  *
@@ -23,8 +27,6 @@ const CONTENT_KEYS = [
 
 const LABELS = { instagram: 'Instagram', facebook: 'Facebook', twitter: 'X', linkedin: 'LinkedIn', tiktok: 'TikTok' }
 
-const FORMAT = /^[a-z_]{1,32}$/
-
 export function originalShape(delivery) {
   if (!delivery) return null
   const shape = {}
@@ -33,15 +35,10 @@ export function originalShape(delivery) {
     if (!Array.isArray(posts) || !posts.length) continue
     const real = posts.filter((p) => p && typeof p === 'object')
     if (!real.length) continue
-    const entry = {
+    shape[name] = {
       count: Math.min(5, real.length),
       images: real.some((p) => typeof p.photo_url === 'string' && p.photo_url.trim() !== ''),
     }
-    if (name === 'instagram') {
-      const formats = [...new Set(real.map((p) => p.format).filter((f) => typeof f === 'string' && FORMAT.test(f)))]
-      entry.formats = formats.length ? formats : ['feed_post']
-    }
-    shape[name] = entry
   }
   return Object.keys(shape).length ? shape : null
 }

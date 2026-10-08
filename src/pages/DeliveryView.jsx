@@ -34,6 +34,9 @@ export default function DeliveryView() {
   const [regenOpen, setRegenOpen] = useState(false)
   // The original's calendar slot, when it is bound to exactly one (null otherwise).
   const [origSlot, setOrigSlot] = useState(null)
+  // Whether the slot lookup has answered (or failed). The Regenerate sheet waits for it, so a
+  // slot-bound original never regenerates unbound because the tap beat the lookup (2a review).
+  const [slotLookupDone, setSlotLookupDone] = useState(false)
 
   // 2b — gate on authReady so edit permissions don't flip on a transient null role.
   const isOwner = app.authReady && app.role === 'studio_owner'
@@ -110,7 +113,8 @@ export default function DeliveryView() {
         // A delivery opened straight from the modal can arrive a moment BEFORE its post rows
         // (the generator marks "delivered" first), so a fresh delivery gets a few short retries.
         const fresh = data.created_at && (Date.now() - new Date(data.created_at).getTime()) < 2 * 60 * 1000
-        for (let attempt = 0; attempt < (fresh ? 4 : 1); attempt++) {
+        const attempts = fresh ? 4 : 1
+        for (let attempt = 0; attempt < attempts; attempt++) {
           if (attempt) await new Promise((r) => setTimeout(r, 3000))
           if (!mounted) return
           try {
@@ -120,7 +124,7 @@ export default function DeliveryView() {
               .eq('delivery_id', id)
               .not('slot_id', 'is', null)
             if (!mounted) return
-            if (gpErr) { console.warn('[DeliveryView] slot date lookup failed:', gpErr.message); break }
+            if (gpErr) { console.warn('[DeliveryView] slot date lookup failed:', gpErr.message); setSlotLookupDone(true); break }
             const dates = slotDatesByPost(gp)
             setSlotDates(dates)
             // WO-4 (Mac 2026-10-05): a regenerate keeps the original's slot. Only when the delivery
@@ -129,9 +133,13 @@ export default function DeliveryView() {
             setOrigSlot(slotIds.length === 1
               ? { id: slotIds[0], date: ((gp || []).find((r) => r.slot_id === slotIds[0]) || {}).calendar_slots?.slot_date || null }
               : null)
+            // Done on a hit or on the last try: an early empty answer on a fresh delivery may only
+            // mean its post rows aren't written yet.
+            if (Object.keys(dates).length || attempt === attempts - 1) setSlotLookupDone(true)
             if (Object.keys(dates).length) break
           } catch (e) {
             console.warn('[DeliveryView] slot date lookup threw:', e && e.message)
+            setSlotLookupDone(true)
             break
           }
         }
@@ -316,6 +324,7 @@ export default function DeliveryView() {
         <GenerateModal open={regenOpen} regenerateOf={delivery.id} onClose={() => setRegenOpen(false)}
           // UX ruling 2a: ask for the original's shape, and say why. No shape = the full form.
           regenerateShape={regenShape} regenerateReason={{ reason: delivery.flag_reason, phrase: delivery.flag_phrase }}
+          regenerateReady={slotLookupDone}
           slotId={origSlot ? origSlot.id : null} slotDate={origSlot ? origSlot.date : null}
           // Once the regenerate delivers, this original links to it and stops offering another.
           onSubmitted={(_p, outcome) => { if (outcome && isDeliveredPhase(outcome.phase) && outcome.deliveryId) setRegeneratedId(outcome.deliveryId) }} />
