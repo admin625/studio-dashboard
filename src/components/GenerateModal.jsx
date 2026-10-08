@@ -12,6 +12,7 @@ import { isVoiceEmpty } from '../lib/voice'
 import { pollOutcome, fetchAttempt, classifySyncBody, NO_ANSWER_MS } from '../lib/generationOutcome'
 import { FLAG_TITLE, flagReasonLine, regenerateIntroLine } from '../lib/qualityFlag'
 import { describeShape } from '../lib/regenerateShape'
+import { waitLine } from '../lib/waitLine'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
@@ -177,6 +178,9 @@ export default function GenerateModal({
   // loop left sleeping by close-reopen-resubmit can never land an old result on a new run.
   const runRef = useRef(0)
   const platformsRef = useRef([])
+  // What the current run asked for (UX 2b): the post count and whether photos are coming, so the
+  // waiting and finished screens say "your 3 posts" and give the right wait line.
+  const runAskRef = useRef({ posts: 0, photos: undefined })
   // Whether the CURRENT run is a regenerate. A regenerate's own flagged outcome offers no further
   // Regenerate: one per original (the proxy refuses a second either way).
   const [runIsRegenerate, setRunIsRegenerate] = useState(false)
@@ -300,6 +304,10 @@ export default function GenerateModal({
     setSubmitting(true)
     setError('')
     setRunIsRegenerate(!!regenOf)
+    runAskRef.current = {
+      posts: activePlatforms.reduce((n, p) => n + (Number(p.postCount) || 0), 0),
+      photos: activePlatforms.some(p => p.includeImages),
+    }
 
     // Item 7: every run that can get an attempt row (Log Attempt needs a studio_id) carries a
     // correlation id, so a 202 can be followed to its end. Individual-scope runs have no studio
@@ -553,6 +561,7 @@ export default function GenerateModal({
             onRegenerate={runIsRegenerate || submitting ? null : (id) => { setOutcome(null); handleSubmit(id) }}
             secondPass={runIsRegenerate}
             fromSheet={sheet}
+            ask={runAskRef.current}
           />
         )}
 
@@ -665,6 +674,7 @@ export default function GenerateModal({
                           </button>
                           {/* Post count */}
                           <select
+                            aria-label={`Posts for ${name === 'twitter' ? 'X (Twitter)' : name}`}
                             value={cfg.count}
                             onChange={e => setPlatforms(p => ({ ...p, [name]: { ...p[name], count: parseInt(e.target.value) } }))}
                             className="px-2 py-1 rounded text-xs text-white bg-white/5 border border-white/10"
@@ -758,7 +768,7 @@ export default function GenerateModal({
                   <Plus size={14} /> Add Image
                 </button>
               )}
-              <p className="text-[10px] text-slate-500 mt-2 text-center">Each AI image adds ~1 minute to generation time</p>
+              <p className="text-[10px] text-slate-500 mt-2 text-center">More images take a little longer.</p>
             </div>
           )}
 
@@ -790,9 +800,9 @@ export default function GenerateModal({
             <VoiceMissingHint centered onOpenBrand={openBrandSettings} />
           )}
           <p className="text-[10px] text-slate-500 text-center mt-3">
-            {sheet
-              ? (Object.values(regenerateShape).some(p => p.images) ? 'Usually a minute or two with photos.' : 'Usually takes about a minute.')
-              : 'FCA generates premium content — great things take a moment. Ready within 20 minutes.'}
+            {waitLine(sheet
+              ? Object.values(regenerateShape).some(p => p.images)
+              : Object.values(platforms).some(p => p.on && p.images))}
           </p>
         </div>
       </div>
@@ -813,12 +823,19 @@ export default function GenerateModal({
  * Accessibility: the result text is the live region (actions sit outside it), and focus moves to
  * the heading whenever the phase changes — the form that held focus has just been hidden.
  */
-function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose, onRegenerate, secondPass = false, fromSheet = false }) {
+function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose, onRegenerate, secondPass = false, fromSheet = false, ask = {} }) {
   const headingRef = useRef(null)
   useEffect(() => { if (headingRef.current) headingRef.current.focus() }, [outcome.phase])
   const day = slotDate ? fmtSlotDay(slotDate) : null
   const forDay = day ? ` for ${day}` : ''
-  const what = day ? 'post' : 'content' // a slot is one post; an owner-initiated run is a batch
+  // While it runs, a slot run names what it ASKED for ("your post", "your 3 posts"). Once it ends it
+  // says "your posts" with no number: the count asked for is not proven to be the count delivered.
+  // An owner-initiated run is a batch and stays "your content".
+  const n = ask.posts || 1
+  const one = n === 1
+  const what = day ? (one ? 'post' : `${n} posts`) : 'content'
+  const done_ = day ? (one ? 'post' : 'posts') : 'content'
+  const openLabel = day ? (one ? 'Open the post' : 'Open your posts') : 'Open it'
   // A run from the Regenerate sheet is retried from the post's own Regenerate button.
   const retryWhere = fromSheet ? 'Close this and tap Regenerate on the post to try again.'
     : day ? 'Close this and tap the day on your plan to try again.' : 'Close this and choose Create Content to try again.'
@@ -836,18 +853,18 @@ function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClos
       title = <span className="flex items-center gap-2"><Loader2 size={18} className="animate-spin" /> Writing your {what}{forDay}…</span>
       body = outcome.uncertain
         ? <>We lost the connection while sending this, but it may already be on its way. Checking — keep this open.</>
-        : <>This usually takes about a minute, longer with AI images. Keep this open to see how it turns out.</>
+        : <>{waitLine(ask.photos)} Keep this open to see how it turns out.</>
       actions = null
       break
     case 'delivered':
-      title = day ? `Written${forDay}.` : 'Your content is ready.'
-      body = day ? `Your post is ready, written for ${day} on your plan.` : 'It is in your Deliveries.'
+      title = day ? `Your ${done_}${forDay} ${one ? 'is' : 'are'} ready.` : 'Your content is ready.'
+      body = day ? "It's on your plan and in your Deliveries." : "It's in your Deliveries."
       actions = (
         <div className="flex gap-3">
           {done}
           {outcome.deliveryId && (
             <button onClick={() => onOpen(outcome.deliveryId)} className={btn}
-              style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}>{day ? 'Open the post' : 'Open it'}</button>
+              style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}>{openLabel}</button>
           )}
         </div>
       )
@@ -867,7 +884,7 @@ function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClos
           )}
           {outcome.deliveryId && (
             <button onClick={() => onOpen(outcome.deliveryId)} className={btn}
-              style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}>{day ? 'Open the post' : 'Open it'}</button>
+              style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}>{openLabel}</button>
           )}
         </div>
       )
@@ -885,11 +902,11 @@ function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClos
       tone = 'text-amber-200'
       // Honest under uncertainty: a run that crashed mid-way writes no outcome either (the error
       // handler does not mark attempts yet), so do not promise it is still coming.
-      body = <>Your {what}{forDay} hasn't reported back in {Math.round(NO_ANSWER_MS / 60000)} minutes. It may have arrived, or it may have failed. Check Deliveries; if it isn't there, contact support at {support}.</>
+      body = <>Your {done_}{forDay} {day && !one ? "haven't" : "hasn't"} reported back in {Math.round(NO_ANSWER_MS / 60000)} minutes. {day && !one ? 'They may have arrived, or they may have failed.' : 'It may have arrived, or it may have failed.'} Check Deliveries; if {day && !one ? "they aren't" : "it isn't"} there, contact support at {support}.</>
       actions = <div className="flex gap-3">{done}{toDeliveries}</div>
       break
     default: // failed — the generator itself reported that it created nothing
-      title = day ? "We couldn't write this post." : "We couldn't create this content."
+      title = day ? (one ? "We couldn't write this post." : "We couldn't write these posts.") : "We couldn't create this content."
       tone = 'text-red-300'
       body = <>Something went wrong on our side and nothing was created. {retryWhere} If this keeps happening, contact support at {support}.</>
   }
