@@ -6,7 +6,7 @@
  * card says the goal in plain words.
  *
  * Her own words win: a reason she wrote (reason_source 'owner') is shown as she wrote it.
- * Copy approved with 2b (pending at the 2b stop).
+ * Copy approved by Mac 2026-10-08 (2b); change only with HQ approval.
  */
 export function planLine(slot) {
   if (!slot) return ''
