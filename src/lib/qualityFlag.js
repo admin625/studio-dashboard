@@ -22,20 +22,48 @@ const LINES = {
   error_fallback: () => "Our quality check didn't finish, so this is the first draft. Give it a read, or regenerate.",
 }
 
-/**
- * The one reason line for a flag. banned_phrase without a phrase (the line would read "avoid: ''")
- * falls back to the quality_unresolved line, which is still true: the post did fail a check.
- * An unknown or null code also falls back to it. The generator emits only the three codes, and a
- * delivered_flagged row with any other reason trips Sentinel's wo4_watch flag_mismatch alert, so
- * that path is a monitored anomaly, not normal copy.
- */
-export function flagReasonLine(reason, phrase) {
+// A regenerate that is still flagged (Mac 2026-10-08, UX ruling 2a). There is no second
+// Regenerate (one per original), so these lines must not point at one. The quality_unresolved
+// line is Mac's approved wording; the banned_phrase and error_fallback variants follow it.
+const SECOND_PASS_LINES = {
+  banned_phrase: (phrase) => `Contains a phrase we avoid: '${phrase}'. We've already given this one a second pass, so edit that line before you post.`,
+  quality_unresolved: () => "We've already given this one a second pass. Have a read and tweak anything that doesn't sound like you.",
+  error_fallback: () => "Our quality check didn't finish on this second pass. Have a read and tweak anything that doesn't sound like you.",
+}
+
+// What the Regenerate sheet promises before the run (UX ruling 2a). Says what the new version is
+// for, never that a person will check it.
+const INTRO_LINES = {
+  banned_phrase: (phrase) => `We'll write a fresh version without '${phrase}'.`,
+  quality_unresolved: () => "We'll write a fresh version and run it through our quality check again.",
+  error_fallback: () => "We'll write a fresh version and run our quality check on it.",
+}
+
+// One code-resolution rule for every line set. banned_phrase without a phrase (the line would
+// read "avoid: ''") falls back to quality_unresolved, which is still true: the post did fail a
+// check. An unknown or null code also falls back to it.
+function pick(lines, reason, phrase) {
   if (reason === 'banned_phrase') {
     const p = typeof phrase === 'string' ? phrase.trim() : ''
-    return p ? LINES.banned_phrase(p) : LINES.quality_unresolved()
+    return p ? lines.banned_phrase(p) : lines.quality_unresolved()
   }
-  if (reason === 'error_fallback') return LINES.error_fallback()
-  return LINES.quality_unresolved()
+  if (reason === 'error_fallback') return lines.error_fallback()
+  return lines.quality_unresolved()
+}
+
+/**
+ * The one reason line for a flag. `secondPass`: the flagged post is itself a regenerate, so the
+ * line offers no Regenerate. The generator emits only the three codes, and a delivered_flagged
+ * row with any other reason trips Sentinel's wo4_watch flag_mismatch alert, so the fallback is a
+ * monitored anomaly, not normal copy.
+ */
+export function flagReasonLine(reason, phrase, { secondPass = false } = {}) {
+  return pick(secondPass ? SECOND_PASS_LINES : LINES, reason, phrase)
+}
+
+/** The Regenerate sheet's opening line for a flagged original. */
+export function regenerateIntroLine(reason, phrase) {
+  return pick(INTRO_LINES, reason, phrase)
 }
 
 /** True only for an explicit quality_flag === true. Rows without the field are not flagged. */

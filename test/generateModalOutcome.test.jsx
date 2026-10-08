@@ -437,7 +437,9 @@ describe('WO-4: a flagged delivery is "Check before posting" + one reason line +
     await submit()
     await act(async () => { fireEvent.click(within(panel()).getByRole('button', { name: /^regenerate$/i })) })
     expect(phase()).toBe('flagged')
-    expect(within(panel()).getByText("Our quality check didn't finish, so this is the first draft. Give it a read, or regenerate.")).toBeTruthy()
+    // UX ruling 2a: the second-pass line, which points at no Regenerate (there is none).
+    expect(within(panel()).getByText("Our quality check didn't finish on this second pass. Have a read and tweak anything that doesn't sound like you.")).toBeTruthy()
+    expect(panel().textContent).not.toMatch(/regenerate/i)
     expect(within(panel()).queryByRole('button', { name: /^regenerate$/i })).toBeNull()
     expect(within(panel()).getByRole('button', { name: /open it/i })).toBeTruthy()
   })

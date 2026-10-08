@@ -10,7 +10,8 @@ import { supabase, getSessionOnce } from '../lib/supabase'
 import { fmtSlotDay } from '../lib/slotDate'
 import { isVoiceEmpty } from '../lib/voice'
 import { pollOutcome, fetchAttempt, classifySyncBody, NO_ANSWER_MS } from '../lib/generationOutcome'
-import { FLAG_TITLE, flagReasonLine } from '../lib/qualityFlag'
+import { FLAG_TITLE, flagReasonLine, regenerateIntroLine } from '../lib/qualityFlag'
+import { describeShape } from '../lib/regenerateShape'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
@@ -102,12 +103,19 @@ const FREESTYLE_TEMPLATES = {
  * `regenerate_of`, and generate-content.js accepts it only for a flagged ORIGINAL of this studio
  * that hasn't been regenerated (N2). The same field is sent when the owner taps Regenerate on a
  * flagged outcome below. The app never sends `regenerated_from`; the generator writes it.
+ *
+ * `regenerateShape` + `regenerateReason` (UX ruling 2a, Mac 2026-10-08): with `regenerateOf`,
+ * the modal is a short sheet instead of the full form. It asks for the original's platforms,
+ * counts and images (`lib/regenerateShape.js`), names the flag reason, and takes an optional
+ * topic (a freestyle original's topic is not stored anywhere the app can read). Without a shape
+ * it falls back to the full form, the old behaviour.
  */
 export default function GenerateModal({
   open, onClose, onSubmitted,
   slotId = null, slotJobLabel = null, slotRationale = null, slotDate = null,
-  regenerateOf = null,
+  regenerateOf = null, regenerateShape = null, regenerateReason = null,
 }) {
+  const sheet = !!(regenerateOf && regenerateShape)
   const app = useApp()
   const navigate = useNavigate()
   const primary = app.brandColorPrimary || '#667eea'
@@ -130,6 +138,21 @@ export default function GenerateModal({
   }, [open])
   const [freestyle, setFreestyle] = useState(false)
   const [freestylePrompt, setFreestylePrompt] = useState('')
+  // The Regenerate sheet asks for the original's shape on every open. Declared after the count
+  // reset above, so it runs after it and wins. Every platform is set, so one the original didn't
+  // use is OFF even if a previous run here switched it on. Keyed on the shape's VALUE: a caller
+  // that rebuilds the object each render must not wipe a topic being typed.
+  const shapeKey = sheet ? JSON.stringify(regenerateShape) : ''
+  useEffect(() => {
+    if (!open || !sheet) return
+    setPlatforms(p => Object.fromEntries(Object.entries(p).map(([k, v]) => {
+      const o = regenerateShape[k]
+      if (!o) return [k, { ...v, on: false }]
+      return [k, { ...v, on: true, count: o.count, images: o.images, ...(o.formats ? { formats: o.formats } : {}) }]
+    })))
+    setFreestyle(false)
+    setFreestylePrompt('')
+  }, [open, shapeKey])
   const [sessionVibe, setSessionVibe] = useState(app.aiPhotoPrompt || app.brandVoice || '')
   const [brandVoice, setBrandVoice] = useState(app.brandVoice || '')
   const [targetAudience, setTargetAudience] = useState('Fitness enthusiasts and local community members')
@@ -478,7 +501,7 @@ export default function GenerateModal({
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div>
             <h2 className="text-white text-lg font-bold" style={{ fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.03em' }}>
-              {regenerateOf ? 'Regenerate this post' : slotId ? 'Write this post' : 'Generate New Content'}
+              {sheet ? 'Write a new version' : regenerateOf ? 'Regenerate this post' : slotId ? 'Write this post' : 'Generate New Content'}
             </h2>
             <p className="text-slate-300 text-xs">
               {slotId
@@ -526,10 +549,42 @@ export default function GenerateModal({
             // Same form, same slot, plus regenerate_of. The outcome is cleared first, so a refusal
             // (validation, or the proxy's 403/409) shows on the form like any other error.
             onRegenerate={runIsRegenerate || submitting ? null : (id) => { setOutcome(null); handleSubmit(id) }}
+            secondPass={runIsRegenerate}
           />
         )}
 
-        <div hidden={!!outcome} className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+        {/* UX ruling 2a: the Regenerate sheet. What the new version is for, what it will be (the
+            original's shape), and an optional topic. Nothing else to set. */}
+        {sheet && (
+          <div hidden={!!outcome} className="px-6 py-5 space-y-4" data-testid="regenerate-sheet">
+            <p className="text-sm text-slate-200 leading-snug">
+              {regenerateIntroLine(regenerateReason && regenerateReason.reason, regenerateReason && regenerateReason.phrase)}
+            </p>
+            <p className="text-sm text-slate-400">Same as before: {describeShape(regenerateShape)}.</p>
+            {isOwner && (
+              <div>
+                <label htmlFor="regen-topic" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Anything this post should be about? <span className="text-slate-500 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  id="regen-topic"
+                  value={freestylePrompt}
+                  onChange={e => { setFreestylePrompt(e.target.value); setFreestyle(!!e.target.value.trim()) }}
+                  rows={3}
+                  placeholder="e.g. our October music themes for Core and Cycling"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-slate-600 resize-y focus:outline-none"
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+                />
+              </div>
+            )}
+            {isVoiceEmpty(brandVoice) && <VoiceMissingHint centered onOpenBrand={openBrandSettings} />}
+            {error && (
+              <div className="px-4 py-3 rounded-lg text-sm text-red-300" style={{ background: 'rgba(239,68,68,0.1)' }}>{error}</div>
+            )}
+          </div>
+        )}
+
+        <div hidden={!!outcome || sheet} className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
           {/* Session Vibe */}
           <div className="p-4 rounded-xl" style={{ background: `${primary}10`, border: `1px solid ${primary}30` }}>
             <label className="block text-xs font-bold tracking-wider uppercase mb-1" style={{ color: primary }}>This session's vibe</label>
@@ -718,17 +773,21 @@ export default function GenerateModal({
               className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:-translate-y-0.5 disabled:opacity-60"
               style={{ background: primary, color: isLight(primary) ? '#0A0B0D' : '#fff' }}
             >
-              {submitting ? <><Loader2 size={16} className="animate-spin" /> Creating...</> : <><Sparkles size={16} /> Create Content</>}
+              {submitting
+                ? <><Loader2 size={16} className="animate-spin" /> {sheet ? 'Starting...' : 'Creating...'}</>
+                : <><Sparkles size={16} /> {sheet ? 'Write a new version' : 'Create Content'}</>}
             </button>
           </div>
           {/* Freestyle hides the voice field, so on that path the disabled button would
               otherwise have no visible explanation. In standard mode the helper sits
-              under the field instead, so this would only duplicate it. */}
-          {freestyle && isVoiceEmpty(brandVoice) && (
+              under the field instead, so this would only duplicate it. The sheet shows its own. */}
+          {freestyle && !sheet && isVoiceEmpty(brandVoice) && (
             <VoiceMissingHint centered onOpenBrand={openBrandSettings} />
           )}
           <p className="text-[10px] text-slate-500 text-center mt-3">
-            FCA generates premium content — great things take a moment. Ready within 20 minutes.
+            {sheet
+              ? 'Usually takes about a minute.'
+              : 'FCA generates premium content — great things take a moment. Ready within 20 minutes.'}
           </p>
         </div>
       </div>
@@ -749,7 +808,7 @@ export default function GenerateModal({
  * Accessibility: the result text is the live region (actions sit outside it), and focus moves to
  * the heading whenever the phase changes — the form that held focus has just been hidden.
  */
-function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose, onRegenerate }) {
+function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClose, onRegenerate, secondPass = false }) {
   const headingRef = useRef(null)
   useEffect(() => { if (headingRef.current) headingRef.current.focus() }, [outcome.phase])
   const day = slotDate ? fmtSlotDay(slotDate) : null
@@ -790,7 +849,8 @@ function OutcomePanel({ outcome, slotDate, primary, onOpen, onDeliveries, onClos
       const flag = outcome.flag || {}
       title = FLAG_TITLE
       tone = 'text-amber-200'
-      body = flagReasonLine(flag.reason, flag.phrase)
+      // A regenerate's own flag offers no Regenerate, so its line must not point at one (2a).
+      body = flagReasonLine(flag.reason, flag.phrase, { secondPass })
       actions = (
         <div className="flex gap-3 flex-wrap justify-end">
           {done}

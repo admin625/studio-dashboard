@@ -15,9 +15,10 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
 let submitted = null
 vi.mock('../src/components/GenerateModal', () => ({
-  default: ({ onSubmitted, open, regenerateOf, slotId, slotDate }) => {
+  default: ({ onSubmitted, open, regenerateOf, slotId, slotDate, regenerateShape, regenerateReason }) => {
     submitted = onSubmitted
-    return open ? <div data-testid="regen-modal" data-slot={slotId || ''} data-slot-date={slotDate || ''}>{regenerateOf}</div> : null
+    return open ? <div data-testid="regen-modal" data-slot={slotId || ''} data-slot-date={slotDate || ''}
+      data-shape={JSON.stringify(regenerateShape ?? null)} data-reason={JSON.stringify(regenerateReason ?? null)}>{regenerateOf}</div> : null
   },
 }))
 vi.mock('../src/components/Layout', () => ({ default: ({ children }) => <div>{children}</div> }))
@@ -140,8 +141,20 @@ describe('DeliveryView: the WO-4 flag (D4)', () => {
     deliveryRow = flagged({ flag_reason: 'error_fallback', flag_phrase: null, regenerated_from: 'orig-1' })
     renderView()
     const box = await screen.findByTestId('quality-flag')
-    expect(box.textContent).toContain("Our quality check didn't finish, so this is the first draft. Give it a read, or regenerate.")
+    // UX ruling 2a: the second-pass line points at no Regenerate, because there is none.
+    expect(box.textContent).toContain("Our quality check didn't finish on this second pass. Have a read and tweak anything that doesn't sound like you.")
+    expect(box.textContent).not.toMatch(/regenerate/i)
     expect(screen.queryByRole('button', { name: /^regenerate$/i })).toBeNull()
+  })
+
+  it("Regenerate passes the original's shape and reason to the sheet (UX ruling 2a)", async () => {
+    deliveryRow = flagged({ instagram_content: [{ caption: 'a', format: 'feed_post', photo_url: null }] })
+    renderView()
+    await screen.findByTestId('quality-flag')
+    await act(async () => { screen.getByRole('button', { name: /^regenerate$/i }).click() })
+    const m = screen.getByTestId('regen-modal')
+    expect(JSON.parse(m.dataset.shape)).toEqual({ instagram: { count: 1, images: false, formats: ['feed_post'] } })
+    expect(JSON.parse(m.dataset.reason)).toEqual({ reason: 'banned_phrase', phrase: 'beast mode' })
   })
 
   it('an original that was already regenerated links to the regenerate instead of offering another', async () => {

@@ -2,7 +2,7 @@
  * DeliveryView — Full delivery detail page.
  * Loads delivery by ID, shows posts grouped by platform with tabs.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { slotDatesByPost, fmtSlotDay } from '../lib/slotDate'
@@ -12,6 +12,7 @@ import PostCard from '../components/PostCard'
 import GenerateModal from '../components/GenerateModal'
 import { FLAG_TITLE, flagReasonLine, isFlagged, canOfferRegenerate } from '../lib/qualityFlag'
 import { isDeliveredPhase } from '../lib/generationOutcome'
+import { originalShape } from '../lib/regenerateShape'
 import { Loader2, ChevronLeft, Lock, Calendar, AlertTriangle } from 'lucide-react'
 
 const PLATFORMS = ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok']
@@ -36,6 +37,8 @@ export default function DeliveryView() {
 
   // 2b — gate on authReady so edit permissions don't flip on a transient null role.
   const isOwner = app.authReady && app.role === 'studio_owner'
+  // What a Regenerate asks for: this delivery's own platforms, counts and images (UX ruling 2a).
+  const regenShape = useMemo(() => originalShape(delivery), [delivery])
   const readOnly = !isOwner
 
   useEffect(() => {
@@ -233,7 +236,7 @@ export default function DeliveryView() {
           <p className="text-sm font-semibold text-amber-200 flex items-center gap-2">
             <AlertTriangle size={15} /> {FLAG_TITLE}
           </p>
-          <p className="text-sm text-slate-200 mt-1 leading-snug">{flagReasonLine(delivery.flag_reason, delivery.flag_phrase)}</p>
+          <p className="text-sm text-slate-200 mt-1 leading-snug">{flagReasonLine(delivery.flag_reason, delivery.flag_phrase, { secondPass: delivery.regenerated_from != null })}</p>
           {isOwner && (canOfferRegenerate(delivery, { alreadyRegenerated: !!regeneratedId }) || regeneratedId) && (
             <div className="mt-3 flex gap-3 flex-wrap">
               {regeneratedId ? (
@@ -311,6 +314,8 @@ export default function DeliveryView() {
 
       {isOwner && canOfferRegenerate(delivery) && (
         <GenerateModal open={regenOpen} regenerateOf={delivery.id} onClose={() => setRegenOpen(false)}
+          // UX ruling 2a: ask for the original's shape, and say why. No shape = the full form.
+          regenerateShape={regenShape} regenerateReason={{ reason: delivery.flag_reason, phrase: delivery.flag_phrase }}
           slotId={origSlot ? origSlot.id : null} slotDate={origSlot ? origSlot.date : null}
           // Once the regenerate delivers, this original links to it and stops offering another.
           onSubmitted={(_p, outcome) => { if (outcome && isDeliveredPhase(outcome.phase) && outcome.deliveryId) setRegeneratedId(outcome.deliveryId) }} />
