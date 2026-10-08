@@ -24,6 +24,7 @@ import { fmtSlotDay, fmtSlotMonthDay, localYmd, quarterStartToShow, nextPlannedW
 import Layout from '../components/Layout'
 import GenerateModal from '../components/GenerateModal'
 import { isDeliveredPhase } from '../lib/generationOutcome'
+import { planLine } from '../lib/planLine'
 import { NAV_ACTIVE, NAV_INACTIVE, NAV_ACTIVE_PILL } from '../lib/navColors'
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Lock,
@@ -247,7 +248,7 @@ export default function Calendar() {
         open={!!genSlot}
         slotId={genSlot ? genSlot.id : null}
         slotJobLabel={genSlot ? genSlot.job_label : null}
-        slotRationale={genSlot ? genSlot.reason : null}
+        slotRationale={genSlot ? planLine(genSlot) : null}
         slotDate={genSlot ? genSlot.slot_date : null}
         // Reload on close too: the owner may close before the slot finished flipping.
         onClose={() => { setGenSlot(null); loadWeek(weekStart) }}
@@ -357,7 +358,12 @@ export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
               {s.status === 'generated' && <Chip text="Written" color={primary} />}
               {s.reason_source === 'owner' && <Chip text="Your words" color="#a78bfa" />}
             </div>
-            <p className="text-sm text-slate-200 leading-snug">{s.reason}</p>
+            {/* UX ruling 2b: one plain line naming the goal (Katie: the why stays visible). The
+                planner's full reasoning is behind "Why this post?", in the sheet this card opens. */}
+            <p className="text-sm text-slate-200 leading-snug" data-testid="plan-line">{planLine(s)}</p>
+            {!s.held && (
+              <p className="text-[11px] text-slate-500 mt-1">Why this post? <ChevronRight size={11} className="inline -mt-px" /></p>
+            )}
             {s.held && (
               <p className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1.5">
                 <Lock size={11} /> opens when you confirm
@@ -495,7 +501,7 @@ export function SlotPanel({ slot, primary, onClose, onAct, onReason, onGenerate 
             className="text-slate-500 hover:text-white p-1"><X size={18} /></button>
         </div>
 
-        <label className="block text-[11px] text-slate-400 mb-1.5" htmlFor="slot-reason">Why this post</label>
+        <label className="block text-[11px] text-slate-400 mb-1.5" htmlFor="slot-reason">Why this post?</label>
         <textarea
           id="slot-reason"
           value={text}

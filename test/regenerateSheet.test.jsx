@@ -140,7 +140,7 @@ describe('Regenerate sheet', () => {
 
   it('the wait line follows the shape: photos take longer', () => {
     render(ui({ regenerateShape: { instagram: { count: 1, images: true } } }))
-    expect(screen.getByText('Usually a minute or two with photos.')).toBeTruthy()
+    expect(screen.getByText('Usually a minute or two.')).toBeTruthy()
     cleanup()
     render(ui({ regenerateShape: ONE_NO_IMG }))
     expect(screen.getByText('Usually takes about a minute.')).toBeTruthy()

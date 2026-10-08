@@ -7,10 +7,11 @@ import { supabase, SUPABASE_URL, authedJsonHeaders } from '../lib/supabase'
 import { downscaleToBase64, probeLogoAlpha } from '../lib/image'
 import { withDownloadParam, photoDownloadName } from '../lib/downloadUrl'
 import { fmtSlotDay } from '../lib/slotDate'
+import { humanizeType } from '../lib/postLabels'
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
-  Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp, Edit3, Wand2,
+  Image as ImageIcon, Sparkles, Save, X, Loader2, ChevronDown, ChevronUp, Wand2,
   Stamp, RotateCcw, AlertTriangle,
 } from 'lucide-react'
 
@@ -85,6 +86,9 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
   // warning a second later, which is the whole failure we are trying to stop happening silently.
   const [logoWarning, setLogoWarning] = useState(null)
   const [promptExpanded, setPromptExpanded] = useState(false)
+  // UX ruling 2b: the post's type, goal and image prompt are working notes, not post content.
+  // They sit behind one "Details" toggle instead of on the card.
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   // Watermark state. A studio with ANY usable logo — a light/dark variant, or just the primary
   // via the fallback below — gets the toggle ON by default. Zone/variant pre-fill from the
@@ -388,9 +392,9 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
         matched_photo_id: null,
         needs_ai_image: false,
       })
-      flashMsg({ type: 'success', text: 'Image regenerated' })
+      flashMsg({ type: 'success', text: 'New photo ready' })
     } catch (e) {
-      flashMsg({ type: 'error', text: e.message || 'Regenerate failed' })
+      flashMsg({ type: 'error', text: e.message || "Couldn't make a new photo" })
     }
     setRegenerating(false)
   }
@@ -641,11 +645,6 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
             For {fmtSlotDay(slotDate)}
           </span>
         )}
-        {post.content_type && (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style={{ background: `${primary}20`, color: primary }}>
-            {post.content_type}
-          </span>
-        )}
         {post.format && fmtStyle && (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style={{ background: fmtStyle.bg, color: fmtStyle.color }}>
             {post.format.replace('_', ' ')}
@@ -673,62 +672,6 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
               <span className="text-[10px] text-slate-500 italic truncate">{post.image_direction}</span>
             )}
           </div>
-
-          {/* Image prompt subtext — AI-generated photos ONLY, not studio library photos.
-              Click the row to open the photo editor pre-filled. Truncates at 120 chars
-              with a "show more" toggle. Helper line below points to the edit flow. */}
-          {isAI && effectivePrompt && (() => {
-            const PROMPT_LIMIT = 120
-            const isLong = effectivePrompt.length > PROMPT_LIMIT
-            const shown = promptExpanded || !isLong
-              ? effectivePrompt
-              : effectivePrompt.slice(0, PROMPT_LIMIT).trimEnd() + '…'
-            return (
-              <div
-                style={{
-                  background: 'rgba(255,255,255,0.01)',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => { if (!editorOpen && !readOnly) setEditorOpen(true) }}
-                  title={effectivePrompt}
-                  className="w-full flex items-start gap-2 px-5 pt-3 pb-1 text-left transition-colors hover:bg-white/[0.025]"
-                  style={{ cursor: editorOpen || readOnly ? 'default' : 'pointer' }}
-                >
-                  <Edit3 size={13} className="flex-shrink-0 mt-[2px]" style={{ color: '#A0A0A0' }} />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-semibold mr-1.5" style={{ color: '#A0A0A0', fontSize: '13px' }}>
-                      Image prompt:
-                    </span>
-                    <span style={{ color: '#A0A0A0', fontSize: '13px' }}>
-                      {shown}
-                    </span>
-                    {isLong && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setPromptExpanded(v => !v)
-                        }}
-                        className="ml-1.5 font-semibold transition-colors"
-                        style={{ color: primary, fontSize: '13px' }}
-                      >
-                        {promptExpanded ? 'show less' : 'show more'}
-                      </button>
-                    )}
-                  </div>
-                </button>
-                <p
-                  className="px-5 pb-2 italic"
-                  style={{ color: '#666666', fontSize: '11px', paddingLeft: '39px' }}
-                >
-                  Adjust this prompt in Edit Photo to regenerate with changes.
-                </p>
-              </div>
-            )
-          })()}
 
           {/* Edit Photo toggle */}
           {!readOnly && (
@@ -772,7 +715,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
                   style={{ background: primary, color: '#fff' }}
                 >
                   {regenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                  {regenerating ? 'Regenerating...' : 'Regenerate'}
+                  {regenerating ? 'Making a new photo...' : 'New photo'}
                 </button>
 
                 <button
@@ -1184,19 +1127,48 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
         </div>
       )}
 
-      {/* Metadata */}
-      {(post.optimal_posting_time || post.engagement_goal) && (
+      {/* Metadata: Best Time stays on the card. */}
+      {post.optimal_posting_time && (
         <div className="px-5 py-3 flex flex-wrap gap-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-          {post.optimal_posting_time && (
-            <div className="flex items-center gap-2">
-              <Clock size={12} className="text-slate-500" />
-              <span className="text-base font-bold text-slate-400"><span className="text-slate-300">Best Time:</span> {post.optimal_posting_time}</span>
-            </div>
-          )}
-          {post.engagement_goal && (
-            <div className="flex items-center gap-2">
-              <Target size={12} className="text-slate-500" />
-              <span className="text-[11px] text-slate-400"><span className="font-semibold text-slate-300">Goal:</span> {post.engagement_goal}</span>
+          <div className="flex items-center gap-2">
+            <Clock size={12} className="text-slate-500" />
+            <span className="text-base font-bold text-slate-400"><span className="text-slate-300">Best Time:</span> {post.optimal_posting_time}</span>
+          </div>
+        </div>
+      )}
+
+      {/* UX ruling 2b: Details. Type, goal and the AI image prompt, closed by default. */}
+      {(post.content_type || post.engagement_goal || (isAI && effectivePrompt)) && (
+        <div className="px-5 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <button type="button" onClick={() => setDetailsOpen(v => !v)} aria-expanded={detailsOpen}
+            className="flex items-center gap-1.5 min-h-[44px] text-[12px] font-semibold text-slate-400 hover:text-white transition-colors">
+            Details {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+          {detailsOpen && (
+            <div className="pb-2 space-y-2 text-[12px] text-slate-400" data-testid="post-details">
+              {post.content_type && (
+                <p><span className="font-semibold text-slate-300">Type:</span> {humanizeType(post.content_type)}</p>
+              )}
+              {post.engagement_goal && (
+                <p className="flex items-start gap-1.5"><Target size={12} className="text-slate-500 mt-[3px] flex-shrink-0" />
+                  <span><span className="font-semibold text-slate-300">Goal:</span> {post.engagement_goal}</span></p>
+              )}
+              {isAI && effectivePrompt && (
+                <div>
+                  <p><span className="font-semibold text-slate-300">Image prompt:</span>{' '}
+                    {promptExpanded || effectivePrompt.length <= 120 ? effectivePrompt : effectivePrompt.slice(0, 120).trimEnd() + '…'}
+                    {effectivePrompt.length > 120 && (
+                      <button type="button" onClick={() => setPromptExpanded(v => !v)}
+                        className="ml-1.5 font-semibold" style={{ color: primary }}>
+                        {promptExpanded ? 'show less' : 'show more'}
+                      </button>
+                    )}
+                  </p>
+                  {!readOnly && (
+                    <p className="italic text-slate-500 text-[11px] mt-1">Change it in Edit Photo to make a new photo.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

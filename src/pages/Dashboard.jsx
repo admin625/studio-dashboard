@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import DeliveryList from '../components/DeliveryList'
 import GenerateModal from '../components/GenerateModal'
 import { isDeliveredPhase } from '../lib/generationOutcome'
+import { waitLine } from '../lib/waitLine'
 import { Plus, Sparkles, X } from 'lucide-react'
 
 const POLL_INTERVAL = 15000
@@ -129,7 +130,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm text-white font-semibold">Your content is being created</p>
               <p className="text-xs text-slate-400 mt-0.5">
-                Ready within 20 minutes. We'll email you as soon as it's done.
+                {waitLine()} We'll email you as soon as it's done.
               </p>
             </div>
           </div>
