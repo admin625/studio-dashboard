@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { planLine } from '../src/lib/planLine.js'
-import { waitLine } from '../src/lib/waitLine.js'
+import { waitLine, TAKING_LONGER_MS } from '../src/lib/waitLine.js'
 import { humanizeType } from '../src/lib/postLabels.js'
-import { slotWeekday } from '../src/lib/slotDate.js'
 
 /**
  * UX ruling 2b (Mac 2026-10-08). The plan card showed the planner's own reasoning ("…aligns with
@@ -17,9 +16,8 @@ describe('planLine', () => {
     expect(line).toBe('Goal: help new people get to know you.')
     expect(line).not.toMatch(/weight|own audience|quarter/i)
   })
-  it("class traffic names the slot's own day (UTC rule: Sat Oct 10 stays Saturday)", () => {
-    expect(planLine({ job: 'class_traffic', slot_date: '2026-10-10' })).toBe("Goal: get people booked into Saturday's classes.")
-    expect(planLine({ job: 'class_traffic', slot_date: null })).toBe('Goal: get people booked into class.')
+  it('class traffic claims no weekday (the post day is not proven to be the class day)', () => {
+    expect(planLine({ job: 'class_traffic', slot_date: '2026-10-10' })).toBe('Goal: get people booked into class.')
   })
   it('events name the event; no title falls back', () => {
     expect(planLine({ job: 'event_conversion', event_title: 'SHOP Fashion Show' })).toBe('Goal: fill the room for SHOP Fashion Show.')
@@ -34,6 +32,8 @@ describe('planLine', () => {
   it('other jobs use their own label; nothing returns empty', () => {
     expect(planLine({ job: 'other', job_label: 'Instructor spotlight' })).toBe('Goal: Instructor spotlight.')
     expect(planLine({ job: 'other', job_label: 'Other' })).toBe('Goal: a post for your plan.')
+    expect(planLine({ job: 'other', job_label: 'Retention push!! ' })).toBe('Goal: Retention push.')
+    expect(planLine({ job: 'other', job_label: '...' })).toBe('Goal: a post for your plan.')
     expect(planLine(null)).toBe('')
   })
 })
@@ -44,19 +44,18 @@ describe('waitLine: one estimate', () => {
     expect(waitLine(true)).toBe('Usually a minute or two.')
     expect(waitLine()).toBe('Usually a minute or two.')
   })
+  it('"taking longer" starts outside the promised range: the longest measured run (92 s, 10-08) plus a minute', () => {
+    expect(TAKING_LONGER_MS).toBeGreaterThanOrEqual(92_000 + 60_000 - 2_000)
+  })
   it('never promises a ceiling it cannot keep (the old "within 20 minutes")', () => {
     for (const v of [true, false, undefined]) expect(waitLine(v)).not.toMatch(/20|within/)
   })
 })
 
-describe('humanizeType / slotWeekday', () => {
+describe('humanizeType', () => {
   it('raw codes read as words', () => {
     expect(humanizeType('CLASS_PROMO')).toBe('Class promo')
     expect(humanizeType('educational_tip')).toBe('Educational tip')
     expect(humanizeType('')).toBe('')
-  })
-  it('weekday by the slot date, not the viewer timezone; bad input is empty', () => {
-    expect(slotWeekday('2026-10-05')).toBe('Monday')
-    expect(slotWeekday('nope')).toBe('')
   })
 })

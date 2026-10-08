@@ -21,14 +21,6 @@ export function fmtSlotDay(ymd) {
   })
 }
 
-/** "Saturday" — the slot's own weekday, by the same UTC rule. '' for a missing or bad date. */
-export function slotWeekday(ymd) {
-  if (typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ''
-  const d = new Date(ymd + 'T00:00:00Z')
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
-}
-
 /**
  * Which calendar day each post in a delivery was written for (HQ 2026-09-21: "make the date
  * visible so an owner can see it took"). Input: generation_posts rows for one delivery, with

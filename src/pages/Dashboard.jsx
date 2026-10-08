@@ -5,7 +5,7 @@ import Layout from '../components/Layout'
 import DeliveryList from '../components/DeliveryList'
 import GenerateModal from '../components/GenerateModal'
 import { isDeliveredPhase } from '../lib/generationOutcome'
-import { waitLine } from '../lib/waitLine'
+import { waitLine, TAKING_LONGER_MS } from '../lib/waitLine'
 import { Plus, Sparkles, X } from 'lucide-react'
 
 const POLL_INTERVAL = 15000
@@ -86,7 +86,7 @@ export default function Dashboard() {
     if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current)
     fallbackTimeoutRef.current = setTimeout(() => {
       setPendingTakingLonger(true)
-    }, 90_000)
+    }, TAKING_LONGER_MS)
     startPolling()
   }
 

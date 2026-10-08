@@ -103,7 +103,7 @@ describe('slot run: the outcome reaches the modal', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3 * 4000) })
 
     expect(phase()).toBe('failed')
-    expect(screen.getByText("We couldn't write this post.")).toBeTruthy()
+    expect(screen.getByText("We couldn't write these posts.")).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/human look|notified|will look|look at it|Deliberate failure|What the check flagged/i)
     expect(screen.queryByRole('button', { name: /try again|retry|regenerate/i })).toBeNull()
     expect(p.onClose).not.toHaveBeenCalled()
@@ -128,15 +128,16 @@ describe('slot run: the outcome reaches the modal', () => {
     await submit()
     expect(phase()).toBe('delivered')
     // UX 2b: the day is said once, not twice.
-    expect(screen.getByText('Your 3 posts for Thu, Oct 8 are ready.')).toBeTruthy()
+    // No number once it's done: 3 were asked for, the delivered count is not proven here.
+    expect(screen.getByText('Your posts for Thu, Oct 8 are ready.')).toBeTruthy()
     expect(screen.getByText("It's on your plan and in your Deliveries.")).toBeTruthy()
     expect(panel().textContent.match(/Oct 8/g)).toHaveLength(1)
-    expect(screen.getByRole('button', { name: /open the post/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /open your posts/i })).toBeTruthy()
   })
 
   it('a 1-post slot run says "your post … is ready", and images off gets the shorter wait line', async () => {
     setup({ slotId: 's', slotDate: '2026-10-08' })
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '1' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /posts for instagram/i }), { target: { value: '1' } })
     fireEvent.click(screen.getByTitle(/images on/i))
     attemptRows.push({ outcome: null, outcome_detail: null, delivery_id: null }, { outcome: 'delivered', delivery_id: 'dddddddd-0000-0000-0000-000000000001', outcome_detail: null })
     await submit()
@@ -144,6 +145,23 @@ describe('slot run: the outcome reaches the modal', () => {
     expect(panel().textContent).toContain('Usually takes about a minute.')
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
     expect(screen.getByText('Your post for Thu, Oct 8 is ready.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /open the post/i })).toBeTruthy()
+  })
+
+  it('a 3-post slot run that never reports back agrees in number', async () => {
+    setup({ slotId: 's', slotDate: '2026-10-05' })
+    await submit()
+    await act(async () => { await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 4000) })
+    expect(panel().textContent).toContain("Your posts for Mon, Oct 5 haven't reported back in 10 minutes. They may have arrived, or they may have failed.")
+    expect(panel().textContent).toContain("if they aren't there")
+    expect(panel().textContent).not.toMatch(/posts[^.]*hasn't/)
+  })
+
+  it('a 3-post slot run that fails says "these posts"', async () => {
+    setup({ slotId: 's', slotDate: '2026-10-05' })
+    attemptRows.push({ outcome: 'failed', outcome_detail: null, delivery_id: null })
+    await submit()
+    expect(screen.getByText("We couldn't write these posts.")).toBeTruthy()
   })
 
   it("a synchronous needs_review body (the 71021 shape, no 'error' key) is shown as failed, not read as success", async () => {
@@ -331,7 +349,7 @@ describe('the proxy lost the answer, not the run (2026-09-21 full /review)', () 
     await submit()
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
     expect(screen.queryByText(/Request timed out/)).toBeNull()
-    expect(screen.getByText('Your 3 posts for Mon, Oct 5 are ready.')).toBeTruthy()
+    expect(screen.getByText('Your posts for Mon, Oct 5 are ready.')).toBeTruthy()
   })
 })
 
@@ -351,7 +369,7 @@ describe('lifecycle and focus (2026-09-21 full /review)', () => {
     setup({ slotId: 's', slotDate: '2026-10-05' })
     attemptRows.push(REAL_NEEDS_REVIEW)
     await submit()
-    expect(document.activeElement.textContent).toBe("We couldn't write this post.")
+    expect(document.activeElement.textContent).toBe("We couldn't write these posts.")
   })
 })
 

@@ -45,6 +45,28 @@ describe('PostCard details', () => {
     expect(d.textContent).toContain('Type: Class promo')
     expect(d.textContent).toContain('Goal: Drive followers to book a class')
     expect(t.getAttribute('aria-expanded')).toBe('true')
+    expect(t.getAttribute('aria-controls')).toBe(d.id)
+    expect(t.getAttribute('aria-label')).toBe('Details for post 1')
+  })
+
+  it('an AI photo: Details shows its prompt, cut at 120 with show more, and the Edit Photo pointer', () => {
+    const long = 'Soft natural light, ' + 'calm '.repeat(40)
+    card({ ...POST, matched_photo_id: null, image_prompt: long })
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const d = screen.getByTestId('post-details')
+    expect(d.textContent).toContain('Image prompt: Soft natural light')
+    expect(d.textContent).toContain('…')
+    expect(d.textContent).toContain('Change it in Edit Photo')
+    fireEvent.click(screen.getByRole('button', { name: /show more/i }))
+    expect(d.textContent).toContain(long.trim())
+  })
+
+  it('no photo yet: the prompt shows but the pointer to Edit Photo (which is not there) does not', () => {
+    card({ ...POST, matched_photo_id: null, photo_url: null, needs_ai_image: true })
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const d = screen.getByTestId('post-details')
+    expect(screen.queryByRole('button', { name: /edit photo/i })).toBeNull()
+    expect(d.textContent).not.toContain('Change it in Edit Photo')
   })
 
   it('negative control: a post with none of the three has no Details toggle', () => {

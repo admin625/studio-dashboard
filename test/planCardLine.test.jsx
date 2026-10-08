@@ -28,7 +28,7 @@ afterEach(cleanup)
 describe('plan card line', () => {
   it("shows the plain goal, not the planner's paragraph, with a way to the full reason", () => {
     view([slot()])
-    expect(screen.getByTestId('plan-line').textContent).toBe("Goal: get people booked into Saturday's classes.")
+    expect(screen.getByTestId('plan-line').textContent).toBe('Goal: get people booked into class.')
     expect(document.body.textContent).not.toContain('class-traffic slot')
     expect(screen.getByText(/Why this post\?/)).toBeTruthy()
   })

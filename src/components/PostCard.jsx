@@ -8,6 +8,10 @@ import { downscaleToBase64, probeLogoAlpha } from '../lib/image'
 import { withDownloadParam, photoDownloadName } from '../lib/downloadUrl'
 import { fmtSlotDay } from '../lib/slotDate'
 import { humanizeType } from '../lib/postLabels'
+import { waitLine } from '../lib/waitLine'
+
+// Image prompt shown in Details is cut here, with show more / show less.
+const PROMPT_LIMIT = 120
 import { useApp } from '../context/AppContext'
 import {
   Copy, Check, Pencil, Download, Clock, Target,
@@ -962,7 +966,7 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
                         <p className="text-xs text-slate-300 mt-0.5">
                           {aiGenTimedOut
                             ? 'Image will appear in your Photos page when ready.'
-                            : "Ready in about 1 minute. Keep working — it'll land here when done."}
+                            : `${waitLine(true)} Keep working — it'll land here when done.`}
                         </p>
                       </div>
                       <button onClick={dismissAiBanner} className="flex-shrink-0 text-slate-400 hover:text-white transition-colors" aria-label="Dismiss">
@@ -1141,11 +1145,12 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
       {(post.content_type || post.engagement_goal || (isAI && effectivePrompt)) && (
         <div className="px-5 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
           <button type="button" onClick={() => setDetailsOpen(v => !v)} aria-expanded={detailsOpen}
+            aria-controls={`post-details-${platform}-${index}`} aria-label={`Details for post ${post.post_number || index + 1}`}
             className="flex items-center gap-1.5 min-h-[44px] text-[12px] font-semibold text-slate-400 hover:text-white transition-colors">
             Details {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
           {detailsOpen && (
-            <div className="pb-2 space-y-2 text-[12px] text-slate-400" data-testid="post-details">
+            <div id={`post-details-${platform}-${index}`} className="pb-2 space-y-2 text-[12px] text-slate-400" data-testid="post-details">
               {post.content_type && (
                 <p><span className="font-semibold text-slate-300">Type:</span> {humanizeType(post.content_type)}</p>
               )}
@@ -1156,15 +1161,15 @@ export default function PostCard({ post, index, platform, deliveryId, readOnly, 
               {isAI && effectivePrompt && (
                 <div>
                   <p><span className="font-semibold text-slate-300">Image prompt:</span>{' '}
-                    {promptExpanded || effectivePrompt.length <= 120 ? effectivePrompt : effectivePrompt.slice(0, 120).trimEnd() + '…'}
-                    {effectivePrompt.length > 120 && (
+                    {promptExpanded || effectivePrompt.length <= PROMPT_LIMIT ? effectivePrompt : effectivePrompt.slice(0, PROMPT_LIMIT).trimEnd() + '…'}
+                    {effectivePrompt.length > PROMPT_LIMIT && (
                       <button type="button" onClick={() => setPromptExpanded(v => !v)}
-                        className="ml-1.5 font-semibold" style={{ color: primary }}>
+                        className="ml-1.5 font-semibold py-2 -my-2" style={{ color: primary }}>
                         {promptExpanded ? 'show less' : 'show more'}
                       </button>
                     )}
                   </p>
-                  {!readOnly && (
+                  {!readOnly && hasImage && currentPhotoUrl && (
                     <p className="italic text-slate-500 text-[11px] mt-1">Change it in Edit Photo to make a new photo.</p>
                   )}
                 </div>

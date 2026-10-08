@@ -362,7 +362,7 @@ export function WeekView({ data, primary, onNav, onOpen, today, landedWeek }) {
                 planner's full reasoning is behind "Why this post?", in the sheet this card opens. */}
             <p className="text-sm text-slate-200 leading-snug" data-testid="plan-line">{planLine(s)}</p>
             {!s.held && (
-              <p className="text-[11px] text-slate-500 mt-1">Why this post? <ChevronRight size={11} className="inline -mt-px" /></p>
+              <p className="text-[11px] text-slate-400 mt-1">Why this post? <ChevronRight size={11} className="inline -mt-px" /></p>
             )}
             {s.held && (
               <p className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1.5">

@@ -8,8 +8,6 @@
  * Her own words win: a reason she wrote (reason_source 'owner') is shown as she wrote it.
  * Copy approved with 2b (pending at the 2b stop).
  */
-import { slotWeekday } from './slotDate'
-
 export function planLine(slot) {
   if (!slot) return ''
   if (slot.reason_source === 'owner' && typeof slot.reason === 'string' && slot.reason.trim()) {
@@ -19,13 +17,15 @@ export function planLine(slot) {
   switch (slot.job) {
     case 'awareness':
       return 'Goal: help new people get to know you.'
-    case 'class_traffic': {
-      const day = slotWeekday(slot.slot_date)
-      return day ? `Goal: get people booked into ${day}'s classes.` : 'Goal: get people booked into class.'
-    }
+    // No weekday: the post's day is not proven to be the class day it promotes (2b review).
+    case 'class_traffic':
+      return 'Goal: get people booked into class.'
     case 'event_conversion':
       return title ? `Goal: fill the room for ${title}.` : 'Goal: fill the room for an upcoming event.'
-    default:
-      return slot.job_label && slot.job_label !== 'Other' ? `Goal: ${slot.job_label}.` : 'Goal: a post for your plan.'
+    default: {
+      // job_label for 'other' is free text: strip its own end punctuation before adding ours.
+      const label = typeof slot.job_label === 'string' ? slot.job_label.trim().replace(/[.!?]+$/, '') : ''
+      return label && label !== 'Other' ? `Goal: ${label}.` : 'Goal: a post for your plan.'
+    }
   }
 }
