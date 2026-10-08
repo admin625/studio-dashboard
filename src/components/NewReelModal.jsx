@@ -16,6 +16,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { supabase, getSessionOnce } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
+import { useModalOpen } from '../lib/modalOpen'
 import {
   newAttemptId, emit, emitFailure, armAbandonBeacon,
   nameHash, pwaMode, STAGE, OK, APP_VERSION,
@@ -56,6 +57,7 @@ function decodeJwtClaim(token, key) {
 }
 
 export default function NewReelModal({ studioId, primary, onClose, onCreated }) {
+  useModalOpen(true) // mounted only while open (2c: the help bubble and phone tab bar step aside)
   const app = useApp()
   const [theme, setTheme] = useState('')
   const [platform, setPlatform] = useState('instagram_reels')

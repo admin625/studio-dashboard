@@ -4,6 +4,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useLocation, Link } from 'react-router-dom'
 import { LogOut, Palette, LayoutGrid, Image as ImageIcon, User, Film, CalendarDays, ChevronRight, ChevronLeft } from 'lucide-react'
 import { NAV_BG, NAV_INACTIVE, NAV_ACTIVE, NAV_ACTIVE_PILL, NAV_LABEL_SIZE } from '../lib/navColors'
+import { usePhoneWidth, PHONE_TAB_BAR_PX, useReportBottomBar } from '../lib/viewport'
+import { useAnyModalOpen } from '../lib/modalOpen'
 
 export default function Layout({ children }) {
   const { email, role, studioName, brandColorPrimary, authReady } = useApp()
@@ -11,6 +13,16 @@ export default function Layout({ children }) {
   const location = useLocation()
 
   const primary = brandColorPrimary || '#667eea'
+  // UX ruling 2c: on a phone the six tabs move to a bottom bar where all of them fit (the top row
+  // needed ~570px at 390px and hid Reels/Photos/Brand/Account behind a swipe). One nav is rendered
+  // at a time, so no link is duplicated for screen readers.
+  const phone = usePhoneWidth()
+  // The bar is fixed at z-50, the same layer as the slot sheet and New Reel modal, and comes after
+  // them in the DOM, so it painted over their bottom 56px ("Skip this one"). It steps aside while
+  // any modal is open (2c review).
+  const modalOpen = useAnyModalOpen()
+  const showBar = phone && !modalOpen
+  useReportBottomBar(showBar)
   // 2b — gate owner-only nav on authReady.
   const isOwner = authReady && role === 'studio_owner'
 
@@ -53,12 +65,13 @@ export default function Layout({ children }) {
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
-  }, [location.pathname, navItems.length, measure])
+  }, [location.pathname, navItems.length, measure, phone])
 
   return (
     <div className="min-h-screen" style={{ background: NAV_BG }}>
       {/* ── Nav bar ── */}
       <nav
+        aria-label={phone ? 'Studio' : 'Main'}
         className="sticky top-0 z-50"
         style={{ background: NAV_BG }}
       >
@@ -79,7 +92,11 @@ export default function Layout({ children }) {
               </span>
             </Link>
 
-            {/* Nav tabs — scroll within the nav (PR-4) */}
+            {/* On a phone: the studio's name here; the tabs are in the bottom bar. */}
+            {phone && <span className="min-w-0 truncate text-[13px] text-slate-300 font-medium">{studioName || ''}</span>}
+
+            {/* Nav tabs — scroll within the nav (PR-4). Desktop / tablet only (2c). */}
+            {!phone && (
             <div className="relative min-w-0 flex-1">
             <div ref={tabsRef} onScroll={measure} data-testid="nav-tabs"
               className="nav-scroll flex items-center gap-0.5 overflow-x-auto">
@@ -120,6 +137,7 @@ export default function Layout({ children }) {
               </div>
             )}
             </div>
+            )}
           </div>
 
           {/* Right: Studio name + role + sign out (never shrinks; the tab row gives way instead) */}
@@ -135,7 +153,7 @@ export default function Layout({ children }) {
             </div>
             <button
               onClick={signOut}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium hover:text-white hover:bg-white/5 transition-all"
+              className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 min-w-[44px] min-h-[44px] rounded-md text-[11px] font-medium hover:text-white hover:bg-white/5 transition-all"
               style={{ color: NAV_INACTIVE }}
               aria-label="Sign out"
             >
@@ -150,9 +168,33 @@ export default function Layout({ children }) {
       </nav>
 
       {/* ── Page content — directly on dark background ── */}
-      <main className="max-w-5xl mx-auto px-6 py-8">
+      {/* pb on a phone clears the bottom bar and the help bubble above it, so the last thing on a
+          page can scroll into view instead of sitting under them. */}
+      <main className={`max-w-5xl mx-auto px-6 pt-8 ${phone ? 'pb-36' : 'pb-8'}`}>
         {children}
       </main>
+
+      {/* ── Phone: bottom tab bar (2c) ── */}
+      {/* z-40: below every modal layer (z-50 sheets, z-100 overlays), as a second guard. */}
+      {showBar && (
+        <nav aria-label="Main" data-testid="nav-bottom"
+          className="fixed bottom-0 inset-x-0 z-40"
+          style={{ background: NAV_BG, borderTop: '1px solid rgba(255,255,255,0.08)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="grid" style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}>
+            {navItems.map(({ path, label, Icon }) => {
+              const active = location.pathname === path
+              return (
+                <Link key={path} to={path} aria-current={active ? 'page' : undefined}
+                  className="flex flex-col items-center justify-center gap-1 text-[10px] font-semibold uppercase tracking-wide"
+                  style={{ minHeight: PHONE_TAB_BAR_PX, color: active ? NAV_ACTIVE : NAV_INACTIVE, boxShadow: active ? `inset 0 2px 0 ${primary}` : 'none' }}>
+                  <Icon size={18} style={{ color: active ? primary : NAV_INACTIVE }} />
+                  {label}
+                </Link>
+              )
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   )
 }

@@ -13,6 +13,7 @@ import { pollOutcome, fetchAttempt, classifySyncBody, NO_ANSWER_MS } from '../li
 import { FLAG_TITLE, flagReasonLine, regenerateIntroLine } from '../lib/qualityFlag'
 import { describeShape } from '../lib/regenerateShape'
 import { waitLine } from '../lib/waitLine'
+import { useModalOpen } from '../lib/modalOpen'
 import {
   X, Loader2, ChevronRight, Sparkles, Plus, Trash2,
 } from 'lucide-react'
@@ -117,6 +118,7 @@ export default function GenerateModal({
   regenerateOf = null, regenerateShape = null, regenerateReason = null, regenerateReady = true,
 }) {
   const sheet = !!(regenerateOf && regenerateShape)
+  useModalOpen(open)
   const app = useApp()
   const navigate = useNavigate()
   const primary = app.brandColorPrimary || '#667eea'
@@ -502,9 +504,13 @@ export default function GenerateModal({
   const showImageBuilder = isOwner && app.photoSource !== 'studio_only'
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto py-10 px-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
+    // UX ruling 2c: on a phone the modal is capped at the screen height and only its body scrolls,
+    // so the footer (Create / Write a new version) is always on screen. Measured 10-08 at 390x844:
+    // the button sat at y=851, below the fold, inside a body that scrolled separately.
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto py-4 sm:py-10 px-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
       <div
-        className="w-full max-w-2xl rounded-2xl overflow-hidden"
+        data-testid="generate-modal"
+        className="w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-sm:max-h-[calc(100vh-2rem)] max-sm:supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]"
         style={{ background: '#0A0B0D', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         {/* Header */}
@@ -549,6 +555,7 @@ export default function GenerateModal({
         )}
 
         {outcome && (
+          <div className="flex-1 min-h-0 overflow-y-auto">
           <OutcomePanel
             outcome={outcome}
             slotDate={slotDate}
@@ -563,12 +570,13 @@ export default function GenerateModal({
             fromSheet={sheet}
             ask={runAskRef.current}
           />
+          </div>
         )}
 
         {/* UX ruling 2a: the Regenerate sheet. What the new version is for, what it will be (the
             original's shape), and an optional topic. Nothing else to set. */}
         {sheet && (
-          <div hidden={!!outcome} className="px-6 py-5 space-y-4" data-testid="regenerate-sheet">
+          <div hidden={!!outcome} className="px-6 py-5 space-y-4 flex-1 min-h-0 overflow-y-auto" data-testid="regenerate-sheet">
             <p className="text-sm text-slate-200 leading-snug">
               {regenerateIntroLine(regenerateReason && regenerateReason.reason, regenerateReason && regenerateReason.phrase)}
             </p>
@@ -597,7 +605,7 @@ export default function GenerateModal({
           </div>
         )}
 
-        <div hidden={!!outcome || sheet} className="px-6 py-5 space-y-6 max-h-[70vh] overflow-y-auto">
+        <div hidden={!!outcome || sheet} className="px-6 py-5 space-y-6 flex-1 min-h-0 overflow-y-auto sm:max-h-[70vh]" data-testid="generate-body">
           {/* Session Vibe */}
           <div className="p-4 rounded-xl" style={{ background: `${primary}10`, border: `1px solid ${primary}30` }}>
             <label className="block text-xs font-bold tracking-wider uppercase mb-1" style={{ color: primary }}>This session's vibe</label>
@@ -778,9 +786,9 @@ export default function GenerateModal({
         </div>
 
         {/* Footer */}
-        <div hidden={!!outcome} className="px-6 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div hidden={!!outcome} className="px-6 py-4 flex-shrink-0" data-testid="generate-footer" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="flex items-center justify-between">
-            <button onClick={close} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
+            <button onClick={close} className="min-h-[44px] px-2 -ml-2 text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
             <button
               onClick={() => handleSubmit()}
               // A sheet waits for the caller's slot lookup, so a slot-bound original never regenerates unbound.

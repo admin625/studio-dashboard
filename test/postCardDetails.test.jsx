@@ -81,3 +81,18 @@ describe('PostCard details', () => {
     expect(screen.queryByRole('button', { name: /^regenerate$/i })).toBeNull()
   })
 })
+
+describe('2c: edit controls on a phone', () => {
+  it('Edit caption / Edit hashtags are visible without hover below sm and 44px tall; hover-reveal only from sm up', () => {
+    card()
+    for (const name of [/edit caption/i, /edit hashtags/i]) {
+      const b = screen.getByRole('button', { name })
+      const cls = b.className.split(/\s+/)
+      expect(cls).not.toContain('opacity-0') // the old base class: invisible with no hover
+      expect(cls).toContain('sm:opacity-0')
+      expect(cls).toContain('min-h-[44px]')
+    }
+    expect(screen.getByRole('button', { name: /edit photo/i }).className).toContain('min-h-[44px]')
+    expect(screen.getByRole('link', { name: /image/i }).className).toContain('min-h-[44px]')
+  })
+})

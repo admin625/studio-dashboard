@@ -68,3 +68,14 @@ describe('held event card (Mac 2026-10-08): "Why this post?" opens read-only', (
     expect(screen.queryByTestId('held-why')).toBeNull()
   })
 })
+
+describe('2c: week arrows', () => {
+  it('previous / next week are 44px targets', () => {
+    view([slot()])
+    for (const name of [/previous week/i, /next week/i]) {
+      const b = screen.getByRole('button', { name })
+      expect(b.className).toContain('min-w-[44px]')
+      expect(b.className).toContain('min-h-[44px]')
+    }
+  })
+})
